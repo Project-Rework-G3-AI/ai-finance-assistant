@@ -104,3 +104,24 @@ Opsional AI: isi `AI_API_KEY` (+ `AI_BASE_URL`/`AI_MODEL` bila pakai provider la
 - Ekstraksi mock tanpa AI = nominal hanya dari caption (gambar tidak dibaca); tanpa caption, kolom `Nominal` kosong.
 - Klasifikasi awal kosong (kolom Kategori diisi AI bila vision aktif, sisanya manual).
 - Belum ada balancing (milestone 2) dan tanya-jawab (milestone 3).
+
+## Pengembangan Berikutnya
+
+Urutkan berdasarkan nilai buat brief (3 pilihan kelompok) dan usaha:
+
+1. **Balancing (inti Pilihan 1)** — baca mutasi bank (PDF/XLSX) → cocokkan baris Sheet via Ref ID/tanggal+nominal → status `cocok` / `belum cocok` / `tercatat di kas tapi tidak di mutasi` + laporan selisih per periode.
+2. **Gabung web prototype ↔ data bot** — `index.html` membaca Sheet yang sama (service account sudah ada) → rekap/PnL langsung dari data harian.
+3. **Tanya-jawab & ringkasan (Pilihan 3)** — command bot (`/total Januari`) → query kode → angka dari kode, LLM hanya merangkai kalimat, jawaban wajib menunjuk baris sumber.
+4. **Kualitas** — pytest (extract/dedupe/pending), eval 10 foto sampel → bahan EV-xx Testing Report.
+5. **Integrasi lanjutan bila waktu cukup** — klasifikasi kategori otomatis (rule/Jev), command `/rekap`, ekstraksi invoice PDF, multi-kas, deploy always-on.
+
+Yang tidak perlu dibangun: database, login, dashboard analytics, n8n.
+
+### Catatan desain terbuka (dipelajari nanti)
+
+- **Nama admin otomatis** — tambah kolom `Nama Admin` diisi dari data pengirim Telegram (`message.from`: `first_name` + `last_name`, fallback `username`, terakhir `"Tidak diketahui"`) — menggantikan kolom "Tanggal Input dan Nama Admin" gaya Cash Report perusahaan. Pertimbangan: nama bergantung pada akun pengirim (bukan selalu orang yang sama dengan yang menginput).
+- **Multi-sheet per periode** — Sheet Tujuan ditentukan dari tanggal ekstraksi (`YYYY-MM` → sheet/bulan). Sebelum append: cek apakah sheet periode ada.
+  - Ada → pakai.
+  - Belum ada → **buat sheet baru otomatis** (`add_worksheet("Nov 2026")` + header), atau fallback ke sheet umum + kolom `Periode` bila otomatis dinilai berisiko.
+  - Dedupe Ref ID wajib **per sheet** (col_values dibaca dari sheet tujuan, bukan sheet pertama).
+  - Alternatif sederhana: 1 spreadsheet berisi banyak tab bulanan (bukan banyak file) — disarankan, karena share service account cukup 1 kali.
