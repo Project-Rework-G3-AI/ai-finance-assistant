@@ -1,0 +1,106 @@
+# Bot Pencatatan Transaksi — Milestone 1: Telegram → Ekstraksi → Google Sheets
+
+Bot Telegram terima foto/screenshot bukti transaksi → ekstraksi field → append ke Google Sheets (status `draft`, review manual di Sheet). Tanpa database.
+
+## Arsitektur
+
+```mermaid
+flowchart LR
+    U["Pengguna<br/>(Finance/Admin)"] -->|"kirim foto + caption"| TG["Telegram API<br/>(cloud)"]
+    TG -->|"getUpdates<br/>long polling, koneksi keluar"| BOT["Bot — main.py<br/>FastAPI + asyncio<br/>(berjalan di lokal)"]
+
+    BOT -->|"baca gambar"| EXT{"Ekstraksi"}
+    EXT -->|"AI_API_KEY terisi"| VIS["Vision LLM<br/>(chat/completions)"]
+    EXT -->|"tanpa AI / AI gagal"| MOCK["Mock<br/>nama file + caption"]
+    VIS -.->|"gagal → fallback"| MOCK
+
+    BOT -->|"Ref ID duplikat?"| DUP{"sudah<br/>ada?"}
+    DUP -->|"ya"| SKIP["balasan: dilewati"]
+    DUP -->|"tidak"| SHEET[("Google Sheets<br/>status draft<br/>(cloud)")]
+    SHEET -->|"gagal"| PEND["pending.jsonl<br/>(lokal)"]
+    PEND -->|"retry tiap siklus"| SHEET
+
+    SHEET -->|"review manual:<br/>draft → verified"| U
+    W["Browser lokal<br/>GET /health<br/>POST /api/extract"] --> BOT
+
+    classDef cloud fill:#1e3a5f,stroke:#3b82f6,color:#fff
+    classDef local fill:#14532d,stroke:#22c55e,color:#fff
+    class TG,SHEET,VIS cloud
+    class BOT,MOCK,PEND,W local
+```
+
+- Satu proses di lokal: polling Telegram + endpoint API berjalan bersamaan; semua koneksi **keluar** (internet), tanpa server publik.
+- Mode vision (AI) dipakai bila `AI_API_KEY` ada; selalu fallback ke mock agar alur tidak pernah putus.
+- Sheets = tujuan akhir (append-only); `pending.jsonl` = penahan gagal, bukan penyimpanan utama.
+
+## Setup
+
+```bash
+cd bot
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env        # lalu isi
+python main.py              # server di http://127.0.0.1:8000
+```
+
+Isi `.env` minimal:
+
+1. `TELEGRAM_BOT_TOKEN` — dari @BotFather.
+2. `TELEGRAM_ALLOWED_CHAT_IDS` — chat_id pengguna yang boleh (cek via @userinfobot), pisahkan koma.
+
+## Setup Google Sheets (service account)
+
+Gratis, tanpa billing, sekali setup (~5 menit), kunci tidak kedaluwarsa.
+
+1. **Buat project** — https://console.cloud.google.com → dropdown project → **New Project** → Create.
+2. **Aktifkan API** — menu **APIs & Services** → **Library** → cari "Google Sheets API" → **Enable**.
+3. **Buat service account** — **APIs & Services** → **Credentials** → **Create Credentials** → **Service account** → nama bebas → Create and Continue → skip role → **Done**.
+4. **Unduh kunci** — klik akun yang baru dibuat → tab **Keys** → **Add Key** → **Create new key** → **JSON**.
+5. **Pasang ke project**:
+   ```bash
+   cp ~/Downloads/<file>.json service_account.json   # sudah masuk .gitignore
+   ```
+6. **Ambil email service account**:
+   ```bash
+   .venv/bin/python -c "import json;print(json.load(open('service_account.json'))['client_email'])"
+   ```
+7. **Siapkan Sheet** — buat Sheet baru (kas Operasional) → **Share** → tempel email service account → role **Editor** → centang "Don't send". Salin **Spreadsheet ID** dari URL `docs.google.com/spreadsheet/d/`**`ID`**`/edit`.
+8. **Isi `.env`**:
+   ```
+   GOOGLE_SPREADSHEET_ID=<ID>
+   GOOGLE_SERVICE_ACCOUNT_FILE=service_account.json
+   ```
+
+Verifikasi: `curl http://127.0.0.1:8000/health` → `"sheets": true`.
+
+Troubleshooting: append gagal "insufficient permissions" = email service account (langkah 6) belum dapat akses Editor di Sheet (langkah 7).
+
+Opsional AI: isi `AI_API_KEY` (+ `AI_BASE_URL`/`AI_MODEL` bila pakai provider lain) untuk ekstraksi vision. Tanpa itu = mode mock (tanggal dari nama file, nominal dari caption).
+
+## Alur
+
+- Kirim **foto ke bot dalam satu pesan**, dengan caption (opsional, mis. `Rp195.000 penjualan satvika`). Caption dipakai sebagai konteks ekstraksi **dan** disimpan utuh di kolom `Caption`.
+  - Caption yang dikirim sebagai pesan terpisah **tidak** terbaca bot — selalu satu paket foto + caption.
+- Mode vision (AI): gambar + caption dikirim bersama ke AI → field diisi AI.
+- Mode mock (tanpa AI): gambar tidak dibaca; tanggal dari nama file, nominal/arah dari caption, keterangan = caption.
+- Bot ekstrak → append ke Sheet (12 kolom), balasan status. Duplikat (Ref ID sama) dilewati.
+- Sheets gagal → antre `pending.jsonl`, retry otomatis tiap siklus polling.
+- Review: ubah kolom `Status` `draft` → `verified` setelah dicek. **Angka AI belum dipakai sebelum verified.**
+
+## Skema Sheet (12 kolom)
+
+`Tanggal | Keterangan | Nominal | Arah | Kategori | Status | Sumber File | Ref ID | Confidence | Tanggal Input | Catatan | Caption`
+
+- Header dibuat otomatis saat Sheet kosong; Sheet lama (11 kolom) otomatis ditambah kolom `Caption`.
+- `Keterangan` = hasil ekstraksi AI (atau caption di mode mock); `Caption` = teks asli apa adanya.
+
+## Endpoint
+
+- `GET /health` — status telegram/sheets/ai + antrean.
+- `POST /api/extract` `{filename, image_base64?, caption?}` — ekstraksi + append tanpa bot (untuk uji cepat/web nanti).
+
+## Batasan (milestone 1)
+
+- Ekstraksi mock tanpa AI = nominal hanya dari caption (gambar tidak dibaca); tanpa caption, kolom `Nominal` kosong.
+- Klasifikasi awal kosong (kolom Kategori diisi AI bila vision aktif, sisanya manual).
+- Belum ada balancing (milestone 2) dan tanya-jawab (milestone 3).
