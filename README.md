@@ -101,6 +101,20 @@ Opsional AI: isi `AI_API_KEY` (+ `AI_BASE_URL`/`AI_MODEL` bila pakai provider la
 - `GET /health` — status telegram/sheets/ai + antrean.
 - `POST /api/extract` `{filename, image_base64?, caption?}` — ekstraksi + append tanpa bot (untuk uji cepat/web nanti).
 
+## Balasan Proses (acknowledgment)
+
+Setiap foto/bukti yang lolos whitelist selalu dibalas bertahap:
+
+1. **`⏳ Diterima, sedang diproses…`** — dikirim **sebelum** file diunduh dan ekstraksi dijalankan, supaya user tahu pesannya masuk meski ekstraksi butuh 10–60 detik. Kegagalan mengirim ack tidak menggagalkan proses.
+2. **Pesan hasil** (satu dari empat):
+   - `✅ Draft tercatat ke Sheets` — sukses, baris berstatus `draft`.
+   - `♻️ Sudah pernah dicatat — dilewati` — duplikat Ref ID.
+   - `⚠️ … masuk antrean` — ekstraksi sukses, pengiriman Sheet gagal (lihat Antrean Gagal).
+   - `❌ Gagal memproses: …` — ekstraksi/pemrosesan error (error ditampilkan, alur tetap jalan untuk pesan berikutnya).
+3. Pesan teks tanpa foto (di luar whitelist) dibalas panduan singkat, foto non-gambar dibalas penolakan format.
+
+Ack = dua bubble terpisah (bukan edit pesan) — disengaja agar sederhana dan tidak bergantung pada API edit.
+
 ## Antrean Gagal (`pending.jsonl`)
 
 Mekanisme agar ekstraksi tidak hilang ketika Google Sheets tidak bisa dijangkau:
