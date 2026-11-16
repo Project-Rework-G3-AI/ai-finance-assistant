@@ -2,6 +2,8 @@
 
 Bot Telegram terima foto/screenshot bukti transaksi → ekstraksi field → append ke Google Sheets (status `draft`, review manual di Sheet). Tanpa database.
 
+Deploy aktif: https://ai-finance-assistant-z473.onrender.com/health — detail di [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## Arsitektur
 
 ```mermaid
