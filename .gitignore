@@ -4,3 +4,4 @@ pending.jsonl
 __pycache__/
 .venv/
 .DS_Store
+.commandcode/
