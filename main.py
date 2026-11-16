@@ -237,11 +237,6 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
         filename = doc.get("file_name") or f"doc_{msg.get('date', int(time.time()))}"
 
     caption = msg.get("caption") or ""
-
-    # ack segera: user tahu pesan diterima sebelum ekstraksi (bisa 10-60 detik)
-    with suppress(Exception):
-        await tg_call(client, "sendMessage", chat_id=chat_id, text="⏳ Diterima, sedang diproses…")
-
     info = await tg_call(client, "getFile", file_id=fid)
     url = f"https://api.telegram.org/file/bot{TG_TOKEN}/{info['file_path']}"
     img = await client.get(url, timeout=90)

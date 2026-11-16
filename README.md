@@ -101,20 +101,6 @@ Opsional AI: isi `AI_API_KEY` (+ `AI_BASE_URL`/`AI_MODEL` bila pakai provider la
 - `GET /health` — status telegram/sheets/ai + antrean.
 - `POST /api/extract` `{filename, image_base64?, caption?}` — ekstraksi + append tanpa bot (untuk uji cepat/web nanti).
 
-## Balasan Proses (acknowledgment)
-
-Setiap foto/bukti yang lolos whitelist selalu dibalas bertahap:
-
-1. **`⏳ Diterima, sedang diproses…`** — dikirim **sebelum** file diunduh dan ekstraksi dijalankan, supaya user tahu pesannya masuk meski ekstraksi butuh 10–60 detik. Kegagalan mengirim ack tidak menggagalkan proses.
-2. **Pesan hasil** (satu dari empat):
-   - `✅ Draft tercatat ke Sheets` — sukses, baris berstatus `draft`.
-   - `♻️ Sudah pernah dicatat — dilewati` — duplikat Ref ID.
-   - `⚠️ … masuk antrean` — ekstraksi sukses, pengiriman Sheet gagal (lihat Antrean Gagal).
-   - `❌ Gagal memproses: …` — ekstraksi/pemrosesan error (error ditampilkan, alur tetap jalan untuk pesan berikutnya).
-3. Pesan teks tanpa foto (di luar whitelist) dibalas panduan singkat, foto non-gambar dibalas penolakan format.
-
-Ack = dua bubble terpisah (bukan edit pesan) — disengaja agar sederhana dan tidak bergantung pada API edit.
-
 ## Antrean Gagal (`pending.jsonl`)
 
 Mekanisme agar ekstraksi tidak hilang ketika Google Sheets tidak bisa dijangkau:
@@ -147,6 +133,7 @@ Yang tidak perlu dibangun: database, login, dashboard analytics, n8n.
 
 ### Catatan desain terbuka (dipelajari nanti)
 
+- **Balasan ack "sedang diproses"** — saat ini foto yang diproses tidak dibalas sampai selesai (ekstraksi bisa 10–60 detik, user menunggu tanpa kabar). Rencana: kirim `⏳ Diterima, sedang diproses…` segera setelah lolos whitelist, **sebelum** unduh file/ekstraksi, lalu pesan hasil seperti sekarang (✅/♻️/⚠️/❌). Kegagalan kirim ack diabaikan agar tidak mematikan proses. Pertimbangan UX: menurunkan risiko user kirim ulang karena mengira gagal, dan memenuhi UN-01 (kepastian transaksi diterima). Bentuk sederhana: dua bubble terpisah; opsi lanjut: edit pesan ack menjadi hasil akhir.
 - **Ref ID prioritas nomor referensi dokumen** — `Ref ID` saat ini selalu diisi `tg:<file_unique_id>` sehingga nomor referensi hasil ekstraksi (`rec["ref"]`) terbuang. Rencana: `ref_id = f"doc:{rec['ref']}"` bila ada, fallback `tg:<file_unique_id>`. Alasan: nomor referensi bank unik per transaksi → deteksi duplikat lebih kuat (foto diedit/kompresi ulang tetap ketangkap) dan menjadi kunci pencocokan untuk balancing (milestone 2) terhadap kolom referensi di mutasi bank. Format prefix `doc:`/`tg:` ditentukan sejak awal dan tidak diubah-ubah.
 - **Google Drive sebagai penyimpanan bukti transfer** — setiap foto yang diterima diunggah ke Drive (folder per periode) sehingga baris di Sheet bisa menautkan langsung ke gambar asli saat verifikasi (memenuhi UC-02 "bandingkan dengan gambar via tautan") dan menjadi arsip bukti. Kandidat: `google-api-python-client` dengan service account yang sama. Belum diimplementasikan.
 - **PostgreSQL sebagai basis data** — menyimpan nilai hasil ekstraksi (sebelum koreksi) dan nilai final (setelah verifikasi) agar akurasi sistem dapat diukur secara terprogram (bahan SC-01/SC-02 & Testing Report), terpisah dari Sheet yang menjadi tempat kerja harian. Belum diimplementasikan; alternatif ringan bila kebutuhan hanya penyimpanan satu-periode: SQLite 1 file.
