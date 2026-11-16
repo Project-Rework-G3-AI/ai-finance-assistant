@@ -101,6 +101,18 @@ Opsional AI: isi `AI_API_KEY` (+ `AI_BASE_URL`/`AI_MODEL` bila pakai provider la
 - `GET /health` — status telegram/sheets/ai + antrean.
 - `POST /api/extract` `{filename, image_base64?, caption?}` — ekstraksi + append tanpa bot (untuk uji cepat/web nanti).
 
+## Antrean Gagal (`pending.jsonl`)
+
+Mekanisme agar ekstraksi tidak hilang ketika Google Sheets tidak bisa dijangkau:
+
+1. **Kapan masuk antrean** — `append_sheet()` gagal (Sheets down, permission salah, kredensial kedaluwarsa, koneksi putus) setelah ekstraksi sukses. Record ditulis ke `pending.jsonl` (1 baris JSON per kejadian) lalu pengguna tetap diberi balasan bahwa ekstraksi berhasil tapi pengiriman ditunda.
+2. **Format baris** — hasil ekstraksi lengkap (`tanggal`, `keterangan`, `nominal`, `ref_id`, `caption`, dst.) + `_error` (pesan kegagalan) + `_ts` (epoch).
+3. **Kapan dikirim ulang** — `flush_pending()` dipanggil **tiap siklus polling** sebelum `getUpdates` berikutnya. Tiap baris dihapus dari file dulu, lalu dicoba append; gagal lagi → ditulis ulang. Sukses/duplikat → baris hilang dari antrean.
+4. **Tidak pernah menggandakan** — retry melewati cek dedupe `Ref ID` yang sama seperti proses normal, jadi meski baris sempat terkirim sebelum error, retry akan berstatus `dup`.
+5. **Batas** — file di filesystem proses; **hilang saat redeploy Render** (tidak persisten). Antrean ini penahan kegagalan sementara, bukan penyimpanan. `GET /health` menampilkan `pending: true/false`.
+
+`pending.jsonl` sudah masuk `.gitignore` — tidak pernah ikut ter-commit.
+
 ## Batasan (milestone 1)
 
 - Ekstraksi mock tanpa AI = nominal hanya dari caption (gambar tidak dibaca); tanpa caption, kolom `Nominal` kosong.
