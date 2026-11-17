@@ -2,4 +2,5 @@ fastapi
 uvicorn[standard]
 httpx
 gspread
+google-api-python-client
 python-dotenv

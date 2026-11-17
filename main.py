@@ -31,12 +31,17 @@ TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TG_ALLOWED = {int(x) for x in os.getenv("TELEGRAM_ALLOWED_CHAT_IDS", "").replace(" ", "").split(",") if x.strip()}
 SHEET_ID = os.getenv("GOOGLE_SPREADSHEET_ID", "").strip()
 SA_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "service_account.json").strip()
+DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip()
 AI_KEY = os.getenv("AI_API_KEY", "").strip()
 AI_BASE = os.getenv("AI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
 AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini").strip()
 
 PENDING = Path(__file__).parent / "pending.jsonl"
-HEADERS = ["Tanggal", "Keterangan", "Nominal", "Arah", "Kategori", "Status", "Sumber File", "Ref ID", "Confidence", "Tanggal Input", "Catatan", "Caption"]
+HEADERS = ["Tanggal", "Keterangan", "Nominal", "Arah", "Kategori", "Status", "Sumber File", "Ref ID", "Confidence", "Tanggal Input", "Catatan", "Caption", "Link Bukti"]
+GOOGLE_SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
 
 CATATAN_MOCK = "Mock ekstraksi: isi dari nama file/caption — periksa & koreksi sebelum dipakai."
 
@@ -119,6 +124,55 @@ async def extract(client: httpx.AsyncClient, filename: str, image_bytes: bytes, 
     return _mock_extract(filename, caption)
 
 
+# ---------- Google Drive (arsip bukti transfer) ----------
+
+def _sa_info() -> dict:
+    raw = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    if raw:
+        return json.loads(raw)
+    with open(SA_FILE, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def upload_drive(image_bytes: bytes, filename: str) -> str:
+    """Upload foto ke folder Drive. Return webViewLink. Melempar bila gagal."""
+    import io
+
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaIoBaseUpload
+
+    creds = service_account.Credentials.from_service_account_info(_sa_info(), scopes=GOOGLE_SCOPES)
+    drive = build("drive", "v3", credentials=creds, cache_discovery=False)
+    mime = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
+    f = drive.files().create(
+        body={"name": filename, "parents": [DRIVE_FOLDER_ID]},
+        media_body=MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype=mime),
+        fields="id, webViewLink",
+    ).execute()
+    return f.get("webViewLink", "")
+
+
+def upload_and_link(image_bytes: bytes, filename: str, ref_id: str) -> str:
+    """Upload ke Drive + tulis link ke kolom Link Bukti pada baris Ref ID.
+
+    Return link, atau '' bila fitur mati/gagal (baris tetap tersimpan).
+    """
+    if not DRIVE_FOLDER_ID or not image_bytes:
+        return ""
+    try:
+        link = upload_drive(image_bytes, filename)
+        if link:
+            ws = _worksheet()
+            refs = ws.col_values(8)
+            row = refs.index(ref_id) + 1
+            ws.update_cell(row, len(HEADERS), link)
+        return link
+    except Exception as e:
+        print(f"Drive upload gagal: {type(e).__name__}: {e}")
+        return ""
+
+
 # ---------- Google Sheets (append-only) ----------
 
 _sheet_cache = None
@@ -131,15 +185,15 @@ def _worksheet():
     if not SHEET_ID:
         raise RuntimeError("GOOGLE_SPREADSHEET_ID kosong")
     import gspread
-    sa_raw = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
-    gc = gspread.service_account_from_dict(json.loads(sa_raw)) if sa_raw else gspread.service_account(filename=SA_FILE)
+    gc = gspread.service_account_from_info(_sa_info(), scopes=GOOGLE_SCOPES)
     ws = gc.open_by_key(SHEET_ID).sheet1
     row1 = ws.row_values(1)
     if not row1:
         ws.append_row(HEADERS, value_input_option="RAW")
-    elif len(row1) < len(HEADERS) and row1[:11] == HEADERS[:11]:
-        # Sheet lama (11 kolom) → tambahkan kolom Caption di ujung
-        ws.update_cell(1, len(row1) + 1, HEADERS[len(row1)])
+    elif row1[:11] == HEADERS[:11]:
+        # Sheet lama (11/12 kolom) → tambahkan kolom yang kurang di ujung
+        for i in range(len(row1), len(HEADERS)):
+            ws.update_cell(1, i + 1, HEADERS[i])
     _sheet_cache = ws
     return ws
 
@@ -149,7 +203,7 @@ def _to_row(rec: dict) -> list:
         rec["tanggal"], rec["keterangan"], rec.get("nominal") or "", rec["arah"],
         rec["kategori"], "draft", rec["sumber_file"], rec["ref_id"],
         rec["confidence"], datetime.now().strftime("%Y-%m-%d %H:%M"), rec["catatan"],
-        rec.get("caption", ""),
+        rec.get("caption", ""), rec.get("link_bukti", ""),
     ]
 
 
@@ -253,12 +307,15 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
     if hasil == "dup":
         await tg_send(client, chat_id, "♻️ Sudah pernah dicatat — dilewati.")
         return
+    link = await asyncio.to_thread(upload_and_link, img.content, filename, rec["ref_id"])
     nominal = f"Rp{rec['nominal']:,}" if rec["nominal"] else "<i>belum terbaca</i>"
+    baris_bukti = f'\n<a href="{link}">Bukti transfer</a>' if link else ""
     await tg_send(
         client, chat_id,
         f"✅ Draft tercatat ke Sheets\n"
         f"{rec['tanggal']} · {nominal} · {rec['arah']}\n"
-        f"Keterangan: {rec['keterangan']}\nStatus: <b>draft</b> — periksa & ubah ke verified di Sheet.",
+        f"Keterangan: {rec['keterangan']}{baris_bukti}\n"
+        f"Status: <b>draft</b> — periksa & ubah ke verified di Sheet.",
     )
 
 
@@ -313,6 +370,7 @@ def health():
         "telegram": bool(TG_TOKEN and TG_ALLOWED),
         "sheets": bool(SHEET_ID),
         "ai": "vision" if AI_KEY else "mock",
+        "drive": bool(DRIVE_FOLDER_ID),
         "pending": PENDING.exists(),
     }
 
@@ -329,7 +387,8 @@ async def api_extract(req: ExtractReq):
         except Exception as e:
             push_pending(rec, str(e))
             return {**rec, "sheet": "pending", "error": str(e)}
-        return {**rec, "sheet": hasil}
+        link = upload_and_link(raw, req.filename, ref)
+        return {**rec, "sheet": hasil, "link_bukti": link}
 
 
 if __name__ == "__main__":
