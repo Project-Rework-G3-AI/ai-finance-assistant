@@ -19,6 +19,7 @@ flowchart LR
     BOT -->|"Ref ID duplikat?"| DUP{"sudah<br/>ada?"}
     DUP -->|"ya"| SKIP["balasan: dilewati"]
     DUP -->|"tidak"| SHEET[("Google Sheets<br/>status draft<br/>(cloud)")]
+    SHEET -->|"upload foto baru<br/>(opsional)"| DRIVE["Google Drive<br/>Link Bukti<br/>(cloud)"]
     SHEET -->|"gagal"| PEND["pending.jsonl<br/>(lokal)"]
     PEND -->|"retry tiap siklus"| SHEET
 
@@ -27,7 +28,7 @@ flowchart LR
 
     classDef cloud fill:#1e3a5f,stroke:#3b82f6,color:#fff
     classDef local fill:#14532d,stroke:#22c55e,color:#fff
-    class TG,SHEET,VIS cloud
+    class TG,SHEET,VIS,DRIVE cloud
     class BOT,MOCK,PEND,W local
 ```
 
@@ -79,26 +80,40 @@ Troubleshooting: append gagal "insufficient permissions" = email service account
 
 Opsional AI: isi `AI_API_KEY` (+ `AI_BASE_URL`/`AI_MODEL` bila pakai provider lain) untuk ekstraksi vision. Tanpa itu = mode mock (tanggal dari nama file, nominal dari caption).
 
+## Setup Google Drive (opsional — arsip bukti transfer)
+
+Foto yang diterima juga diunggah ke Google Drive; tautannya ditulis ke kolom `Link Bukti` supaya bisa dibuka langsung dari Sheet (memenuhi UC-02). Fitur ini **opsional** — tanpa konfigurasi, bot tetap jalan normal.
+
+1. **Aktifkan Drive API** — Google Cloud Console → **APIs & Services** → **Library** → cari "Google Drive API" → **Enable** (project & service account yang sama dengan Sheets, gratis tanpa billing).
+2. **Buat folder tujuan** — di Drive (akun siapa pun) buat folder, mis. `Receipts 2026`.
+3. **Share folder ke service account** — klik Share → tempel `client_email` (langkah 6 di atas) → role **Editor** → centang "Don't send". *(Ini wajib — service account tidak punya Drive sendiri.)*
+4. **Ambil Folder ID** — buka folder, salin ID dari URL `drive.google.com/drive/folders/`**`ID`**.
+5. **Isi `.env`**: `GOOGLE_DRIVE_FOLDER_ID=<ID>` (di Render: sama di Dashboard Environment).
+
+Verifikasi: `/health` → `"drive": true`; kirim foto → balasan ada tautan "Bukti transfer" dan baris Sheet punya isi `Link Bukti`.
+
+Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan hanya bila ekstraksi/simpan Sheet sukses. Gagal unggah Drive tidak mematikan proses — kolom dibiarkan kosong, error muncul di log.
+
 ## Alur
 
 - Kirim **foto ke bot dalam satu pesan**, dengan caption (opsional, mis. `Rp195.000 penjualan satvika`). Caption dipakai sebagai konteks ekstraksi **dan** disimpan utuh di kolom `Caption`.
   - Caption yang dikirim sebagai pesan terpisah **tidak** terbaca bot — selalu satu paket foto + caption.
 - Mode vision (AI): gambar + caption dikirim bersama ke AI → field diisi AI.
 - Mode mock (tanpa AI): gambar tidak dibaca; tanggal dari nama file, nominal/arah dari caption, keterangan = caption.
-- Bot ekstrak → append ke Sheet (12 kolom), balasan status. Duplikat (Ref ID sama) dilewati.
+- Bot ekstrak → append ke Sheet (13 kolom), upload foto ke Drive + tautan di kolom `Link Bukti`, balasan status (termasuk link bukti). Duplikat (Ref ID sama) dilewati.
 - Sheets gagal → antre `pending.jsonl`, retry otomatis tiap siklus polling.
 - Review: ubah kolom `Status` `draft` → `verified` setelah dicek. **Angka AI belum dipakai sebelum verified.**
 
-## Skema Sheet (12 kolom)
+## Skema Sheet (13 kolom)
 
-`Tanggal | Keterangan | Nominal | Arah | Kategori | Status | Sumber File | Ref ID | Confidence | Tanggal Input | Catatan | Caption`
+`Tanggal | Keterangan | Nominal | Arah | Kategori | Status | Sumber File | Ref ID | Confidence | Tanggal Input | Catatan | Caption | Link Bukti`
 
-- Header dibuat otomatis saat Sheet kosong; Sheet lama (11 kolom) otomatis ditambah kolom `Caption`.
-- `Keterangan` = hasil ekstraksi AI (atau caption di mode mock); `Caption` = teks asli apa adanya.
+- Header dibuat otomatis saat Sheet kosong; Sheet lama (11/12 kolom) otomatis ditambah kolom yang kurang.
+- `Keterangan` = hasil ekstraksi AI (atau caption di mode mock); `Caption` = teks asli apa adanya; `Link Bukti` = tautan foto di Google Drive (kosong bila fitur Drive mati/gagal).
 
 ## Endpoint
 
-- `GET /health` — status telegram/sheets/ai + antrean.
+- `GET /health` — status telegram/sheets/ai/drive + antrean.
 - `POST /api/extract` `{filename, image_base64?, caption?}` — ekstraksi + append tanpa bot (untuk uji cepat/web nanti).
 
 ## Antrean Gagal (`pending.jsonl`)
@@ -135,7 +150,7 @@ Yang tidak perlu dibangun: database, login, dashboard analytics, n8n.
 
 - **Balasan ack "sedang diproses"** — saat ini foto yang diproses tidak dibalas sampai selesai (ekstraksi bisa 10–60 detik, user menunggu tanpa kabar). Rencana: kirim `⏳ Diterima, sedang diproses…` segera setelah lolos whitelist, **sebelum** unduh file/ekstraksi, lalu pesan hasil seperti sekarang (✅/♻️/⚠️/❌). Kegagalan kirim ack diabaikan agar tidak mematikan proses. Pertimbangan UX: menurunkan risiko user kirim ulang karena mengira gagal, dan memenuhi UN-01 (kepastian transaksi diterima). Bentuk sederhana: dua bubble terpisah; opsi lanjut: edit pesan ack menjadi hasil akhir.
 - **Ref ID prioritas nomor referensi dokumen** — `Ref ID` saat ini selalu diisi `tg:<file_unique_id>` sehingga nomor referensi hasil ekstraksi (`rec["ref"]`) terbuang. Rencana: `ref_id = f"doc:{rec['ref']}"` bila ada, fallback `tg:<file_unique_id>`. Alasan: nomor referensi bank unik per transaksi → deteksi duplikat lebih kuat (foto diedit/kompresi ulang tetap ketangkap) dan menjadi kunci pencocokan untuk balancing (milestone 2) terhadap kolom referensi di mutasi bank. Format prefix `doc:`/`tg:` ditentukan sejak awal dan tidak diubah-ubah.
-- **Google Drive sebagai penyimpanan bukti transfer** — setiap foto yang diterima diunggah ke Drive (folder per periode) sehingga baris di Sheet bisa menautkan langsung ke gambar asli saat verifikasi (memenuhi UC-02 "bandingkan dengan gambar via tautan") dan menjadi arsip bukti. Kandidat: `google-api-python-client` dengan service account yang sama. Belum diimplementasikan.
+- **Google Drive sebagai penyimpanan bukti transfer** — sudah diimplementasikan (lihat "Setup Google Drive"): 1 folder tujuan + kolom `Link Bukti`. Yang belum: **folder per periode** (`Receipts 2026/01`) supaya arsip terpisah per bulan.
 - **PostgreSQL sebagai basis data** — menyimpan nilai hasil ekstraksi (sebelum koreksi) dan nilai final (setelah verifikasi) agar akurasi sistem dapat diukur secara terprogram (bahan SC-01/SC-02 & Testing Report), terpisah dari Sheet yang menjadi tempat kerja harian. Belum diimplementasikan; alternatif ringan bila kebutuhan hanya penyimpanan satu-periode: SQLite 1 file.
 - **Nama admin otomatis** — tambah kolom `Nama Admin` diisi dari data pengirim Telegram (`message.from`: `first_name` + `last_name`, fallback `username`, terakhir `"Tidak diketahui"`) — menggantikan kolom "Tanggal Input dan Nama Admin" gaya Cash Report perusahaan. Pertimbangan: nama bergantung pada akun pengirim (bukan selalu orang yang sama dengan yang menginput).
 - **Multi-sheet per periode** — Sheet Tujuan ditentukan dari tanggal ekstraksi (`YYYY-MM` → sheet/bulan). Sebelum append: cek apakah sheet periode ada.
