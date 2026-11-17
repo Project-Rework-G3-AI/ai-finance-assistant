@@ -32,7 +32,8 @@ UptimeRobot → GET /health tiap 5 menit → free tier tetap terjaga
 | `TELEGRAM_ALLOWED_CHAT_IDS` | daftar chat_id, pisah koma |
 | `GOOGLE_SPREADSHEET_ID` | ID tujuan Sheet |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | **isi penuh file** `service_account.json` (JSON mentah) |
-| `GOOGLE_DRIVE_FOLDER_ID` | (opsional) ID folder Drive yang sudah di-share Editor ke SA — arsip foto bukti |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN` | (opsional) OAuth user untuk upload bukti ke Drive — lihat README "Setup Google Drive" |
+| `GOOGLE_DRIVE_FOLDER_ID` | (opsional) ID folder tujuan arsip foto di Drive |
 | `AI_API_KEY` | kunci vision (kosongkan = mode mock) |
 | `AI_BASE_URL`, `AI_MODEL` | opsional (default OpenAI) |
 
