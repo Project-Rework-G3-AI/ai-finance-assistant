@@ -131,7 +131,8 @@ def _worksheet():
     if not SHEET_ID:
         raise RuntimeError("GOOGLE_SPREADSHEET_ID kosong")
     import gspread
-    gc = gspread.service_account(filename=SA_FILE)
+    sa_raw = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    gc = gspread.service_account_from_dict(json.loads(sa_raw)) if sa_raw else gspread.service_account(filename=SA_FILE)
     ws = gc.open_by_key(SHEET_ID).sheet1
     row1 = ws.row_values(1)
     if not row1:
@@ -333,4 +334,5 @@ async def api_extract(req: ExtractReq):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=int(os.getenv("PORT", "8000")))
+    # HOST=0.0.0.0 untuk hosting (Render dkk); default tetap lokal agar tidak terekspos
+    uvicorn.run(app, host=os.getenv("HOST", "127.0.0.1"), port=int(os.getenv("PORT", "8000")))

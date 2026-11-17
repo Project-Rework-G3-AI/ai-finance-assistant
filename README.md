@@ -2,6 +2,8 @@
 
 Bot Telegram terima foto/screenshot bukti transaksi → ekstraksi field → append ke Google Sheets (status `draft`, review manual di Sheet). Tanpa database.
 
+Deploy aktif: https://ai-finance-assistant-z473.onrender.com/health — detail di [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## Arsitektur
 
 ```mermaid
@@ -99,6 +101,18 @@ Opsional AI: isi `AI_API_KEY` (+ `AI_BASE_URL`/`AI_MODEL` bila pakai provider la
 - `GET /health` — status telegram/sheets/ai + antrean.
 - `POST /api/extract` `{filename, image_base64?, caption?}` — ekstraksi + append tanpa bot (untuk uji cepat/web nanti).
 
+## Antrean Gagal (`pending.jsonl`)
+
+Mekanisme agar ekstraksi tidak hilang ketika Google Sheets tidak bisa dijangkau:
+
+1. **Kapan masuk antrean** — `append_sheet()` gagal (Sheets down, permission salah, kredensial kedaluwarsa, koneksi putus) setelah ekstraksi sukses. Record ditulis ke `pending.jsonl` (1 baris JSON per kejadian) lalu pengguna tetap diberi balasan bahwa ekstraksi berhasil tapi pengiriman ditunda.
+2. **Format baris** — hasil ekstraksi lengkap (`tanggal`, `keterangan`, `nominal`, `ref_id`, `caption`, dst.) + `_error` (pesan kegagalan) + `_ts` (epoch).
+3. **Kapan dikirim ulang** — `flush_pending()` dipanggil **tiap siklus polling** sebelum `getUpdates` berikutnya. Tiap baris dihapus dari file dulu, lalu dicoba append; gagal lagi → ditulis ulang. Sukses/duplikat → baris hilang dari antrean.
+4. **Tidak pernah menggandakan** — retry melewati cek dedupe `Ref ID` yang sama seperti proses normal, jadi meski baris sempat terkirim sebelum error, retry akan berstatus `dup`.
+5. **Batas** — file di filesystem proses; **hilang saat redeploy Render** (tidak persisten). Antrean ini penahan kegagalan sementara, bukan penyimpanan. `GET /health` menampilkan `pending: true/false`.
+
+`pending.jsonl` sudah masuk `.gitignore` — tidak pernah ikut ter-commit.
+
 ## Batasan (milestone 1)
 
 - Ekstraksi mock tanpa AI = nominal hanya dari caption (gambar tidak dibaca); tanpa caption, kolom `Nominal` kosong.
@@ -119,6 +133,7 @@ Yang tidak perlu dibangun: database, login, dashboard analytics, n8n.
 
 ### Catatan desain terbuka (dipelajari nanti)
 
+- **Balasan ack "sedang diproses"** — saat ini foto yang diproses tidak dibalas sampai selesai (ekstraksi bisa 10–60 detik, user menunggu tanpa kabar). Rencana: kirim `⏳ Diterima, sedang diproses…` segera setelah lolos whitelist, **sebelum** unduh file/ekstraksi, lalu pesan hasil seperti sekarang (✅/♻️/⚠️/❌). Kegagalan kirim ack diabaikan agar tidak mematikan proses. Pertimbangan UX: menurunkan risiko user kirim ulang karena mengira gagal, dan memenuhi UN-01 (kepastian transaksi diterima). Bentuk sederhana: dua bubble terpisah; opsi lanjut: edit pesan ack menjadi hasil akhir.
 - **Ref ID prioritas nomor referensi dokumen** — `Ref ID` saat ini selalu diisi `tg:<file_unique_id>` sehingga nomor referensi hasil ekstraksi (`rec["ref"]`) terbuang. Rencana: `ref_id = f"doc:{rec['ref']}"` bila ada, fallback `tg:<file_unique_id>`. Alasan: nomor referensi bank unik per transaksi → deteksi duplikat lebih kuat (foto diedit/kompresi ulang tetap ketangkap) dan menjadi kunci pencocokan untuk balancing (milestone 2) terhadap kolom referensi di mutasi bank. Format prefix `doc:`/`tg:` ditentukan sejak awal dan tidak diubah-ubah.
 - **Google Drive sebagai penyimpanan bukti transfer** — setiap foto yang diterima diunggah ke Drive (folder per periode) sehingga baris di Sheet bisa menautkan langsung ke gambar asli saat verifikasi (memenuhi UC-02 "bandingkan dengan gambar via tautan") dan menjadi arsip bukti. Kandidat: `google-api-python-client` dengan service account yang sama. Belum diimplementasikan.
 - **PostgreSQL sebagai basis data** — menyimpan nilai hasil ekstraksi (sebelum koreksi) dan nilai final (setelah verifikasi) agar akurasi sistem dapat diukur secara terprogram (bahan SC-01/SC-02 & Testing Report), terpisah dari Sheet yang menjadi tempat kerja harian. Belum diimplementasikan; alternatif ringan bila kebutuhan hanya penyimpanan satu-periode: SQLite 1 file.
