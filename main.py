@@ -185,7 +185,7 @@ def _worksheet():
     if not SHEET_ID:
         raise RuntimeError("GOOGLE_SPREADSHEET_ID kosong")
     import gspread
-    gc = gspread.service_account_from_info(_sa_info(), scopes=GOOGLE_SCOPES)
+    gc = gspread.service_account_from_dict(_sa_info(), scopes=GOOGLE_SCOPES)
     ws = gc.open_by_key(SHEET_ID).sheet1
     row1 = ws.row_values(1)
     if not row1:
