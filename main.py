@@ -124,26 +124,44 @@ async def extract(client: httpx.AsyncClient, filename: str, image_bytes: bytes, 
     return _mock_extract(filename, caption)
 
 
-# ---------- Google Drive (arsip bukti transfer) ----------
+# ---------- Google Drive (arsip bukti transfer, OAuth user) ----------
+# Service account tidak bisa: Google memblokir SA membuat file (kuota SA = 0,
+# error storageQuotaExceeded) kecuali Shared Drive. Pakai OAuth akun user.
 
-def _sa_info() -> dict:
-    raw = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
-    if raw:
-        return json.loads(raw)
-    with open(SA_FILE, encoding="utf-8") as f:
-        return json.load(f)
+DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
+OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
+OAUTH_REFRESH_TOKEN = os.getenv("GOOGLE_OAUTH_REFRESH_TOKEN", "").strip()
+
+
+def _drive_ready() -> bool:
+    return bool(DRIVE_FOLDER_ID and OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET and OAUTH_REFRESH_TOKEN)
+
+
+def _oauth_creds():
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+
+    creds = Credentials.from_authorized_user_info(
+        {
+            "refresh_token": OAUTH_REFRESH_TOKEN,
+            "client_id": OAUTH_CLIENT_ID,
+            "client_secret": OAUTH_CLIENT_SECRET,
+        },
+        scopes=[DRIVE_SCOPE],
+    )
+    creds.refresh(Request())
+    return creds
 
 
 def upload_drive(image_bytes: bytes, filename: str) -> str:
-    """Upload foto ke folder Drive. Return webViewLink. Melempar bila gagal."""
+    """Upload foto ke folder Drive (akun user via OAuth). Return webViewLink."""
     import io
 
-    from google.oauth2 import service_account
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaIoBaseUpload
 
-    creds = service_account.Credentials.from_service_account_info(_sa_info(), scopes=GOOGLE_SCOPES)
-    drive = build("drive", "v3", credentials=creds, cache_discovery=False)
+    drive = build("drive", "v3", credentials=_oauth_creds(), cache_discovery=False)
     mime = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
     f = drive.files().create(
         body={"name": filename, "parents": [DRIVE_FOLDER_ID]},
@@ -158,7 +176,7 @@ def upload_and_link(image_bytes: bytes, filename: str, ref_id: str) -> str:
 
     Return link, atau '' bila fitur mati/gagal (baris tetap tersimpan).
     """
-    if not DRIVE_FOLDER_ID or not image_bytes:
+    if not _drive_ready() or not image_bytes:
         return ""
     try:
         link = upload_drive(image_bytes, filename)
@@ -185,7 +203,8 @@ def _worksheet():
     if not SHEET_ID:
         raise RuntimeError("GOOGLE_SPREADSHEET_ID kosong")
     import gspread
-    gc = gspread.service_account_from_dict(_sa_info(), scopes=GOOGLE_SCOPES)
+    sa_raw = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    gc = gspread.service_account_from_dict(json.loads(sa_raw), scopes=GOOGLE_SCOPES) if sa_raw else gspread.service_account(filename=SA_FILE, scopes=GOOGLE_SCOPES)
     ws = gc.open_by_key(SHEET_ID).sheet1
     row1 = ws.row_values(1)
     if not row1:
@@ -370,7 +389,7 @@ def health():
         "telegram": bool(TG_TOKEN and TG_ALLOWED),
         "sheets": bool(SHEET_ID),
         "ai": "vision" if AI_KEY else "mock",
-        "drive": bool(DRIVE_FOLDER_ID),
+        "drive": _drive_ready(),
         "pending": PENDING.exists(),
     }
 

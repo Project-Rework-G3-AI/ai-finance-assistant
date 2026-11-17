@@ -84,15 +84,36 @@ Opsional AI: isi `AI_API_KEY` (+ `AI_BASE_URL`/`AI_MODEL` bila pakai provider la
 
 Foto yang diterima juga diunggah ke Google Drive; tautannya ditulis ke kolom `Link Bukti` supaya bisa dibuka langsung dari Sheet (memenuhi UC-02). Fitur ini **opsional** — tanpa konfigurasi, bot tetap jalan normal.
 
-1. **Aktifkan Drive API** — Google Cloud Console → **APIs & Services** → **Library** → cari "Google Drive API" → **Enable** (project & service account yang sama dengan Sheets, gratis tanpa billing).
-2. **Buat folder tujuan** — di Drive (akun siapa pun) buat folder, mis. `Receipts 2026`.
-3. **Share folder ke service account** — klik Share → tempel `client_email` (langkah 6 di atas) → role **Editor** → centang "Don't send". *(Ini wajib — service account tidak punya Drive sendiri.)*
-4. **Ambil Folder ID** — buka folder, salin ID dari URL `drive.google.com/drive/folders/`**`ID`**.
-5. **Isi `.env`**: `GOOGLE_DRIVE_FOLDER_ID=<ID>` (di Render: sama di Dashboard Environment).
+Upload memakai **OAuth akun user** (bukan service account): Google memblokir service account membuat file sendiri (error `storageQuotaExceeded`), kecuali lewat Shared Drive yang butuh Google Workspace.
+
+1. **Aktifkan Drive API** — Google Cloud Console → **APIs & Services** → **Library** → cari "Google Drive API" → **Enable**.
+2. **OAuth consent screen** — **APIs & Services** → **OAuth consent screen** → User Type **External** → isi app name/email → **Save** → tab **Audience/Testing** → **+ Add users** → tambahkan Gmail yang akan jadi pemilik foto (mode Testing cukup, tidak perlu verifikasi Google).
+3. **Buat OAuth client** — **Credentials** → **Create Credentials** → **OAuth client ID** → Application type **Desktop app** → Create → **Download JSON** → simpan sebagai `credentials.json` di folder `bot/` (sudah masuk `.gitignore`).
+4. **Ambil refresh token (sekali saja)** — jalankan:
+   ```bash
+   .venv/bin/pip install google-auth-oauthlib   # sudah di requirements.txt
+   .venv/bin/python - <<'PY'
+   from google_auth_oauthlib.flow import InstalledAppFlow
+   flow = InstalledAppFlow.from_client_secrets_file(
+       "credentials.json", ["https://www.googleapis.com/auth/drive.file"])
+   creds = flow.run_local_server(port=0)
+   print("REFRESH_TOKEN=" + creds.refresh_token)
+   PY
+   ```
+   Browser terbuka → login Gmail tujuan → izinkan → salin nilai `REFRESH_TOKEN` dari terminal.
+5. **Buat folder tujuan** — di Drive akun yang sama, mis. `Receipts 2026` → salin **Folder ID** dari URL `drive.google.com/drive/folders/`**`ID`**. *(Tidak perlu share — file nanti milik akun ini.)*
+6. **Isi `.env`**:
+   ```
+   GOOGLE_OAUTH_CLIENT_ID=<client id dari langkah 3>
+   GOOGLE_OAUTH_CLIENT_SECRET=<client secret>
+   GOOGLE_OAUTH_REFRESH_TOKEN=<nilai langkah 4>
+   GOOGLE_DRIVE_FOLDER_ID=<folder id langkah 5>
+   ```
+   Di Render: sama di Dashboard Environment.
 
 Verifikasi: `/health` → `"drive": true`; kirim foto → balasan ada tautan "Bukti transfer" dan baris Sheet punya isi `Link Bukti`.
 
-Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan hanya bila ekstraksi/simpan Sheet sukses. Gagal unggah Drive tidak mematikan proses — kolom dibiarkan kosong, error muncul di log.
+Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan hanya bila ekstraksi/simpan Sheet sukses. Gagal unggah Drive tidak mematikan proses — kolom dibiarkan kosong, error muncul di log. Refresh token tidak kedaluwarsa selama tidak dicabut (atau password Gmail diganti).
 
 ## Alur
 
