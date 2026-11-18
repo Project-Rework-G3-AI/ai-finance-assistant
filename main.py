@@ -1,7 +1,7 @@
-"""Bot Pencatatan Transaksi — Milestone 1: Telegram bot -> ekstraksi bukti transaksi -> Google Sheets.
+"""Bot Pencatatan Transaksi — Milestone 1: Telegram bot -> ekstraksi bukti transaksi -> Cash Report (Google Sheets).
 
 Satu proses: FastAPI (endpoint ekstraksi + serve) + long-poll Telegram (asyncio task).
-Tanpa database. Gagal kirim ke Sheets -> antre di pending.jsonl (retry otomatis).
+Tanpa database. Gagal tulis ke Cash Report -> antre di pending.jsonl (retry otomatis).
 
 Mode ekstraksi:
   - mock  (default, tanpa AI_API_KEY): tanggal dari nama file/caption, nominal dari caption.
@@ -19,6 +19,7 @@ import time
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import httpx
 from dotenv import load_dotenv
@@ -29,19 +30,27 @@ load_dotenv(Path(__file__).parent / ".env")
 
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TG_ALLOWED = {int(x) for x in os.getenv("TELEGRAM_ALLOWED_CHAT_IDS", "").replace(" ", "").split(",") if x.strip()}
-SHEET_ID = os.getenv("GOOGLE_SPREADSHEET_ID", "").strip()
 SA_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "service_account.json").strip()
-DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip()
+DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip()  # folder Receipts (upload foto)
+CR_FOLDER_ID = os.getenv("CASH_REPORT_FOLDER_ID", "").strip()
+CR_TEMPLATE_ID = os.getenv("CASH_REPORT_TEMPLATE_ID", "").strip()
+CR_TEMPLATE_YEAR = os.getenv("CASH_REPORT_TEMPLATE_YEAR", "2025").strip()
+CR_DEFAULT_BANK = os.getenv("CR_DEFAULT_BANK", "TUNAI").strip().upper()
 AI_KEY = os.getenv("AI_API_KEY", "").strip()
 AI_BASE = os.getenv("AI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
 AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini").strip()
 
 PENDING = Path(__file__).parent / "pending.jsonl"
-HEADERS = ["Tanggal", "Keterangan", "Nominal", "Arah", "Kategori", "Status", "Sumber File", "Ref ID", "Confidence", "Tanggal Input", "Catatan", "Caption", "Link Bukti"]
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
+MONTHS = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+]
+# Kolom tambahan di luar format A-J cash report (baris header 5)
+EXTRA_HEADERS = ["Ref ID", "Status", "Confidence", "Caption", "Catatan", "Sumber File"]
 
 CATATAN_MOCK = "Mock ekstraksi: isi dari nama file/caption — periksa & koreksi sebelum dipakai."
 
@@ -64,6 +73,7 @@ def _mock_extract(filename: str, caption: str) -> dict:
         "confidence": 0.0,
         "catatan": CATATAN_MOCK,
         "caption": caption.strip(),
+        "bank": "",
         "mode": "mock",
     }
 
@@ -77,7 +87,8 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
         '"arah":"masuk|keluar","kategori":"satu dari: Bahan Baku, Biaya-Gaji Karyawan, '
         'Biaya-Konsumsi, Biaya-Perlengkapan Kantor dan Administrasi, Biaya-Transportasi, '
         'Biaya-Ongkir, Biaya-Perbaikan Bangunan, Biaya-Operasional, Biaya-Pembelian Aset, '
-        'Biaya-Sosial, Penjualan, Lainnya"}'
+        'Biaya-Sosial, Penjualan, Lainnya","bank":"nama bank uppercase, mis. BCA/BNI — '
+        'kosong bila tidak terbaca"}'
     )
     if caption:
         prompt += f"\nCaption Telegram: {caption}"
@@ -109,6 +120,7 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
         "confidence": 1.0,
         "catatan": "Ekstraksi AI — wajib ditinjau sebelum dipakai.",
         "caption": caption.strip(),
+        "bank": str(data.get("bank") or "").strip().upper(),
         "mode": "vision",
     }
 
@@ -124,11 +136,13 @@ async def extract(client: httpx.AsyncClient, filename: str, image_bytes: bytes, 
     return _mock_extract(filename, caption)
 
 
-# ---------- Google Drive (arsip bukti transfer, OAuth user) ----------
-# Service account tidak bisa: Google memblokir SA membuat file (kuota SA = 0,
-# error storageQuotaExceeded) kecuali Shared Drive. Pakai OAuth akun user.
+# ---------- Google Drive (OAuth user) ----------
+# Drive = OAuth akun user (SA tidak bisa membuat file: kuota SA = 0, error
+# storageQuotaExceeded). Sel/struktur Cash Report = service account (folder
+# sudah di-share ke SA). Scope penuh diperlukan: cari folder & copy template
+# milik user — token lama ber-scopes drive.file harus dibuat ulang (README).
 
-DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
+DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
 OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
 OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
 OAUTH_REFRESH_TOKEN = os.getenv("GOOGLE_OAUTH_REFRESH_TOKEN", "").strip()
@@ -154,14 +168,40 @@ def _oauth_creds():
     return creds
 
 
+_drive_svc = None
+
+
+def _drive():
+    global _drive_svc
+    if _drive_svc is None:
+        from googleapiclient.discovery import build
+        _drive_svc = build("drive", "v3", credentials=_oauth_creds(), cache_discovery=False)
+    return _drive_svc
+
+
+_sheet_cli = None
+
+
+def _sheets():
+    global _sheet_cli
+    if _sheet_cli is None:
+        import gspread
+        sa_raw = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+        _sheet_cli = (
+            gspread.service_account_from_dict(json.loads(sa_raw), scopes=GOOGLE_SCOPES)
+            if sa_raw
+            else gspread.service_account(filename=SA_FILE, scopes=GOOGLE_SCOPES)
+        )
+    return _sheet_cli
+
+
 def upload_drive(image_bytes: bytes, filename: str) -> str:
     """Upload foto ke folder Drive (akun user via OAuth). Return webViewLink."""
     import io
 
-    from googleapiclient.discovery import build
     from googleapiclient.http import MediaIoBaseUpload
 
-    drive = build("drive", "v3", credentials=_oauth_creds(), cache_discovery=False)
+    drive = _drive()
     mime = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
     f = drive.files().create(
         body={"name": filename, "parents": [DRIVE_FOLDER_ID]},
@@ -171,72 +211,219 @@ def upload_drive(image_bytes: bytes, filename: str) -> str:
     return f.get("webViewLink", "")
 
 
-def upload_and_link(image_bytes: bytes, filename: str, ref_id: str) -> str:
-    """Upload ke Drive + tulis link ke kolom Link Bukti pada baris Ref ID.
+def _escape_drive_query(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("'", "\\'")
 
-    Return link, atau '' bila fitur mati/gagal (baris tetap tersimpan).
-    """
-    if not _drive_ready() or not image_bytes:
-        return ""
+
+def _find_or_create_folder(folder_name: str, parent_id: str) -> str:
+    """Folder di Drive (OAuth): cari, kalau tidak ada buat. Gagal jika >1."""
+    q = (
+        f"name = '{_escape_drive_query(folder_name)}' "
+        f"and '{parent_id}' in parents "
+        "and mimeType = 'application/vnd.google-apps.folder' "
+        "and trashed = false"
+    )
+    files = _drive().files().list(q=q, fields="files(id, name)", pageSize=100).execute().get("files", [])
+    if len(files) > 1:
+        raise RuntimeError(f"Folder ganda ditemukan: {folder_name}")
+    if files:
+        return files[0]["id"]
+    f = _drive().files().create(
+        body={"name": folder_name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent_id]},
+        fields="id",
+    ).execute()
+    return f["id"]
+
+
+def _find_or_create_spreadsheet(bank: str, year: str, year_folder_id: str) -> dict:
+    """Spreadsheet 'Cash Report {bank}' per tahun: cari, kalau tidak ada copy template."""
+    name = f"Cash Report {bank}"
+    q = (
+        f"name = '{_escape_drive_query(name)}' "
+        f"and '{year_folder_id}' in parents "
+        "and mimeType = 'application/vnd.google-apps.spreadsheet' "
+        "and trashed = false"
+    )
+    files = _drive().files().list(q=q, fields="files(id, name, webViewLink)", pageSize=100).execute().get("files", [])
+    if len(files) > 1:
+        raise RuntimeError(f"Cash Report ganda ditemukan: {name}")
+    if files:
+        return files[0]
+    if not CR_TEMPLATE_ID:
+        raise RuntimeError("CASH_REPORT_TEMPLATE_ID kosong")
+    f = _drive().files().copy(
+        fileId=CR_TEMPLATE_ID,
+        body={"name": name, "parents": [year_folder_id]},
+        fields="id, name, webViewLink",
+    ).execute()
+    _initialize_year(f["id"], year)
+    return f
+
+
+def _initialize_year(spreadsheet_id: str, year: str) -> None:
+    """Setelah copy template: rename tab & header tahun template -> tahun target."""
+    sh = _open_spreadsheet(spreadsheet_id)
+    reqs = []
+    for w in sh.worksheets():
+        title = w.title
+        if CR_TEMPLATE_YEAR in title:
+            reqs.append({
+                "updateSheetProperties": {
+                    "properties": {"sheetId": w.sheet_id, "title": title.replace(CR_TEMPLATE_YEAR, str(year))},
+                    "fields": "title",
+                }
+            })
+        if title.strip().lower() == "config":
+            reqs.append({
+                "findReplace": {
+                    "find": CR_TEMPLATE_YEAR, "replacement": str(year),
+                    "range": {"sheetId": w.sheet_id, "startRowIndex": 1, "endRowIndex": 13,
+                              "startColumnIndex": 0, "endColumnIndex": 1},
+                    "matchCase": True, "matchEntireCell": False, "searchByRegex": False,
+                }
+            })
+        else:
+            reqs.append({
+                "findReplace": {
+                    "find": CR_TEMPLATE_YEAR, "replacement": str(year),
+                    "range": {"sheetId": w.sheet_id, "startRowIndex": 2, "endRowIndex": 3,
+                              "startColumnIndex": 1, "endColumnIndex": 2},
+                    "matchCase": True, "matchEntireCell": False, "searchByRegex": False,
+                }
+            })
+    if reqs:
+        sh.batch_update(reqs)
+
+
+_ss_cache: dict = {}
+
+
+def _open_spreadsheet(spreadsheet_id: str):
+    if spreadsheet_id not in _ss_cache:
+        _ss_cache[spreadsheet_id] = _sheets().open_by_key(spreadsheet_id)
+    return _ss_cache[spreadsheet_id]
+
+
+def _monthly_worksheet(sh, tanggal: str):
+    """Tab 'Cash Report - <Bulan> <Tahun>'. Error bila tidak ada (tidak dibuat otomatis)."""
+    year, month = int(tanggal[:4]), int(tanggal[5:7])
+    title = f"Cash Report - {MONTHS[month - 1]} {year}"
     try:
-        link = upload_drive(image_bytes, filename)
-        if link:
-            ws = _worksheet()
-            refs = ws.col_values(8)
-            row = refs.index(ref_id) + 1
-            ws.update_cell(row, len(HEADERS), link)
-        return link
+        return sh.worksheet(title)
     except Exception as e:
-        print(f"Drive upload gagal: {type(e).__name__}: {e}")
-        return ""
+        raise FileNotFoundError(f"Worksheet tidak ditemukan: {title}") from e
 
 
-# ---------- Google Sheets (append-only) ----------
-
-_sheet_cache = None
+_ensured: set = set()
 
 
-def _worksheet():
-    global _sheet_cache
-    if _sheet_cache is not None:
-        return _sheet_cache
-    if not SHEET_ID:
-        raise RuntimeError("GOOGLE_SPREADSHEET_ID kosong")
-    import gspread
-    sa_raw = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
-    gc = gspread.service_account_from_dict(json.loads(sa_raw), scopes=GOOGLE_SCOPES) if sa_raw else gspread.service_account(filename=SA_FILE, scopes=GOOGLE_SCOPES)
-    ws = gc.open_by_key(SHEET_ID).sheet1
-    row1 = ws.row_values(1)
-    if not row1:
-        ws.append_row(HEADERS, value_input_option="RAW")
-    elif row1[:11] == HEADERS[:11]:
-        # Sheet lama (11/12 kolom) → tambahkan kolom yang kurang di ujung
-        for i in range(len(row1), len(HEADERS)):
-            ws.update_cell(1, i + 1, HEADERS[i])
-    _sheet_cache = ws
-    return ws
+def _ensure_extra(ws) -> None:
+    """Perluas grid ke 16 kolom + tulis header K..P (sekali per tab)."""
+    key = f"{ws.id}:{ws.title}"
+    if key in _ensured:
+        return
+    if ws.col_count < 16:
+        ws.resize(columns=16)
+    if not any(str(v).strip() for v in ws.row_values(5)[10:16]):
+        for i, h in enumerate(EXTRA_HEADERS):
+            ws.update_cell(5, 11 + i, h)
+    _ensured.add(key)
 
 
-def _to_row(rec: dict) -> list:
-    return [
-        rec["tanggal"], rec["keterangan"], rec.get("nominal") or "", rec["arah"],
-        rec["kategori"], "draft", rec["sumber_file"], rec["ref_id"],
-        rec["confidence"], datetime.now().strftime("%Y-%m-%d %H:%M"), rec["catatan"],
-        rec.get("caption", ""), rec.get("link_bukti", ""),
-    ]
+def _place_row(ws) -> tuple:
+    """Baris tujuan: kosong pertama di 7..SubTotal-1; kalau penuh, sisipkan baris.
+
+    Return (row, inserted, sub) — sub = baris Sub Total SETelah sisip (bila ada).
+    """
+    col_b = ws.col_values(2)
+    sub = next((i + 1 for i, v in enumerate(col_b) if str(v).strip().lower() == "sub total"), None)
+    if not sub:
+        raise ValueError("baris Sub Total tidak ditemukan di tab bulanan")
+    for r in range(7, sub):
+        v = col_b[r - 1] if r - 1 < len(col_b) else ""
+        if not str(v).strip():
+            return r, False, sub
+    ws.spreadsheet.batch_update({
+        "requests": [{
+            "insertDimension": {
+                "range": {"sheetId": ws.sheet_id, "dimension": "ROWS",
+                          "startIndex": sub - 1, "endIndex": sub},
+                "inheritFromBefore": True,
+            }
+        }]
+    })
+    return sub, True, sub + 1
 
 
-def append_sheet(rec: dict) -> str:
-    """Append baris; dedupe via Ref ID. Return 'ok' | 'dup'."""
-    ws = _worksheet()
-    try:
-        refs = ws.col_values(8)
-    except Exception:
-        refs = []
-    if rec["ref_id"] in refs:
-        return "dup"
-    ws.append_row(_to_row(rec), value_input_option="RAW")
-    return "ok"
+def _safe(v) -> str:
+    """Cegah teks user/AI diinterpretasi sebagai formula (USER_ENTERED)."""
+    s = "" if v is None else str(v)
+    return "'" + s if s[:1] in ("=", "+", "-", "@") else s
+
+
+def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -> dict:
+    """Tulis 1 transaksi ke Cash Report: folder tahun -> file bank -> tab bulan.
+
+    Return {"status": "ok"|"dup", "worksheet", "row", "link"}.
+    Urutan: dedupe dulu (Ref ID kolom K), baru upload foto & tulis baris.
+    """
+    if not CR_FOLDER_ID or not CR_TEMPLATE_ID:
+        raise RuntimeError("CASH_REPORT_FOLDER_ID / CASH_REPORT_TEMPLATE_ID belum diisi")
+    tanggal = str(rec.get("tanggal") or datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d"))
+    year = tanggal[:4]
+    bank = str(rec.get("bank") or "").strip().upper() or CR_DEFAULT_BANK
+
+    year_folder = _find_or_create_folder(year, CR_FOLDER_ID)
+    ss_file = _find_or_create_spreadsheet(bank, year, year_folder)
+    sh = _open_spreadsheet(ss_file["id"])
+    ws = _monthly_worksheet(sh, tanggal)
+    _ensure_extra(ws)
+
+    if rec["ref_id"] in ws.col_values(11):  # kolom K = Ref ID
+        return {"status": "dup", "worksheet": ws.title, "row": 0, "link": ""}
+
+    link = ""
+    if _drive_ready() and image_bytes:
+        with suppress(Exception):
+            link = upload_drive(image_bytes, filename or rec.get("sumber_file") or "receipt.jpg")
+
+    row, inserted, sub = _place_row(ws)
+    nominal = rec.get("nominal")
+    masuk = rec.get("arah") == "masuk"
+    input_date = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d")
+    ws.update(
+        values=[[
+            input_date, tanggal, _safe(rec.get("keterangan")), _safe(rec.get("kategori")),
+            "", "",
+            nominal if (masuk and nominal) else "",
+            nominal if ((not masuk) and nominal) else "",
+            f"=I{row - 1}+G{row}-H{row}",
+            link, rec["ref_id"], "draft", rec.get("confidence", ""),
+            _safe(rec.get("caption")), _safe(rec.get("catatan")), _safe(rec.get("sumber_file")),
+        ]],
+        range_name=f"A{row}:P{row}",
+        value_input_option="USER_ENTERED",
+    )
+    # format tanggal A,B mengikuti gaya laporan (d-mmm-yy)
+    ws.spreadsheet.batch_update({
+        "requests": [{
+            "repeatCell": {
+                "range": {"sheetId": ws.sheet_id, "startRowIndex": row - 1, "endRowIndex": row,
+                          "startColumnIndex": 0, "endColumnIndex": 2},
+                "cell": {"userEnteredFormat": {"numberFormat": {"type": "DATE", "pattern": "d-mmm-yy"}}},
+                "fields": "userEnteredFormat.numberFormat",
+            }
+        }]
+    })
+    if inserted:
+        # sisip baris -> rumus Sub Total/Sisa/Grand Total digeser manual
+        ws.update(values=[[f"=SUM(G6:G{sub - 1})", f"=SUM(H6:H{sub - 1})"]],
+                  range_name=f"G{sub}:H{sub}", value_input_option="USER_ENTERED")
+        ws.update(values=[[f"=G{sub}-H{sub}"]],
+                  range_name=f"H{sub + 1}", value_input_option="USER_ENTERED")
+        ws.update(values=[[f"=G{sub}+G{sub + 1}", f"=H{sub}+H{sub + 1}"]],
+                  range_name=f"G{sub + 2}:H{sub + 2}", value_input_option="USER_ENTERED")
+    return {"status": "ok", "worksheet": ws.title, "row": row, "link": link}
 
 
 def push_pending(rec: dict, error: str) -> None:
@@ -258,7 +445,7 @@ def flush_pending(client: httpx.AsyncClient) -> int:
         rec.pop("_error", None)
         rec.pop("_ts", None)
         try:
-            append_sheet(rec)
+            write_cash_report(rec)  # tanpa gambar: retry hanya barisnya, link kosong
         except Exception as e:
             push_pending(rec, f"retry gagal: {e}")
             sisa.append(ln)
@@ -318,21 +505,21 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
     rec = await extract(client, filename, img.content, caption)
     rec = {**rec, "sumber_file": filename, "ref_id": f"tg:{fid}"}
     try:
-        hasil = append_sheet(rec)
+        hasil = await asyncio.to_thread(write_cash_report, rec, img.content, filename)
     except Exception as e:
         push_pending(rec, str(e))
-        await tg_send(client, chat_id, f"⚠️ Ekstraksi OK, tapi kirim ke Sheets gagal ({type(e).__name__}). Masuk antrean, dikirim ulang otomatis.")
+        await tg_send(client, chat_id, f"⚠️ Ekstraksi OK, tapi tulis ke Cash Report gagal ({type(e).__name__}). Masuk antrean, dikirim ulang otomatis.")
         return
-    if hasil == "dup":
+    if hasil["status"] == "dup":
         await tg_send(client, chat_id, "♻️ Sudah pernah dicatat — dilewati.")
         return
-    link = await asyncio.to_thread(upload_and_link, img.content, filename, rec["ref_id"])
     nominal = f"Rp{rec['nominal']:,}" if rec["nominal"] else "<i>belum terbaca</i>"
-    baris_bukti = f'\n<a href="{link}">Bukti transfer</a>' if link else ""
+    bank = rec.get("bank") or CR_DEFAULT_BANK
+    baris_bukti = f'\n<a href="{hasil["link"]}">Bukti transfer</a>' if hasil["link"] else ""
     await tg_send(
         client, chat_id,
-        f"✅ Draft tercatat ke Sheets\n"
-        f"{rec['tanggal']} · {nominal} · {rec['arah']}\n"
+        f"✅ Draft tercatat — {hasil['worksheet']} baris {hasil['row']}\n"
+        f"{rec['tanggal']} · {nominal} · {rec['arah']} · {bank}\n"
         f"Keterangan: {rec['keterangan']}{baris_bukti}\n"
         f"Status: <b>draft</b> — periksa & ubah ke verified di Sheet.",
     )
@@ -387,7 +574,7 @@ def health():
     return {
         "ok": True,
         "telegram": bool(TG_TOKEN and TG_ALLOWED),
-        "sheets": bool(SHEET_ID),
+        "sheets": bool(CR_FOLDER_ID and CR_TEMPLATE_ID),
         "ai": "vision" if AI_KEY else "mock",
         "drive": _drive_ready(),
         "pending": PENDING.exists(),
@@ -402,12 +589,12 @@ async def api_extract(req: ExtractReq):
         ref = "manual:" + re.sub(r"\W+", "-", req.filename)[:80]
         rec = {**rec, "sumber_file": req.filename, "ref_id": ref}
         try:
-            hasil = append_sheet(rec)
+            hasil = await asyncio.to_thread(write_cash_report, rec, raw, req.filename)
         except Exception as e:
             push_pending(rec, str(e))
             return {**rec, "sheet": "pending", "error": str(e)}
-        link = upload_and_link(raw, req.filename, ref)
-        return {**rec, "sheet": hasil, "link_bukti": link}
+        return {**rec, "sheet": hasil["status"], "worksheet": hasil["worksheet"],
+                "row": hasil["row"], "link_bukti": hasil["link"]}
 
 
 if __name__ == "__main__":

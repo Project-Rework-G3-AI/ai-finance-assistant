@@ -1,6 +1,6 @@
-# Bot Pencatatan Transaksi — Milestone 1: Telegram → Ekstraksi → Google Sheets
+# Bot Pencatatan Transaksi — Milestone 1: Telegram → Ekstraksi → Cash Report
 
-Bot Telegram terima foto/screenshot bukti transaksi → ekstraksi field → append ke Google Sheets (status `draft`, review manual di Sheet). Tanpa database.
+Bot Telegram terima foto/screenshot bukti transaksi → ekstraksi field → tulis ke **Cash Report** (Google Sheets per bank per tahun, tab bulanan, status `draft`, review manual). Tanpa database.
 
 Deploy aktif: https://ai-finance-assistant-z473.onrender.com/health — detail di [DEPLOYMENT.md](DEPLOYMENT.md).
 
@@ -16,25 +16,27 @@ flowchart LR
     EXT -->|"tanpa AI / AI gagal"| MOCK["Mock<br/>nama file + caption"]
     VIS -.->|"gagal → fallback"| MOCK
 
-    BOT -->|"Ref ID duplikat?"| DUP{"sudah<br/>ada?"}
+    BOT -->|"Ref ID (kolom K) duplikat?"| DUP{"sudah<br/>ada?"}
     DUP -->|"ya"| SKIP["balasan: dilewati"]
-    DUP -->|"tidak"| SHEET[("Google Sheets<br/>status draft<br/>(cloud)")]
-    SHEET -->|"upload foto baru<br/>(opsional)"| DRIVE["Google Drive<br/>Link Bukti<br/>(cloud)"]
-    SHEET -->|"gagal"| PEND["pending.jsonl<br/>(lokal)"]
-    PEND -->|"retry tiap siklus"| SHEET
+    DUP -->|"tidak"| CR[("Cash Report<br/>per bank · tab bulanan<br/>(cloud, SA)")]
 
-    SHEET -->|"review manual:<br/>draft → verified"| U
+    CR -->|"cari/copy template"| YR["Folder tahun +<br/>file Cash Report {bank}<br/>(Drive OAuth)"]
+    CR -->|"upload foto baru<br/>(opsional)"| DRIVE["Google Drive<br/>Receipts · kolom Lampiran"]
+    CR -->|"gagal"| PEND["pending.jsonl<br/>(lokal)"]
+    PEND -->|"retry tiap siklus"| CR
+
+    CR -->|"review manual:<br/>draft → verified"| U
     W["Browser lokal<br/>GET /health<br/>POST /api/extract"] --> BOT
 
     classDef cloud fill:#1e3a5f,stroke:#3b82f6,color:#fff
     classDef local fill:#14532d,stroke:#22c55e,color:#fff
-    class TG,SHEET,VIS,DRIVE cloud
+    class TG,CR,VIS,DRIVE,YR cloud
     class BOT,MOCK,PEND,W local
 ```
 
 - Satu proses di lokal: polling Telegram + endpoint API berjalan bersamaan; semua koneksi **keluar** (internet), tanpa server publik.
 - Mode vision (AI) dipakai bila `AI_API_KEY` ada; selalu fallback ke mock agar alur tidak pernah putus.
-- Sheets = tujuan akhir (append-only); `pending.jsonl` = penahan gagal, bukan penyimpanan utama.
+- **Split kredensial**: Drive (cari folder, copy template, upload foto) = OAuth user; sel/tab Cash Report = service account. `pending.jsonl` = penahan gagal, bukan penyimpanan utama.
 
 ## Setup
 
@@ -67,24 +69,53 @@ Gratis, tanpa billing, sekali setup (~5 menit), kunci tidak kedaluwarsa.
    ```bash
    .venv/bin/python -c "import json;print(json.load(open('service_account.json'))['client_email'])"
    ```
-7. **Siapkan Sheet** — buat Sheet baru (kas Operasional) → **Share** → tempel email service account → role **Editor** → centang "Don't send". Salin **Spreadsheet ID** dari URL `docs.google.com/spreadsheet/d/`**`ID`**`/edit`.
+7. **Siapkan folder Cash Report & share ke SA** — buat folder `Cash Report` di Drive → **Share** → tempel email service account (langkah 6) → role **Editor** → centang "Don't send". *(Semua file yang kelak dibuat di dalamnya — folder tahun, file per bank — mewarisi izin ini.)*
 8. **Isi `.env`**:
    ```
-   GOOGLE_SPREADSHEET_ID=<ID>
    GOOGLE_SERVICE_ACCOUNT_FILE=service_account.json
+   CASH_REPORT_FOLDER_ID=<ID folder Cash Report>
+   CASH_REPORT_TEMPLATE_ID=<ID spreadsheet template>
    ```
 
 Verifikasi: `curl http://127.0.0.1:8000/health` → `"sheets": true`.
 
-Troubleshooting: append gagal "insufficient permissions" = email service account (langkah 6) belum dapat akses Editor di Sheet (langkah 7).
+Troubleshooting: append gagal "insufficient permissions" = email service account (langkah 6) belum dapat akses Editor di folder (langkah 7).
 
 Opsional AI: isi `AI_API_KEY` (+ `AI_BASE_URL`/`AI_MODEL` bila pakai provider lain) untuk ekstraksi vision. Tanpa itu = mode mock (tanggal dari nama file, nominal dari caption).
 
+## Setup Cash Report (folder, template, verifikasi)
+
+Struktur yang dipakai bot (lihat juga `cash_report/README.md`):
+
+```
+Google Drive/
+├── Cash Report/
+│   ├── Spreadsheet Template Cash Report   ← CASH_REPORT_TEMPLATE_ID
+│   └── <tahun>/                           ← otomatis (folder tahun)
+│       └── Cash Report {BANK}             ← otomatis (copy template)
+└── Receipts/                              ← GOOGLE_DRIVE_FOLDER_ID (upload foto)
+```
+
+Aturan **template** (wajib dipenuhi):
+
+- Google Sheet, berisi 12 tab `Cash Report - <Bulan> 2025` + tab `config` (tahun template = `CR_TEMPLATE_YEAR`, default `2025`).
+- Header tabel di **baris 5**; `Saldo Awal` baris 6; data mulai baris 7; ada baris **`Sub Total`** (kolom B, bebas huruf besar/kecil) dengan `Sisa Saldo` dan `Grand Total` di bawahnya.
+- Kolom A–J format perusahaan; kolom K–P (**Ref ID, Status, Confidence, Caption, Catatan, Sumber File**) ditambah otomatis bot (grid diperluas 10→16, header ditulis di K5:P5 bila kosong).
+- Rumus bawaan template yang dihormati bot: saldo `=I_prev+G−H`, `SUM(G/H)` di Sub Total — hanya ditulis ulang saat bot menyisipkan baris.
+
+Verifikasi setup (baca saja, tidak menulis):
+
+```bash
+.venv/bin/python cash_report/verify_setup.py
+```
+
+Menampilkan: share SA ✓, daftar tab, tab bulan hilang, tab config, baris Sub Total, header tahun, formula E/F/G/H, dan isi baris 5–7.
+
 ## Setup Google Drive (opsional — arsip bukti transfer)
 
-Foto yang diterima juga diunggah ke Google Drive; tautannya ditulis ke kolom `Link Bukti` supaya bisa dibuka langsung dari Sheet (memenuhi UC-02). Fitur ini **opsional** — tanpa konfigurasi, bot tetap jalan normal.
+Foto yang diterima juga diunggah ke Google Drive (folder `Receipts`); tautannya ditulis ke kolom **Lampiran (J)** supaya bisa dibuka langsung dari Cash Report (memenuhi UC-02). Fitur ini **opsional** — tanpa konfigurasi, bot tetap jalan normal.
 
-Upload memakai **OAuth akun user** (bukan service account): Google memblokir service account membuat file sendiri (error `storageQuotaExceeded`), kecuali lewat Shared Drive yang butuh Google Workspace.
+Upload & manajemen file memakai **OAuth akun user** (bukan service account): Google memblokir service account membuat file sendiri (error `storageQuotaExceeded`). Scope yang dipakai **`https://www.googleapis.com/auth/drive`** (penuh) — diperlukan untuk mencari folder tahun dan menyalin template milik user. **Token lama ber-scopes `drive.file` tidak berlaku untuk fitur ini — buat ulang refresh token (langkah 4).**
 
 1. **Aktifkan Drive API** — Google Cloud Console → **APIs & Services** → **Library** → cari "Google Drive API" → **Enable**.
 2. **OAuth consent screen** — **APIs & Services** → **OAuth consent screen** → User Type **External** → isi app name/email → **Save** → tab **Audience/Testing** → **+ Add users** → tambahkan Gmail yang akan jadi pemilik foto (mode Testing cukup, tidak perlu verifikasi Google).
@@ -96,7 +127,7 @@ Upload memakai **OAuth akun user** (bukan service account): Google memblokir ser
 .venv/bin/python - <<'PY'
 from google_auth_oauthlib.flow import InstalledAppFlow
 flow = InstalledAppFlow.from_client_secrets_file(
-    "credentials.json", ["https://www.googleapis.com/auth/drive.file"])
+    "credentials.json", ["https://www.googleapis.com/auth/drive"])
 creds = flow.run_local_server(port=0)
 print("REFRESH_TOKEN=" + creds.refresh_token)
 PY
@@ -113,40 +144,58 @@ PY
    ```
    Di Render: sama di Dashboard Environment.
 
-Verifikasi: `/health` → `"drive": true`; kirim foto → balasan ada tautan "Bukti transfer" dan baris Sheet punya isi `Link Bukti`.
+Verifikasi: `/health` → `"drive": true`; kirim foto → balasan ada tautan "Bukti transfer" dan baris Cash Report punya isi kolom Lampiran.
 
-Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan hanya bila ekstraksi/simpan Sheet sukses. Gagal unggah Drive tidak mematikan proses — kolom dibiarkan kosong, error muncul di log. Refresh token tidak kedaluwarsa selama tidak dicabut (atau password Gmail diganti).
+Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan hanya bila tulis Cash Report sukses. Gagal unggah Drive tidak mematikan proses — kolom dibiarkan kosong, error muncul di log. Refresh token tidak kedaluwarsa selama tidak dicabut (atau password Gmail diganti).
 
 ## Alur
 
 - Kirim **foto ke bot dalam satu pesan**, dengan caption (opsional, mis. `Rp195.000 penjualan satvika`). Caption dipakai sebagai konteks ekstraksi **dan** disimpan utuh di kolom `Caption`.
   - Caption yang dikirim sebagai pesan terpisah **tidak** terbaca bot — selalu satu paket foto + caption.
-- Mode vision (AI): gambar + caption dikirim bersama ke AI → field diisi AI.
+- Mode vision (AI): gambar + caption dikirim bersama ke AI → field diisi AI (termasuk `bank` → menentukan file Cash Report tujuan; kosong → `CR_DEFAULT_BANK`).
 - Mode mock (tanpa AI): gambar tidak dibaca; tanggal dari nama file, nominal/arah dari caption, keterangan = caption.
-- Bot ekstrak → append ke Sheet (13 kolom), upload foto ke Drive + tautan di kolom `Link Bukti`, balasan status (termasuk link bukti). Duplikat (Ref ID sama) dilewati.
-- Sheets gagal → antre `pending.jsonl`, retry otomatis tiap siklus polling.
-- Review: ubah kolom `Status` `draft` → `verified` setelah dicek. **Angka AI belum dipakai sebelum verified.**
+- Bot ekstrak → **pipeline Cash Report**: folder tahun (buat bila perlu) → file `Cash Report {bank}` (copy template bila baru, tahun di-rename) → tab bulanan → cek duplikat (Ref ID, kolom K) → upload foto ke Receipts → tulis baris A–P → balasan status + tautan bukti.
+- Tab bulanan tidak ada (nama salah/hilang) atau tulis gagal → antre `pending.jsonl`, retry otomatis tiap siklus polling.
+- Review: ubah kolom `Status` (L) `draft` → `verified` setelah dicek. **Angka AI belum dipakai sebelum verified.**
 
-## Skema Sheet (13 kolom)
+## Skema kolom Cash Report (A–P)
 
-`Tanggal | Keterangan | Nominal | Arah | Kategori | Status | Sumber File | Ref ID | Confidence | Tanggal Input | Catatan | Caption | Link Bukti`
+Format perusahaan A–J + kolom audit K–P (ditambah otomatis):
 
-- Header dibuat otomatis saat Sheet kosong; Sheet lama (11/12 kolom) otomatis ditambah kolom yang kurang.
-- `Keterangan` = hasil ekstraksi AI (atau caption di mode mock); `Caption` = teks asli apa adanya; `Link Bukti` = tautan foto di Google Drive (kosong bila fitur Drive mati/gagal).
+| Kolom | Isi | Aturan |
+|---|---|---|
+| A | Tanggal Input | tanggal jam penulisan (Asia/Jakarta) |
+| B | Tanggal Transaksi | dari ekstraksi |
+| C | Keterangan | caption menang, fallback ekstraksi |
+| D | Kategori | dari ekstraksi |
+| E, F | Keterangan uang masuk/keluar | **selalu kosong** (format perusahaan) |
+| G | Debet | nominal **hanya bila arah = masuk** |
+| H | Kredit | nominal **hanya bila arah = keluar** |
+| I | Saldo | formula template — tidak ditulis bot |
+| J | Lampiran | tautan foto di Drive (kosong bila fitur off/gagal) |
+| K | Ref ID | dedupe (`tg:…` / `manual:…`) |
+| L | Status | `draft` saat tulis; reviewer → `verified` |
+| M | Confidence | hasil ekstraksi |
+| N | Caption | teks asli apa adanya |
+| O | Catatan | mis. "Ekstraksi AI — wajib ditinjau" |
+| P | Sumber File | nama file foto |
+
+- Baris ditulis di baris kosong pertama 7..SubTotal−1; penuh → disisipkan (format & rumus ikut menyesuaikan).
+- Query PnL/reconcile nanti **hanya menghitung baris `Status = verified`** dan memakai G/H sebagai angka.
 
 ## Endpoint
 
 - `GET /health` — status telegram/sheets/ai/drive + antrean.
-- `POST /api/extract` `{filename, image_base64?, caption?}` — ekstraksi + append tanpa bot (untuk uji cepat/web nanti).
+- `POST /api/extract` `{filename, image_base64?, caption?}` — ekstraksi + tulis Cash Report tanpa bot (untuk uji cepat/web nanti).
 
 ## Antrean Gagal (`pending.jsonl`)
 
-Mekanisme agar ekstraksi tidak hilang ketika Google Sheets tidak bisa dijangkau:
+Mekanisme agar ekstraksi tidak hilang ketika Drive/Sheets tidak bisa dijangkau:
 
-1. **Kapan masuk antrean** — `append_sheet()` gagal (Sheets down, permission salah, kredensial kedaluwarsa, koneksi putus) setelah ekstraksi sukses. Record ditulis ke `pending.jsonl` (1 baris JSON per kejadian) lalu pengguna tetap diberi balasan bahwa ekstraksi berhasil tapi pengiriman ditunda.
-2. **Format baris** — hasil ekstraksi lengkap (`tanggal`, `keterangan`, `nominal`, `ref_id`, `caption`, dst.) + `_error` (pesan kegagalan) + `_ts` (epoch).
-3. **Kapan dikirim ulang** — `flush_pending()` dipanggil **tiap siklus polling** sebelum `getUpdates` berikutnya. Tiap baris dihapus dari file dulu, lalu dicoba append; gagal lagi → ditulis ulang. Sukses/duplikat → baris hilang dari antrean.
-4. **Tidak pernah menggandakan** — retry melewati cek dedupe `Ref ID` yang sama seperti proses normal, jadi meski baris sempat terkirim sebelum error, retry akan berstatus `dup`.
+1. **Kapan masuk antrean** — `write_cash_report()` gagal (folder/template tidak ada, permission salah, kredensial kedaluwarsa, koneksi putus) setelah ekstraksi sukses. Record ditulis ke `pending.jsonl` (1 baris JSON per kejadian) lalu pengguna tetap diberi balasan bahwa ekstraksi berhasil tapi pengiriman ditunda.
+2. **Format baris** — hasil ekstraksi lengkap (`tanggal`, `keterangan`, `nominal`, `arah`, `bank`, `ref_id`, `caption`, dst.) + `_error` (pesan kegagalan) + `_ts` (epoch).
+3. **Kapan dikirim ulang** — `flush_pending()` dipanggil **tiap siklus polling** sebelum `getUpdates` berikutnya. Tiap baris dihapus dari file dulu, lalu dicoba tulis; gagal lagi → ditulis ulang. Sukses/duplikat → baris hilang dari antrean.
+4. **Tidak pernah menggandakan** — retry melewati cek dedupe `Ref ID` (kolom K) yang sama seperti proses normal, jadi meski baris sempat terkirim sebelum error, retry akan berstatus `dup`. Retry **tanpa gambar** (file foto tidak ikut antrean) → kolom Lampiran kosong — cukup isi manual atau kirim ulang foto untuk baris yang belum ada.
 5. **Batas** — file di filesystem proses; **hilang saat redeploy Render** (tidak persisten). Antrean ini penahan kegagalan sementara, bukan penyimpanan. `GET /health` menampilkan `pending: true/false`.
 
 `pending.jsonl` sudah masuk `.gitignore` — tidak pernah ikut ter-commit.
@@ -181,7 +230,7 @@ Data diedit manual di Sheet (draft → verified); mirror DB akan jadi basi dan m
 |---|---|
 | `aggregate(period, arah, kategori?)` | total masuk/keluar — dihitung **kode** |
 | `list_rows(period, filter?)` | daftar baris untuk pertanyaan rinci |
-| `get_receipt(ref_id)` | ambil `Link Bukti` dari Drive (read-only) |
+| `get_receipt(ref_id)` | ambil tautan foto dari kolom Lampiran (J) (read-only) |
 
 Aturan tetap: AI hanya menerjemahkan intent → parameter dan menyusun narasi; jawaban wajib menyebut sumber (tab/baris).
 
@@ -209,10 +258,6 @@ Aturan tetap: AI hanya menerjemahkan intent → parameter dan menyusun narasi; j
 
 - **Balasan ack "sedang diproses"** — saat ini foto yang diproses tidak dibalas sampai selesai (ekstraksi bisa 10–60 detik, user menunggu tanpa kabar). Rencana: kirim `⏳ Diterima, sedang diproses…` segera setelah lolos whitelist, **sebelum** unduh file/ekstraksi, lalu pesan hasil seperti sekarang (✅/♻️/⚠️/❌). Kegagalan kirim ack diabaikan agar tidak mematikan proses. Pertimbangan UX: menurunkan risiko user kirim ulang karena mengira gagal, dan memenuhi UN-01 (kepastian transaksi diterima). Bentuk sederhana: dua bubble terpisah; opsi lanjut: edit pesan ack menjadi hasil akhir.
 - **Ref ID prioritas nomor referensi dokumen** — `Ref ID` saat ini selalu diisi `tg:<file_unique_id>` sehingga nomor referensi hasil ekstraksi (`rec["ref"]`) terbuang. Rencana: `ref_id = f"doc:{rec['ref']}"` bila ada, fallback `tg:<file_unique_id>`. Alasan: nomor referensi bank unik per transaksi → deteksi duplikat lebih kuat (foto diedit/kompresi ulang tetap ketangkap) dan menjadi kunci pencocokan untuk balancing (milestone 2) terhadap kolom referensi di mutasi bank. Format prefix `doc:`/`tg:` ditentukan sejak awal dan tidak diubah-ubah.
-- **Google Drive sebagai penyimpanan bukti transfer** — sudah diimplementasikan (lihat "Setup Google Drive"): 1 folder tujuan + kolom `Link Bukti`. Yang belum: **folder per periode** (`Receipts 2026/01`) supaya arsip terpisah per bulan.
+- **Google Drive sebagai penyimpanan bukti transfer** — sudah diimplementasikan (lihat "Setup Google Drive"): folder `Receipts` + kolom Lampiran (J). Yang belum: **folder per periode** (`Receipts 2026/01`) supaya arsip terpisah per bulan.
 - **Nama admin otomatis** — tambah kolom `Nama Admin` diisi dari data pengirim Telegram (`message.from`: `first_name` + `last_name`, fallback `username`, terakhir `"Tidak diketahui"`) — menggantikan kolom "Tanggal Input dan Nama Admin" gaya Cash Report perusahaan. Pertimbangan: nama bergantung pada akun pengirim (bukan selalu orang yang sama dengan yang menginput).
-- **Multi-sheet per periode** — Sheet Tujuan ditentukan dari tanggal ekstraksi (`YYYY-MM` → sheet/bulan). Sebelum append: cek apakah sheet periode ada.
-  - Ada → pakai.
-  - Belum ada → **buat sheet baru otomatis** (`add_worksheet("Nov 2026")` + header), atau fallback ke sheet umum + kolom `Periode` bila otomatis dinilai berisiko.
-  - Dedupe Ref ID wajib **per sheet** (col_values dibaca dari sheet tujuan, bukan sheet pertama).
-  - Alternatif sederhana: 1 spreadsheet berisi banyak tab bulanan (bukan banyak file) — disarankan, karena share service account cukup 1 kali.
+- **Multi-sheet per periode** — **sudah sebagian lewat struktur Cash Report**: file per bank per tahun, tab per bulan, dedupe Ref ID per tab (`col_values` dibaca dari tab tujuan). Yang belum: **buat tab bulan otomatis** bila tidak ada (sekarang error `Worksheet tidak ditemukan`) — berguna bila template tidak lengkap 12 bulan.
