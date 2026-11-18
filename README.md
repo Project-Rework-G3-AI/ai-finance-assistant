@@ -120,20 +120,13 @@ Upload & manajemen file memakai **OAuth akun user** (bukan service account): Goo
 1. **Aktifkan Drive API** — Google Cloud Console → **APIs & Services** → **Library** → cari "Google Drive API" → **Enable**.
 2. **OAuth consent screen** — **APIs & Services** → **OAuth consent screen** → User Type **External** → isi app name/email → **Save** → tab **Audience/Testing** → **+ Add users** → tambahkan Gmail yang akan jadi pemilik foto (mode Testing cukup, tidak perlu verifikasi Google).
 3. **Buat OAuth client** — **Credentials** → **Create Credentials** → **OAuth client ID** → Application type **Desktop app** → Create → **Download JSON** → simpan sebagai `credentials.json` di folder `bot/` (sudah masuk `.gitignore`).
-4. **Ambil refresh token (sekali saja)** — jalankan dua perintah ini. Perhatian: baris penutup `PY` harus **tepat di kolom paling kiri** (tanpa spasi); kalau terminal menampilkan prompt `>` terus, ketik `PY` lalu Enter.
+4. **Ambil refresh token (sekali saja)** — jalankan:
 
 ```bash
-.venv/bin/pip install google-auth-oauthlib   # sudah di requirements.txt
-.venv/bin/python - <<'PY'
-from google_auth_oauthlib.flow import InstalledAppFlow
-flow = InstalledAppFlow.from_client_secrets_file(
-    "credentials.json", ["https://www.googleapis.com/auth/drive"])
-creds = flow.run_local_server(port=0)
-print("REFRESH_TOKEN=" + creds.refresh_token)
-PY
+python oauth_init.py
 ```
 
-   Browser terbuka → login Gmail tujuan → izinkan → salin nilai `REFRESH_TOKEN` dari terminal.
+   Browser terbuka → login Gmail tujuan → izinkan → salin baris `GOOGLE_OAUTH_REFRESH_TOKEN=...` dari terminal.
 5. **Buat folder tujuan** — di Drive akun yang sama, mis. `Receipts 2026` → salin **Folder ID** dari URL `drive.google.com/drive/folders/`**`ID`**. *(Tidak perlu share — file nanti milik akun ini.)*
 6. **Isi `.env`**:
    ```
