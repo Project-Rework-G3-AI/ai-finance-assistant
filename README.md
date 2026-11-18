@@ -169,6 +169,42 @@ Urutkan berdasarkan nilai buat brief (3 pilihan kelompok) dan usaha:
 
 Yang tidak perlu dibangun: database, login, dashboard analytics, n8n.
 
+## Rancangan Tanya-Jawab & Data (hasil diskusi desain)
+
+Keputusan inti: **tanpa database untuk query AI** — Sheet tetap satu-satunya source of truth.
+
+### Query AI baca Sheet langsung, bukan mirror DB
+
+Data diedit manual di Sheet (draft → verified); mirror DB akan jadi basi dan menimbulkan masalah sync yang justru dihindari. Volume kecil → baca via `gspread` saat query juga cukup. Bentuknya **tools**, bukan database:
+
+| Tool | Fungsi |
+|---|---|
+| `aggregate(period, arah, kategori?)` | total masuk/keluar — dihitung **kode** |
+| `list_rows(period, filter?)` | daftar baris untuk pertanyaan rinci |
+| `get_receipt(ref_id)` | ambil `Link Bukti` dari Drive (read-only) |
+
+Aturan tetap: AI hanya menerjemahkan intent → parameter dan menyusun narasi; jawaban wajib menyebut sumber (tab/baris).
+
+### PnL & reconcile: cukup spreadsheet
+
+- **PnL**: baca → agregasi per kategori di kode (sudah dibuktikan prototipe).
+- **Reconcile**: matching *in-memory* antara transaksi Sheet dan **tab `Mutasi`** (hasil parse PDF/XLSX disimpan sekali — jangan parse ulang tiap run) → hasil ditulis ke kolom (`Status Reconcile`, `Cocok Dengan`, `Selisih`) + laporan selisih per periode.
+- **Database hanya kalau**: butuh log nilai AI vs final (SQLite, append-only), baris > ~100rb (PostgreSQL), atau multi-penulis. Sinkron **satu arah Sheet → DB**, tidak pernah dua arah.
+
+### Routing pesan: foto vs tanya-data
+
+- Foto/dokumen → jalur ekstraksi **tidak berubah** dan tidak pernah melewati LLM (cukup cek tipe pesan).
+- Teks → berurutan: (1) command `/` dulu (gratis, deterministik); (2) bahasa bebas → **satu panggilan LLM tool-calling** — pilihan tool-nya *adalah* routing-nya. Classifier terpisah tidak direkomendasikan (berarti dua panggilan AI per pertanyaan: lambat, mahal, dua titik gagal).
+- Klasifikasi gagal / AI mati → balasan bantuan (fallback, pola sama dengan mode mock).
+
+### Command `/` — opsional, parameter divalidasi
+
+- Tidak wajib; disarankan untuk pola berulang: `/total Nov`, `/rekap`, `/help`.
+- Parameter tidak valid → balas **usage singkat dengan contoh**, tidak pernah exception:
+  - `/total` atau `/total abc` → `Format: /total <bulan> — contoh: /total Nov, /total 2026-11`
+  - command tidak dikenal → ringkasan bantuan.
+- `first = text.split()[0].split("@")[0]` (buang `@botname` di grup) → lookup dict handler → parse argumen di dalam handler.
+
 ### Catatan desain terbuka (dipelajari nanti)
 
 - **Balasan ack "sedang diproses"** — saat ini foto yang diproses tidak dibalas sampai selesai (ekstraksi bisa 10–60 detik, user menunggu tanpa kabar). Rencana: kirim `⏳ Diterima, sedang diproses…` segera setelah lolos whitelist, **sebelum** unduh file/ekstraksi, lalu pesan hasil seperti sekarang (✅/♻️/⚠️/❌). Kegagalan kirim ack diabaikan agar tidak mematikan proses. Pertimbangan UX: menurunkan risiko user kirim ulang karena mengira gagal, dan memenuhi UN-01 (kepastian transaksi diterima). Bentuk sederhana: dua bubble terpisah; opsi lanjut: edit pesan ack menjadi hasil akhir.
