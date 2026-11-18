@@ -269,7 +269,7 @@ def _initialize_year(spreadsheet_id: str, year: str) -> None:
         if CR_TEMPLATE_YEAR in title:
             reqs.append({
                 "updateSheetProperties": {
-                    "properties": {"sheetId": w.sheet_id, "title": title.replace(CR_TEMPLATE_YEAR, str(year))},
+                    "properties": {"sheetId": w.id, "title": title.replace(CR_TEMPLATE_YEAR, str(year))},
                     "fields": "title",
                 }
             })
@@ -277,7 +277,7 @@ def _initialize_year(spreadsheet_id: str, year: str) -> None:
             reqs.append({
                 "findReplace": {
                     "find": CR_TEMPLATE_YEAR, "replacement": str(year),
-                    "range": {"sheetId": w.sheet_id, "startRowIndex": 1, "endRowIndex": 13,
+                    "range": {"sheetId": w.id, "startRowIndex": 1, "endRowIndex": 13,
                               "startColumnIndex": 0, "endColumnIndex": 1},
                     "matchCase": True, "matchEntireCell": False, "searchByRegex": False,
                 }
@@ -286,13 +286,13 @@ def _initialize_year(spreadsheet_id: str, year: str) -> None:
             reqs.append({
                 "findReplace": {
                     "find": CR_TEMPLATE_YEAR, "replacement": str(year),
-                    "range": {"sheetId": w.sheet_id, "startRowIndex": 2, "endRowIndex": 3,
+                    "range": {"sheetId": w.id, "startRowIndex": 2, "endRowIndex": 3,
                               "startColumnIndex": 1, "endColumnIndex": 2},
                     "matchCase": True, "matchEntireCell": False, "searchByRegex": False,
                 }
             })
     if reqs:
-        sh.batch_update(reqs)
+        sh.batch_update({"requests": reqs})
 
 
 _ss_cache: dict = {}
@@ -323,7 +323,7 @@ def _ensure_extra(ws) -> None:
     if key in _ensured:
         return
     if ws.col_count < 16:
-        ws.resize(columns=16)
+        ws.resize(cols=16)
     if not any(str(v).strip() for v in ws.row_values(5)[10:16]):
         for i, h in enumerate(EXTRA_HEADERS):
             ws.update_cell(5, 11 + i, h)
@@ -346,7 +346,7 @@ def _place_row(ws) -> tuple:
     ws.spreadsheet.batch_update({
         "requests": [{
             "insertDimension": {
-                "range": {"sheetId": ws.sheet_id, "dimension": "ROWS",
+                "range": {"sheetId": ws.id, "dimension": "ROWS",
                           "startIndex": sub - 1, "endIndex": sub},
                 "inheritFromBefore": True,
             }
@@ -376,7 +376,15 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
     year_folder = _find_or_create_folder(year, CR_FOLDER_ID)
     ss_file = _find_or_create_spreadsheet(bank, year, year_folder)
     sh = _open_spreadsheet(ss_file["id"])
-    ws = _monthly_worksheet(sh, tanggal)
+    try:
+        ws = _monthly_worksheet(sh, tanggal)
+    except FileNotFoundError:
+        # file terlanjur ada tapi inisialisasi tahun tidak selesai (gagal di
+        # tengah sebelumnya) -> inisialisasi sekarang, lalu ulangi cek tab
+        if not any(CR_TEMPLATE_YEAR in w.title for w in sh.worksheets()):
+            raise
+        _initialize_year(ss_file["id"], year)
+        ws = _monthly_worksheet(sh, tanggal)
     _ensure_extra(ws)
 
     if rec["ref_id"] in ws.col_values(11):  # kolom K = Ref ID
@@ -408,7 +416,7 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
     ws.spreadsheet.batch_update({
         "requests": [{
             "repeatCell": {
-                "range": {"sheetId": ws.sheet_id, "startRowIndex": row - 1, "endRowIndex": row,
+                "range": {"sheetId": ws.id, "startRowIndex": row - 1, "endRowIndex": row,
                           "startColumnIndex": 0, "endColumnIndex": 2},
                 "cell": {"userEnteredFormat": {"numberFormat": {"type": "DATE", "pattern": "d-mmm-yy"}}},
                 "fields": "userEnteredFormat.numberFormat",
