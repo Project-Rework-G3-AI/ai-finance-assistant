@@ -392,8 +392,11 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
 
     link = ""
     if _drive_ready() and image_bytes:
-        with suppress(Exception):
+        try:
             link = upload_drive(image_bytes, filename or rec.get("sumber_file") or "receipt.jpg")
+        except Exception as e:
+            # baris tetap tersimpan; kolom Lampiran kosong — jejak di log
+            print(f"Drive upload gagal: {type(e).__name__}: {e}")
 
     row, inserted, sub = _place_row(ws)
     nominal = rec.get("nominal")
