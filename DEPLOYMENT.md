@@ -32,7 +32,7 @@ UptimeRobot → GET /health tiap 5 menit → free tier tetap terjaga
 | `TELEGRAM_ALLOWED_CHAT_IDS` | daftar chat_id, pisah koma |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | **isi penuh file** `service_account.json` (JSON mentah) |
 | `CASH_REPORT_FOLDER_ID`, `CASH_REPORT_TEMPLATE_ID` | folder Cash Report (di-share Editor ke SA) + ID template |
-| `CASH_REPORT_TEMPLATE_YEAR`, `CR_DEFAULT_BANK` | opsional (default `2025`, `TUNAI`) |
+| `CR_DEFAULT_BANK` | opsional (default `TUNAI`) |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN` | OAuth user (scope `drive`) — cari folder/copy template/upload foto |
 | `GOOGLE_DRIVE_FOLDER_ID` | (opsional) ID folder `Receipts` — arsip foto bukti |
 | `AI_API_KEY` | kunci vision (kosongkan = mode mock) |
