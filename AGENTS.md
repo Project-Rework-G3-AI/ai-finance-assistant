@@ -28,8 +28,8 @@ Tidak ada test framework — verifikasi via `/health` dan `/api/extract` sebelum
 
 - Dua komponen dalam satu proses: task asyncio long-polling Telegram + server FastAPI. `HOST`/`PORT` dari env (default `127.0.0.1` lokal; `0.0.0.0` di hosting).
 - Kredensial: Telegram & AI via env; **Drive = OAuth user** (`GOOGLE_OAUTH_*`, scope `drive`); **sel Cash Report = service account** (`GOOGLE_SERVICE_ACCOUNT_JSON`/`_FILE`, folder Cash Report di-share Editor ke SA). **Tidak pernah di kode/repo** — `.env`, `service_account.json`, `credentials.json`, `pending.jsonl` sudah di `.gitignore`.
-- Tulis ke **Cash Report**: folder tahun → file `Cash Report {bank}` (copy template, tahun di-rename) → tab bulanan → dedupe Ref ID (kolom K) → tulis baris A–P (A–J format perusahaan, K–P audit). Gagal → antre `pending.jsonl`, retry tiap siklus polling.
-- Semua angka dihitung kode; AI (vision) hanya mengisi field (`bank`, kategori, dll). Status baris selalu `draft` (kolom L) — konversi `verified` = review manual; query nanti hanya hitung `verified`.
+- Tulis ke **Cash Report**: folder tahun → file `Cash Report <tahun>` (copy template Bizschool, sel periode ditulis) → sheet `TRANSAKSI` (flat ledger A–N) → dedupe Ref ID (kolom G) → upload foto ke Receipts (kolom M) → append baris (transfer = 2 baris berpasangan kolom N). Gagal → antre `pending.jsonl`, retry tiap siklus polling.
+- Semua angka dihitung kode; AI (vision) hanya mengisi field (`bank`, kategori, dll). Status baris selalu `draft` (kolom H) — konversi `verified` = review manual; query nanti hanya hitung `verified`.
 
 ## Code Style Guidelines
 

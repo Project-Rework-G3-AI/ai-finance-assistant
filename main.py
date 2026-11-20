@@ -34,7 +34,6 @@ SA_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "service_account.json").strip
 DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip()  # folder Receipts (upload foto)
 CR_FOLDER_ID = os.getenv("CASH_REPORT_FOLDER_ID", "").strip()
 CR_TEMPLATE_ID = os.getenv("CASH_REPORT_TEMPLATE_ID", "").strip()
-CR_TEMPLATE_YEAR = os.getenv("CASH_REPORT_TEMPLATE_YEAR", "2025").strip()
 CR_DEFAULT_BANK = os.getenv("CR_DEFAULT_BANK", "TUNAI").strip().upper()
 AI_KEY = os.getenv("AI_API_KEY", "").strip()
 AI_BASE = os.getenv("AI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
@@ -45,12 +44,6 @@ GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
-MONTHS = [
-    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-    "Juli", "Agustus", "September", "Oktober", "November", "Desember",
-]
-# Kolom tambahan di luar format A-J cash report (baris header 5)
-EXTRA_HEADERS = ["Ref ID", "Status", "Confidence", "Caption", "Catatan", "Sumber File"]
 
 CATATAN_MOCK = "Mock ekstraksi: isi dari nama file/caption — periksa & koreksi sebelum dipakai."
 
@@ -74,6 +67,7 @@ def _mock_extract(filename: str, caption: str) -> dict:
         "catatan": CATATAN_MOCK,
         "caption": caption.strip(),
         "bank": "",
+        "kantong_tujuan": "",
         "mode": "mock",
     }
 
@@ -84,11 +78,15 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
     prompt = (
         "Ekstrak data transaksi dari bukti ini. Balas HANYA JSON tanpa teks lain: "
         '{"tanggal":"YYYY-MM-DD","keterangan":"...","nominal":number,'
-        '"arah":"masuk|keluar","kategori":"satu dari: Bahan Baku, Biaya-Gaji Karyawan, '
-        'Biaya-Konsumsi, Biaya-Perlengkapan Kantor dan Administrasi, Biaya-Transportasi, '
-        'Biaya-Ongkir, Biaya-Perbaikan Bangunan, Biaya-Operasional, Biaya-Pembelian Aset, '
-        'Biaya-Sosial, Penjualan, Lainnya","bank":"nama bank uppercase, mis. BCA/BNI — '
-        'kosong bila tidak terbaca"}'
+        '"arah":"masuk|keluar|transfer",'
+        '"kategori":"satu dari: Bahan Baku, Biaya-Gaji Karyawan, Biaya-Konsumsi, '
+        'Biaya-Perlengkapan Kantor dan Administrasi, Biaya-Transportasi, Biaya-Ongkir, '
+        'Biaya-Perbaikan Bangunan, Biaya-Operasional, Biaya-Pembelian Aset, Biaya-Sosial, '
+        'Administrasi Bank, Pajak, Bunga, Admin Flip, Transfer Antar Bank, Penjualan, Lainnya",'
+        '"bank":"kantong asal dana — salah satu dari: BRI, BNI, Jago, TUNAI; '
+        'kosong bila tidak terbaca",'
+        '"kantong_tujuan":"hanya bila arah=transfer — kantong tujuan: '
+        'BRI, BNI, Jago, TUNAI; kosong bila bukan transfer"}'
     )
     if caption:
         prompt += f"\nCaption Telegram: {caption}"
@@ -111,16 +109,18 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
     if not m:
         raise ValueError("balasan AI bukan JSON")
     data = json.loads(m.group(0))
+    arah = str(data.get("arah", "")).lower()
     return {
         "tanggal": str(data.get("tanggal") or datetime.now().strftime("%Y-%m-%d")),
         "keterangan": str(data.get("keterangan") or caption or filename),
         "nominal": int(data["nominal"]) if data.get("nominal") else None,
-        "arah": "masuk" if str(data.get("arah", "")).lower() == "masuk" else "keluar",
+        "arah": arah if arah in ("masuk", "keluar", "transfer") else "keluar",
         "kategori": str(data.get("kategori") or ""),
         "confidence": 1.0,
         "catatan": "Ekstraksi AI — wajib ditinjau sebelum dipakai.",
         "caption": caption.strip(),
         "bank": str(data.get("bank") or "").strip().upper(),
+        "kantong_tujuan": str(data.get("kantong_tujuan") or "").strip().upper(),
         "mode": "vision",
     }
 
@@ -235,9 +235,9 @@ def _find_or_create_folder(folder_name: str, parent_id: str) -> str:
     return f["id"]
 
 
-def _find_or_create_spreadsheet(bank: str, year: str, year_folder_id: str) -> dict:
-    """Spreadsheet 'Cash Report {bank}' per tahun: cari, kalau tidak ada copy template."""
-    name = f"Cash Report {bank}"
+def _find_or_create_spreadsheet(year: str, year_folder_id: str) -> dict:
+    """Spreadsheet gabungan 'Cash Report {tahun}': cari, kalau tidak ada copy template."""
+    name = f"Cash Report {year}"
     q = (
         f"name = '{_escape_drive_query(name)}' "
         f"and '{year_folder_id}' in parents "
@@ -256,43 +256,22 @@ def _find_or_create_spreadsheet(bank: str, year: str, year_folder_id: str) -> di
         body={"name": name, "parents": [year_folder_id]},
         fields="id, name, webViewLink",
     ).execute()
-    _initialize_year(f["id"], year)
+    _init_year_dates(f["id"], year)
     return f
 
 
-def _initialize_year(spreadsheet_id: str, year: str) -> None:
-    """Setelah copy template: rename tab & header tahun template -> tahun target."""
+def _init_year_dates(spreadsheet_id: str, year: str) -> None:
+    """Setelah copy template: sel periode RECAP = 1 Januari tahun berjalan.
+
+    Sheet RECAP/YEARLY/EXPENSE/INCOME semuanya turunan dari sel ini, jadi
+    cukup satu tulisan.
+    """
     sh = _open_spreadsheet(spreadsheet_id)
-    reqs = []
-    for w in sh.worksheets():
-        title = w.title
-        if CR_TEMPLATE_YEAR in title:
-            reqs.append({
-                "updateSheetProperties": {
-                    "properties": {"sheetId": w.id, "title": title.replace(CR_TEMPLATE_YEAR, str(year))},
-                    "fields": "title",
-                }
-            })
-        if title.strip().lower() == "config":
-            reqs.append({
-                "findReplace": {
-                    "find": CR_TEMPLATE_YEAR, "replacement": str(year),
-                    "range": {"sheetId": w.id, "startRowIndex": 1, "endRowIndex": 13,
-                              "startColumnIndex": 0, "endColumnIndex": 1},
-                    "matchCase": True, "matchEntireCell": False, "searchByRegex": False,
-                }
-            })
-        else:
-            reqs.append({
-                "findReplace": {
-                    "find": CR_TEMPLATE_YEAR, "replacement": str(year),
-                    "range": {"sheetId": w.id, "startRowIndex": 2, "endRowIndex": 3,
-                              "startColumnIndex": 1, "endColumnIndex": 2},
-                    "matchCase": True, "matchEntireCell": False, "searchByRegex": False,
-                }
-            })
-    if reqs:
-        sh.batch_update({"requests": reqs})
+    sh.worksheet("RECAP OVERVIEW").update(
+        values=[[f"=DATE({year},1,1)"]],
+        range_name="B3",
+        value_input_option="USER_ENTERED",
+    )
 
 
 _ss_cache: dict = {}
@@ -304,57 +283,6 @@ def _open_spreadsheet(spreadsheet_id: str):
     return _ss_cache[spreadsheet_id]
 
 
-def _monthly_worksheet(sh, tanggal: str):
-    """Tab 'Cash Report - <Bulan> <Tahun>'. Error bila tidak ada (tidak dibuat otomatis)."""
-    year, month = int(tanggal[:4]), int(tanggal[5:7])
-    title = f"Cash Report - {MONTHS[month - 1]} {year}"
-    try:
-        return sh.worksheet(title)
-    except Exception as e:
-        raise FileNotFoundError(f"Worksheet tidak ditemukan: {title}") from e
-
-
-_ensured: set = set()
-
-
-def _ensure_extra(ws) -> None:
-    """Perluas grid ke 16 kolom + tulis header K..P (sekali per tab)."""
-    key = f"{ws.id}:{ws.title}"
-    if key in _ensured:
-        return
-    if ws.col_count < 16:
-        ws.resize(cols=16)
-    if not any(str(v).strip() for v in ws.row_values(5)[10:16]):
-        for i, h in enumerate(EXTRA_HEADERS):
-            ws.update_cell(5, 11 + i, h)
-    _ensured.add(key)
-
-
-def _place_row(ws) -> tuple:
-    """Baris tujuan: kosong pertama di 7..SubTotal-1; kalau penuh, sisipkan baris.
-
-    Return (row, inserted, sub) — sub = baris Sub Total SETelah sisip (bila ada).
-    """
-    col_b = ws.col_values(2)
-    sub = next((i + 1 for i, v in enumerate(col_b) if str(v).strip().lower() == "sub total"), None)
-    if not sub:
-        raise ValueError("baris Sub Total tidak ditemukan di tab bulanan")
-    for r in range(7, sub):
-        v = col_b[r - 1] if r - 1 < len(col_b) else ""
-        if not str(v).strip():
-            return r, False, sub
-    ws.spreadsheet.batch_update({
-        "requests": [{
-            "insertDimension": {
-                "range": {"sheetId": ws.id, "dimension": "ROWS",
-                          "startIndex": sub - 1, "endIndex": sub},
-                "inheritFromBefore": True,
-            }
-        }]
-    })
-    return sub, True, sub + 1
-
-
 def _safe(v) -> str:
     """Cegah teks user/AI diinterpretasi sebagai formula (USER_ENTERED)."""
     s = "" if v is None else str(v)
@@ -362,32 +290,28 @@ def _safe(v) -> str:
 
 
 def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -> dict:
-    """Tulis 1 transaksi ke Cash Report: folder tahun -> file bank -> tab bulan.
+    """Tulis transaksi ke ledger 'Cash Report {tahun}', sheet TRANSAKSI.
 
+    Flat ledger: append di baris pertama kolom A kosong. Transfer antar kantong
+    ditulis 2 baris berpasangan (kolom N = ID Pasangan = Ref ID).
     Return {"status": "ok"|"dup", "worksheet", "row", "link"}.
-    Urutan: dedupe dulu (Ref ID kolom K), baru upload foto & tulis baris.
+    Urutan: dedupe dulu (Ref ID kolom G), baru upload foto & tulis baris.
     """
     if not CR_FOLDER_ID or not CR_TEMPLATE_ID:
         raise RuntimeError("CASH_REPORT_FOLDER_ID / CASH_REPORT_TEMPLATE_ID belum diisi")
     tanggal = str(rec.get("tanggal") or datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d"))
     year = tanggal[:4]
-    bank = str(rec.get("bank") or "").strip().upper() or CR_DEFAULT_BANK
+    kantong = str(rec.get("bank") or "").strip().upper() or CR_DEFAULT_BANK
 
     year_folder = _find_or_create_folder(year, CR_FOLDER_ID)
-    ss_file = _find_or_create_spreadsheet(bank, year, year_folder)
+    ss_file = _find_or_create_spreadsheet(year, year_folder)
     sh = _open_spreadsheet(ss_file["id"])
     try:
-        ws = _monthly_worksheet(sh, tanggal)
-    except FileNotFoundError:
-        # file terlanjur ada tapi inisialisasi tahun tidak selesai (gagal di
-        # tengah sebelumnya) -> inisialisasi sekarang, lalu ulangi cek tab
-        if not any(CR_TEMPLATE_YEAR in w.title for w in sh.worksheets()):
-            raise
-        _initialize_year(ss_file["id"], year)
-        ws = _monthly_worksheet(sh, tanggal)
-    _ensure_extra(ws)
+        ws = sh.worksheet("TRANSAKSI")
+    except Exception as e:
+        raise FileNotFoundError("Sheet TRANSAKSI tidak ditemukan — periksa CASH_REPORT_TEMPLATE_ID") from e
 
-    if rec["ref_id"] in ws.col_values(11):  # kolom K = Ref ID
+    if rec["ref_id"] in ws.col_values(7):  # kolom G = Ref ID
         return {"status": "dup", "worksheet": ws.title, "row": 0, "link": ""}
 
     link = ""
@@ -395,45 +319,42 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
         try:
             link = upload_drive(image_bytes, filename or rec.get("sumber_file") or "receipt.jpg")
         except Exception as e:
-            # baris tetap tersimpan; kolom Lampiran kosong — jejak di log
+            # baris tetap tersimpan; kolom Link Bukti kosong — jejak di log
             print(f"Drive upload gagal: {type(e).__name__}: {e}")
 
-    row, inserted, sub = _place_row(ws)
-    nominal = rec.get("nominal")
-    masuk = rec.get("arah") == "masuk"
-    input_date = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d")
+    col_a = ws.col_values(1)
+    row = next((i + 1 for i, v in enumerate(col_a) if not str(v).strip()), len(col_a) + 1)
+
+    nominal = rec.get("nominal") or 0
+    arah = rec.get("arah")
+    kantong_tujuan = str(rec.get("kantong_tujuan") or "").strip().upper()
+    is_pair = bool(arah == "transfer" and kantong_tujuan and kantong_tujuan != kantong)
+    masuk = arah == "masuk"
+    catatan = rec.get("catatan") or ""
+    if arah == "transfer" and not is_pair:
+        catatan += " [transfer tanpa kantong tujuan terbaca — diperlakukan sebagai keluar]"
+
+    def _baris(k_: str, keluar, masuk_nilai, id_pas: str) -> list:
+        return [
+            tanggal, k_, masuk_nilai, keluar,
+            _safe(rec.get("kategori")), _safe(rec.get("keterangan")),
+            rec["ref_id"], "draft", rec.get("confidence", ""),
+            _safe(rec.get("caption")), _safe(catatan), _safe(rec.get("sumber_file")),
+            link, id_pas,
+        ]
+
+    if is_pair:
+        values = [
+            _baris(kantong, nominal, "", rec["ref_id"]),
+            _baris(kantong_tujuan, "", nominal, rec["ref_id"]),
+        ]
+    else:
+        values = [_baris(kantong, "" if masuk else nominal, nominal if masuk else "", "")]
     ws.update(
-        values=[[
-            input_date, tanggal, _safe(rec.get("keterangan")), _safe(rec.get("kategori")),
-            "", "",
-            nominal if (masuk and nominal) else "",
-            nominal if ((not masuk) and nominal) else "",
-            f"=I{row - 1}+G{row}-H{row}",
-            link, rec["ref_id"], "draft", rec.get("confidence", ""),
-            _safe(rec.get("caption")), _safe(rec.get("catatan")), _safe(rec.get("sumber_file")),
-        ]],
-        range_name=f"A{row}:P{row}",
+        values=values,
+        range_name=f"A{row}:N{row + len(values) - 1}",
         value_input_option="USER_ENTERED",
     )
-    # format tanggal A,B mengikuti gaya laporan (d-mmm-yy)
-    ws.spreadsheet.batch_update({
-        "requests": [{
-            "repeatCell": {
-                "range": {"sheetId": ws.id, "startRowIndex": row - 1, "endRowIndex": row,
-                          "startColumnIndex": 0, "endColumnIndex": 2},
-                "cell": {"userEnteredFormat": {"numberFormat": {"type": "DATE", "pattern": "d-mmm-yy"}}},
-                "fields": "userEnteredFormat.numberFormat",
-            }
-        }]
-    })
-    if inserted:
-        # sisip baris -> rumus Sub Total/Sisa/Grand Total digeser manual
-        ws.update(values=[[f"=SUM(G6:G{sub - 1})", f"=SUM(H6:H{sub - 1})"]],
-                  range_name=f"G{sub}:H{sub}", value_input_option="USER_ENTERED")
-        ws.update(values=[[f"=G{sub}-H{sub}"]],
-                  range_name=f"H{sub + 1}", value_input_option="USER_ENTERED")
-        ws.update(values=[[f"=G{sub}+G{sub + 1}", f"=H{sub}+H{sub + 1}"]],
-                  range_name=f"G{sub + 2}:H{sub + 2}", value_input_option="USER_ENTERED")
     return {"status": "ok", "worksheet": ws.title, "row": row, "link": link}
 
 
@@ -525,12 +446,14 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
         await tg_send(client, chat_id, "♻️ Sudah pernah dicatat — dilewati.")
         return
     nominal = f"Rp{rec['nominal']:,}" if rec["nominal"] else "<i>belum terbaca</i>"
-    bank = rec.get("bank") or CR_DEFAULT_BANK
+    kantong = rec.get("bank") or CR_DEFAULT_BANK
+    tujuan = rec.get("kantong_tujuan") or ""
+    arah_teks = f"transfer {kantong}→{tujuan}" if rec["arah"] == "transfer" and tujuan else rec["arah"]
     baris_bukti = f'\n<a href="{hasil["link"]}">Bukti transfer</a>' if hasil["link"] else ""
     await tg_send(
         client, chat_id,
         f"✅ Draft tercatat — {hasil['worksheet']} baris {hasil['row']}\n"
-        f"{rec['tanggal']} · {nominal} · {rec['arah']} · {bank}\n"
+        f"{rec['tanggal']} · {nominal} · {arah_teks}\n"
         f"Keterangan: {rec['keterangan']}{baris_bukti}\n"
         f"Status: <b>draft</b> — periksa & ubah ke verified di Sheet.",
     )
