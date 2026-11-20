@@ -24,7 +24,7 @@ SHEETS = [
 ]
 TRANSAKSI_HEADERS = [
     "Tanggal", "Kantong", "Masuk", "Keluar", "Kategori", "Keterangan",
-    "Ref ID", "Status", "Catatan", "Sumber File", "Link Bukti", "ID Pasangan",
+    "Ref ID", "Status", "Catatan", "Sumber File", "Link Bukti",
 ]
 
 gagal: list[str] = []
@@ -52,11 +52,11 @@ def main_verify() -> int:
     cek("7 sheet sesuai urutan", titles == SHEETS, f"dapat: {titles}")
 
     ws = sh.worksheet("TRANSAKSI")
-    cek("header TRANSAKSI A1:L1", ws.row_values(1)[:12] == TRANSAKSI_HEADERS,
+    cek("header TRANSAKSI A1:K1", ws.row_values(1)[:11] == TRANSAKSI_HEADERS,
         f"dapat: {ws.row_values(1)}")
     cek("TRANSAKSI freeze baris 1", ws.frozen_row_count == 1,
         f"dapat: {ws.frozen_row_count}")
-    cek("TRANSAKSI >= 12 kolom", ws.col_count >= 12, f"dapat: {ws.col_count}")
+    cek("TRANSAKSI >= 11 kolom", ws.col_count >= 11, f"dapat: {ws.col_count}")
     cek("baris data TRANSAKSI masih kosong",
         not any(str(v).strip() for v in ws.row_values(2)))
 

@@ -316,7 +316,8 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
     """Tulis transaksi ke ledger 'Cash Report {tahun}', sheet TRANSAKSI.
 
     Flat ledger: append di baris pertama kolom A kosong. Transfer antar kantong
-    ditulis 2 baris berpasangan (kolom L = ID Pasangan = Ref ID).
+    ditulis 2 baris berpasangan — keduanya berbagi Ref ID di kolom G (pasangan
+    dikenali dari Ref ID yang sama muncul di2 baris).
     Return {"status": "ok"|"dup", "worksheet", "row", "link"}.
     Urutan: dedupe dulu (Ref ID kolom G), baru upload foto & tulis baris.
     """
@@ -357,25 +358,25 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
     if arah == "transfer" and not is_pair:
         catatan += " [transfer tanpa kantong tujuan terbaca — diperlakukan sebagai keluar]"
 
-    def _baris(k_: str, keluar, masuk_nilai, id_pas: str) -> list:
+    def _baris(k_: str, keluar, masuk_nilai) -> list:
         return [
             tanggal, k_, masuk_nilai, keluar,
             _safe(rec.get("kategori")), _safe(rec.get("keterangan")),
             rec["ref_id"], "draft",
             _safe(catatan), _safe(rec.get("sumber_file")),
-            link, id_pas,
+            link,
         ]
 
     if is_pair:
         values = [
-            _baris(kantong, nominal, "", rec["ref_id"]),
-            _baris(kantong_tujuan, "", nominal, rec["ref_id"]),
+            _baris(kantong, nominal, ""),
+            _baris(kantong_tujuan, "", nominal),
         ]
     else:
-        values = [_baris(kantong, "" if masuk else nominal, nominal if masuk else "", "")]
+        values = [_baris(kantong, "" if masuk else nominal, nominal if masuk else "")]
     ws.update(
         values=values,
-        range_name=f"A{row}:L{row + len(values) - 1}",
+        range_name=f"A{row}:K{row + len(values) - 1}",
         value_input_option="USER_ENTERED",
     )
     return {"status": "ok", "worksheet": ws.title, "row": row, "link": link}

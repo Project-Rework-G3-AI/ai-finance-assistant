@@ -120,7 +120,7 @@ Sel periode (`RECAP OVERVIEW!B3`) ditulis bot saat file baru dibuat = `1 Januari
 
 Aturan penting:
 
-- **Transfer antar kantong** ditulis **2 baris berpasangan** (kolom `ID Pasangan` = Ref ID) — saldo tiap kantong akurat, recap/PnL mengecualikannya.
+- **Transfer antar kantong** ditulis **2 baris berpasangan** — keduanya berbagi `Ref ID` yang sama di kolom G (pasangan dikenali dari situ) — saldo tiap kantong akurat, recap/PnL mengecualikannya.
 - `Saldo Awal` di ACCOUNT diisi manual sekali per tahun.
 - Kolom **Link Bukti (K)** diisi otomatis saat foto terupload ke `Receipts`.
 
@@ -160,11 +160,11 @@ Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan ha
   - Caption yang dikirim sebagai pesan terpisah **tidak** terbaca bot — selalu satu paket foto + caption.
 - Mode vision (AI): gambar + caption dikirim bersama ke AI → field diisi AI (`bank` = **kantong asal** BRI/BNI/Jago/TUNAI; transfer menghasilkan `arah=transfer` + `kantong_tujuan`; kosong → `CR_DEFAULT_BANK`).
 - Mode mock (tanpa AI): gambar tidak dibaca; tanggal dari nama file, nominal/arah dari caption, keterangan = caption.
-- Bot ekstrak → **pipeline Cash Report**: folder tahun (buat bila perlu) → file `Cash Report <tahun>` (copy template bila baru + tulis sel periode) → sheet `TRANSAKSI` → cek duplikat (Ref ID, kolom G) → upload foto ke Receipts → tulis baris A–L (transfer = 2 baris berpasangan) → balasan status + tautan bukti.
+- Bot ekstrak → **pipeline Cash Report**: folder tahun (buat bila perlu) → file `Cash Report <tahun>` (copy template bila baru + tulis sel periode) → sheet `TRANSAKSI` → cek duplikat (Ref ID, kolom G) → upload foto ke Receipts → tulis baris A–K (transfer = 2 baris berpasangan, Ref ID sama) → balasan status + tautan bukti.
 - Sheet `TRANSAKSI` tidak ada (template salah) atau tulis gagal → antre `pending.jsonl`, retry otomatis tiap siklus polling.
 - Review: ubah kolom `Status` (H) `draft` → `verified` setelah dicek. **Angka AI belum dipakai sebelum verified.**
 
-## Skema kolom sheet TRANSAKSI (A–L)
+## Skema kolom sheet TRANSAKSI (A–K)
 
 Flat ledger — baris 1 header, data mulai baris 2, append di baris pertama kolom A kosong:
 
@@ -181,9 +181,8 @@ Flat ledger — baris 1 header, data mulai baris 2, append di baris pertama kolo
 | I Catatan | catatan sistem (bukan LLM): "wajib ditinjau", nilai tidak terbaca, anomali | |
 | J Sumber File | nama file foto asli dari Telegram | |
 | K Link Bukti | tautan foto di Drive (kosong bila fitur off/gagal) | |
-| L ID Pasangan | = Ref ID pada 2 baris transfer; kosong selain itu | |
 
-- **Transfer antar kantong**: `arah=transfer` + `kantong_tujuan` → bot menulis **2 baris** (asal di D, tujuan di C) dengan `ID Pasangan` sama; RECAP/PnL mengecualikan kategori `Transfer Antar Bank`, ACCOUNT tetap menghitungnya (saldo per kantong benar).
+- **Transfer antar kantong**: `arah=transfer` + `kantong_tujuan` → bot menulis **2 baris** (asal di D, tujuan di C) dengan **Ref ID (G) sama** — itulah penanda pasangannya; RECAP/PnL mengecualikan kategori `Transfer Antar Bank`, ACCOUNT tetap menghitungnya (saldo per kantong benar).
 - **Catatan diisi kode, bukan LLM** — contoh: `Ekstraksi AI — wajib ditinjau… (nominal tidak terbaca — isi manual)`, `Mock ekstraksi:…`, `[… transfer tanpa kantong tujuan terbaca …]`.
 - Query PnL/reconcile nanti **hanya menghitung baris `Status = verified`** dan memakai C/D sebagai angka.
 
