@@ -59,7 +59,7 @@ Buka health check; jawaban yang benar:
 ```
 
 - `telegram: false` → token/chat_id belum terisi atau belum terbaca.
-- `sheets: false` → `GOOGLE_SPREADSHEET_ID` / `GOOGLE_SERVICE_ACCOUNT_JSON` belum terisi.
+- `sheets: false` → `CASH_REPORT_FOLDER_ID` / `CASH_REPORT_TEMPLATE_ID` belum terisi.
 - `ai: "mock"` → `AI_API_KEY` kosong (ekstraksi hanya dari caption).
 - `pending: true` → ada antrean yang belum terkirim ke Sheet (lihat log).
 
