@@ -57,19 +57,29 @@ def _mock_extract(filename: str, caption: str) -> dict:
     nom = re.search(r"Rp\s*([\d.,]+)", caption, re.I)
     nominal = int(nom.group(1).replace(".", "").replace(",", "")) if nom else None
     arah = "masuk" if re.search(r"\b(masuk|penjualan|transfer dari)\b", caption, re.I) else "keluar"
+    catatan = CATATAN_MOCK
+    if not nominal:
+        catatan += " Nominal tidak terbaca — isi manual."
     return {
         "tanggal": tanggal,
         "keterangan": caption.strip() or Path(filename).stem,
         "nominal": nominal,
         "arah": arah,
         "kategori": "",
-        "confidence": 0.0,
-        "catatan": CATATAN_MOCK,
-        "caption": caption.strip(),
+        "catatan": catatan,
         "bank": "",
         "kantong_tujuan": "",
         "mode": "mock",
     }
+
+
+def _gabung_keterangan(llm_ket: str, caption: str, filename: str) -> str:
+    """Keterangan = hasil LLM; caption pengirim digabung dengan ' — ' bila berbeda."""
+    llm = (llm_ket or "").strip()
+    cap = (caption or "").strip()
+    if llm and cap and llm.lower() != cap.lower():
+        return f"{llm} — {cap}"
+    return llm or cap or filename
 
 
 async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes: bytes, caption: str) -> dict:
@@ -110,15 +120,28 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
         raise ValueError("balasan AI bukan JSON")
     data = json.loads(m.group(0))
     arah = str(data.get("arah", "")).lower()
+    keterangan = _gabung_keterangan(str(data.get("keterangan") or ""), caption, filename)
+
+    notes = []
+    if not data.get("tanggal"):
+        notes.append("tanggal tidak terbaca — pakai hari ini")
+    if not data.get("nominal"):
+        notes.append("nominal tidak terbaca — isi manual")
+    if not str(data.get("bank") or "").strip():
+        notes.append("kantong tidak terbaca — pakai default")
+    if not str(data.get("kategori") or "").strip():
+        notes.append("kategori tidak terbaca — isi manual")
+    catatan = "Ekstraksi AI — wajib ditinjau sebelum dipakai."
+    if notes:
+        catatan += " (" + ", ".join(notes) + ")"
+
     return {
         "tanggal": str(data.get("tanggal") or datetime.now().strftime("%Y-%m-%d")),
-        "keterangan": str(data.get("keterangan") or caption or filename),
+        "keterangan": keterangan,
         "nominal": int(data["nominal"]) if data.get("nominal") else None,
         "arah": arah if arah in ("masuk", "keluar", "transfer") else "keluar",
         "kategori": str(data.get("kategori") or ""),
-        "confidence": 1.0,
-        "catatan": "Ekstraksi AI — wajib ditinjau sebelum dipakai.",
-        "caption": caption.strip(),
+        "catatan": catatan,
         "bank": str(data.get("bank") or "").strip().upper(),
         "kantong_tujuan": str(data.get("kantong_tujuan") or "").strip().upper(),
         "mode": "vision",
@@ -293,7 +316,7 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
     """Tulis transaksi ke ledger 'Cash Report {tahun}', sheet TRANSAKSI.
 
     Flat ledger: append di baris pertama kolom A kosong. Transfer antar kantong
-    ditulis 2 baris berpasangan (kolom N = ID Pasangan = Ref ID).
+    ditulis 2 baris berpasangan (kolom L = ID Pasangan = Ref ID).
     Return {"status": "ok"|"dup", "worksheet", "row", "link"}.
     Urutan: dedupe dulu (Ref ID kolom G), baru upload foto & tulis baris.
     """
@@ -338,8 +361,8 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
         return [
             tanggal, k_, masuk_nilai, keluar,
             _safe(rec.get("kategori")), _safe(rec.get("keterangan")),
-            rec["ref_id"], "draft", rec.get("confidence", ""),
-            _safe(rec.get("caption")), _safe(catatan), _safe(rec.get("sumber_file")),
+            rec["ref_id"], "draft",
+            _safe(catatan), _safe(rec.get("sumber_file")),
             link, id_pas,
         ]
 
@@ -352,7 +375,7 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
         values = [_baris(kantong, "" if masuk else nominal, nominal if masuk else "", "")]
     ws.update(
         values=values,
-        range_name=f"A{row}:N{row + len(values) - 1}",
+        range_name=f"A{row}:L{row + len(values) - 1}",
         value_input_option="USER_ENTERED",
     )
     return {"status": "ok", "worksheet": ws.title, "row": row, "link": link}

@@ -37,11 +37,11 @@ Photo/caption → Telegram → poll_loop() → handle_update()
   → extract()              # vision (OpenAI-compatible API) or mock (regex)
   → write_cash_report()    # Drive: folder tahun → file "Cash Report <tahun>" (copy
   │                        #   template if new + write period cell) → sheet TRANSAKSI
-  │                        #   (SA); dedupe by Ref ID (col G); upload photo → col M;
-  │                        #   append row A–N at first empty row; transfer = 2 paired
-  │                        #   rows (col N = ID Pasangan)
+  │                        #   (SA); dedupe by Ref ID (col G); upload photo → col K;
+  │                        #   append row A–L at first empty row; transfer = 2 paired
+  │                        #   rows (col L = ID Pasangan)
   → on failure: push_pending() → pending.jsonl
-  → flush_pending()        # retried each polling cycle (no image → col M empty)
+  → flush_pending()        # retried each polling cycle (no image → col K empty)
   → tg_send()              # reply: worksheet + row + receipt link
 ```
 
@@ -56,8 +56,9 @@ Photo/caption → Telegram → poll_loop() → handle_update()
 - **Sheets (service account)**: all cell writes. Folder `Cash Report` is shared to `client_email` as Editor — files created inside inherit access.
 - Target: file `Cash Report <tahun>` inside year folder → sheet `TRANSAKSI` (flat ledger, Bizschool style). Period cell `RECAP OVERVIEW!B3` = `=DATE(<tahun>,1,1)` written once on copy; RECAP/YEARLY/EXPENSE/INCOME are all derived via SUMIFS.
 - Template built by `cash_report/build_template.py` (7 sheets, year-agnostic); verified by `cash_report/verify_template.py`.
-- Columns A–N: Tanggal, Kantong, Masuk, Keluar, Kategori, Keterangan, Ref ID, Status, Confidence, Caption, Catatan, Sumber File, Link Bukti, ID Pasangan.
-- `Status` (col H) defaults to "draft" on all written rows. Transfer pairs share Ref ID in col G + col N.
+- Columns A–L: Tanggal, Kantong, Masuk, Keluar, Kategori, Keterangan, Ref ID, Status, Catatan, Sumber File, Link Bukti, ID Pasangan.
+- `Status` (col H) defaults to "draft" on all written rows. Transfer pairs share Ref ID in col G + col L.
+- Keterangan = LLM output with Telegram caption appended (`LLM — caption`) via `_gabung_keterangan`; no Confidence/Caption columns (dropped — no requirement, redundant).
 
 ### Failure Queue
 
@@ -75,7 +76,7 @@ Photo/caption → Telegram → poll_loop() → handle_update()
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Cloud | Full SA JSON as string |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | Local | Path to SA JSON file |
 | `GOOGLE_OAUTH_CLIENT_ID/SECRET/REFRESH_TOKEN` | Drive | User OAuth, scope `drive` |
-| `GOOGLE_DRIVE_FOLDER_ID` | No | Receipts folder (photo archive, col M) |
+| `GOOGLE_DRIVE_FOLDER_ID` | No | Receipts folder (photo archive, col K) |
 | `AI_API_KEY` | No | Enables vision extraction |
 | `AI_BASE_URL` | No | Default: OpenAI |
 | `AI_MODEL` | No | Default: gpt-4o-mini |
