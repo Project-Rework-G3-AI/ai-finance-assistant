@@ -56,6 +56,20 @@ def put(ws, start: str, matrix: list[list]) -> None:
     ws.update(values=matrix, range_name=start, value_input_option="USER_ENTERED")
 
 
+def _force_locale(sh) -> None:
+    """Set locale spreadsheet ke en_US sebelum formula ditulis.
+
+    Formula di file ini memakai koma sebagai pemisah argumen. Google Sheets
+    mem-parse formula sesuai locale spreadsheet, jadi locale Indonesia
+    (in_ID) membacanya sebagai parse error -> seluruh sel berformula #ERROR!.
+    Locale harus diset sebelum penulisan pertama, bukan sesudah.
+    """
+    try:
+        sh.update_locale("en_US")
+    except Exception as exc:  # pragma: no cover - hanya jalur kegagalan API
+        raise SystemExit(f"Gagal set locale spreadsheet ke en_US: {exc}") from exc
+
+
 def build() -> str:
     if not main.CR_FOLDER_ID:
         raise SystemExit("CASH_REPORT_FOLDER_ID kosong di .env")
@@ -79,6 +93,10 @@ def build() -> str:
     ).execute()
     sid = f["id"]
     sh = main._sheets().open_by_key(sid)
+
+    # Locale harus diset sebelum sel berformula ditulis: Google Sheets mem-parse
+    # formula sesuai locale, dan formula di sini memakai koma.
+    _force_locale(sh)
 
     sh.add_worksheet(title="SETUP", rows=60, cols=10)
     sh.del_worksheet(sh.sheet1)  # sheet default "Sheet1"
