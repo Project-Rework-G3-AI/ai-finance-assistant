@@ -16,7 +16,7 @@ flowchart LR
     EXT -->|"tanpa AI / AI gagal"| MOCK["Mock<br/>nama file + caption"]
     VIS -.->|"gagal → fallback"| MOCK
 
-    BOT -->|"Ref ID (kolom G) duplikat?"| DUP{"sudah<br/>ada?"}
+    BOT -->|"Ref ID (kolom I) duplikat?"| DUP{"sudah<br/>ada?"}
     DUP -->|"ya"| SKIP["balasan: dilewati"]
     DUP -->|"tidak"| CR[("Cash Report {tahun}<br/>sheet TRANSAKSI<br/>(cloud, SA)")]
 
@@ -120,7 +120,7 @@ Sel periode (`RECAP OVERVIEW!B3`) ditulis bot saat file baru dibuat = `1 Januari
 
 Aturan penting:
 
-- **Transfer antar kantong** ditulis **2 baris berpasangan** — keduanya berbagi `Ref ID` yang sama di kolom G (pasangan dikenali dari situ) — saldo tiap kantong akurat, recap/PnL mengecualikannya.
+- **Transfer antar kantong** ditulis **2 baris berpasangan** — keduanya berbagi `Ref ID` yang sama di kolom I (pasangan dikenali dari situ) — saldo tiap kantong akurat, recap/PnL mengecualikannya.
 - `Saldo Awal` di ACCOUNT diisi manual sekali per tahun.
 - Kolom **Link Bukti (K)** diisi otomatis saat foto terupload ke `Receipts`.
 
@@ -160,9 +160,9 @@ Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan ha
   - Caption yang dikirim sebagai pesan terpisah **tidak** terbaca bot — selalu satu paket foto + caption.
 - Mode vision (AI): gambar + caption dikirim bersama ke AI → field diisi AI (`bank` = **kantong asal** BRI/BNI/Jago/TUNAI; transfer menghasilkan `arah=transfer` + `kantong_tujuan`; kosong → `CR_DEFAULT_BANK`).
 - Mode mock (tanpa AI): gambar tidak dibaca; tanggal dari nama file, nominal/arah dari caption, keterangan = caption.
-- Bot ekstrak → **pipeline Cash Report**: folder tahun (buat bila perlu) → file `Cash Report <tahun>` (copy template bila baru + tulis sel periode) → sheet `TRANSAKSI` → cek duplikat (Ref ID, kolom G) → upload foto ke Receipts → tulis baris A–K (transfer = 2 baris berpasangan, Ref ID sama) → balasan status + tautan bukti.
+- Bot ekstrak → **pipeline Cash Report**: folder tahun (buat bila perlu) → file `Cash Report <tahun>` (copy template bila baru + tulis sel periode) → sheet `TRANSAKSI` → cek duplikat (Ref ID, kolom I) → upload foto ke Receipts → tulis baris A–K (transfer = 2 baris berpasangan, Ref ID sama) → balasan status + tautan bukti.
 - Sheet `TRANSAKSI` tidak ada (template salah) atau tulis gagal → antre `pending.jsonl`, retry otomatis tiap siklus polling.
-- Review: ubah kolom `Status` (H) `draft` → `verified` setelah dicek. **Angka AI belum dipakai sebelum verified.**
+- Review: ubah kolom `Status` (G) `draft` → `verified` setelah dicek. **Angka AI belum dipakai sebelum verified.**
 
 ## Skema kolom sheet TRANSAKSI (A–K)
 
@@ -176,13 +176,13 @@ Flat ledger — baris 1 header, data mulai baris 2, append di baris pertama kolo
 | D Keluar | nominal | terisi bila arah = keluar (atau sisi asal transfer) |
 | E Kategori | daftar di sheet SETUP | dari ekstraksi; reviewer boleh koreksi |
 | F Keterangan | hasil ekstraksi LLM, caption digabung dengan ` — ` bila berbeda | reviewer boleh rapikan |
-| G Ref ID | dedupe (`tg:…` / `manual:…`) | pasangan transfer memakai Ref ID sama |
-| H Status | `draft` saat tulis; reviewer → `verified` | |
-| I Catatan | catatan sistem (bukan LLM): "wajib ditinjau", nilai tidak terbaca, anomali | |
+| G Status | `draft` saat tulis; reviewer → `verified` | |
+| H Catatan | catatan sistem (bukan LLM): "wajib ditinjau", nilai tidak terbaca, anomali | |
+| I Ref ID | dedupe (`tg:…` / `manual:…`) | pasangan transfer memakai Ref ID sama |
 | J Sumber File | nama file foto asli dari Telegram | |
 | K Link Bukti | tautan foto di Drive (kosong bila fitur off/gagal) | |
 
-- **Transfer antar kantong**: `arah=transfer` + `kantong_tujuan` → bot menulis **2 baris** (asal di D, tujuan di C) dengan **Ref ID (G) sama** — itulah penanda pasangannya; RECAP/PnL mengecualikan kategori `Transfer Antar Bank`, ACCOUNT tetap menghitungnya (saldo per kantong benar).
+- **Transfer antar kantong**: `arah=transfer` + `kantong_tujuan` → bot menulis **2 baris** (asal di D, tujuan di C) dengan **Ref ID (I) sama** — itulah penanda pasangannya; RECAP/PnL mengecualikan kategori `Transfer Antar Bank`, ACCOUNT tetap menghitungnya (saldo per kantong benar).
 - **Catatan diisi kode, bukan LLM** — contoh: `Ekstraksi AI — wajib ditinjau… (nominal tidak terbaca — isi manual)`, `Mock ekstraksi:…`, `[… transfer tanpa kantong tujuan terbaca …]`.
 - Query PnL/reconcile nanti **hanya menghitung baris `Status = verified`** dan memakai C/D sebagai angka.
 
@@ -198,7 +198,7 @@ Mekanisme agar ekstraksi tidak hilang ketika Drive/Sheets tidak bisa dijangkau:
 1. **Kapan masuk antrean** — `write_cash_report()` gagal (folder/template tidak ada, permission salah, kredensial kedaluwarsa, koneksi putus) setelah ekstraksi sukses. Record ditulis ke `pending.jsonl` (1 baris JSON per kejadian) lalu pengguna tetap diberi balasan bahwa ekstraksi berhasil tapi pengiriman ditunda.
 2. **Format baris** — hasil ekstraksi lengkap (`tanggal`, `keterangan`, `nominal`, `arah`, `bank`, `ref_id`, `catatan`, dst.) + `_error` (pesan kegagalan) + `_ts` (epoch).
 3. **Kapan dikirim ulang** — `flush_pending()` dipanggil **tiap siklus polling** sebelum `getUpdates` berikutnya. Tiap baris dihapus dari file dulu, lalu dicoba tulis; gagal lagi → ditulis ulang. Sukses/duplikat → baris hilang dari antrean.
-4. **Tidak pernah menggandakan** — retry melewati cek dedupe `Ref ID` (kolom G) yang sama seperti proses normal, jadi meski baris sempat terkirim sebelum error, retry akan berstatus `dup`. Retry **tanpa gambar** (file foto tidak ikut antrean) → kolom Link Bukti kosong — cukup isi manual atau kirim ulang foto untuk baris yang belum ada.
+4. **Tidak pernah menggandakan** — retry melewati cek dedupe `Ref ID` (kolom I) yang sama seperti proses normal, jadi meski baris sempat terkirim sebelum error, retry akan berstatus `dup`. Retry **tanpa gambar** (file foto tidak ikut antrean) → kolom Link Bukti kosong — cukup isi manual atau kirim ulang foto untuk baris yang belum ada.
 5. **Batas** — file di filesystem proses; **hilang saat redeploy Render** (tidak persisten). Antrean ini penahan kegagalan sementara, bukan penyimpanan. `GET /health` menampilkan `pending: true/false`.
 
 `pending.jsonl` sudah masuk `.gitignore` — tidak pernah ikut ter-commit.

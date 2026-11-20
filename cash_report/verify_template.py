@@ -24,7 +24,7 @@ SHEETS = [
 ]
 TRANSAKSI_HEADERS = [
     "Tanggal", "Kantong", "Masuk", "Keluar", "Kategori", "Keterangan",
-    "Ref ID", "Status", "Catatan", "Sumber File", "Link Bukti",
+    "Status", "Catatan", "Ref ID", "Sumber File", "Link Bukti",
 ]
 
 gagal: list[str] = []

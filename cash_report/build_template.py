@@ -45,7 +45,7 @@ EXP_TOTAL_ROW = 6 + len(KAT_NO_TF)  # 21
 
 TRANSAKSI_HEADERS = [
     "Tanggal", "Kantong", "Masuk", "Keluar", "Kategori", "Keterangan",
-    "Ref ID", "Status", "Catatan", "Sumber File", "Link Bukti",
+    "Status", "Catatan", "Ref ID", "Sumber File", "Link Bukti",
 ]
 
 MONTH_COLS = list("BCDEFGHIJKLM")
@@ -290,7 +290,7 @@ def _format(sh, sheets: dict) -> None:
         req("INCOME STATEMENT", 6, 7, 0, 1, bold, "userEnteredFormat.textFormat.bold"),      # LABA KOTOR
         req("INCOME STATEMENT", 8, 9, 0, 1, bold, "userEnteredFormat.textFormat.bold"),      # LABA SEBELUM PAJAK
     ]
-    widths = [100, 90, 110, 110, 200, 260, 150, 80, 240, 170, 200]
+    widths = [100, 90, 110, 110, 200, 260, 80, 240, 150, 170, 200]
     for i, w in enumerate(widths):
         reqs.append({"updateDimensionProperties": {
             "range": {"sheetId": sheets["TRANSAKSI"].id, "dimension": "COLUMNS",

@@ -316,10 +316,10 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
     """Tulis transaksi ke ledger 'Cash Report {tahun}', sheet TRANSAKSI.
 
     Flat ledger: append di baris pertama kolom A kosong. Transfer antar kantong
-    ditulis 2 baris berpasangan — keduanya berbagi Ref ID di kolom G (pasangan
+    ditulis 2 baris berpasangan — keduanya berbagi Ref ID di kolom I (pasangan
     dikenali dari Ref ID yang sama muncul di2 baris).
     Return {"status": "ok"|"dup", "worksheet", "row", "link"}.
-    Urutan: dedupe dulu (Ref ID kolom G), baru upload foto & tulis baris.
+    Urutan: dedupe dulu (Ref ID kolom I), baru upload foto & tulis baris.
     """
     if not CR_FOLDER_ID or not CR_TEMPLATE_ID:
         raise RuntimeError("CASH_REPORT_FOLDER_ID / CASH_REPORT_TEMPLATE_ID belum diisi")
@@ -335,7 +335,7 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
     except Exception as e:
         raise FileNotFoundError("Sheet TRANSAKSI tidak ditemukan — periksa CASH_REPORT_TEMPLATE_ID") from e
 
-    if rec["ref_id"] in ws.col_values(7):  # kolom G = Ref ID
+    if rec["ref_id"] in ws.col_values(9):  # kolom I = Ref ID
         return {"status": "dup", "worksheet": ws.title, "row": 0, "link": ""}
 
     link = ""
@@ -362,9 +362,8 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
         return [
             tanggal, k_, masuk_nilai, keluar,
             _safe(rec.get("kategori")), _safe(rec.get("keterangan")),
-            rec["ref_id"], "draft",
-            _safe(catatan), _safe(rec.get("sumber_file")),
-            link,
+            "draft", _safe(catatan), rec["ref_id"],
+            _safe(rec.get("sumber_file")), link,
         ]
 
     if is_pair:
