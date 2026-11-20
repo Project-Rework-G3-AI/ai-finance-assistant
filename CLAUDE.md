@@ -37,9 +37,9 @@ Photo/caption → Telegram → poll_loop() → handle_update()
   → extract()              # vision (OpenAI-compatible API) or mock (regex)
   → write_cash_report()    # Drive: folder tahun → file "Cash Report <tahun>" (copy
   │                        #   template if new + write period cell) → sheet TRANSAKSI
-  │                        #   (SA); dedupe by Ref ID (col G); upload photo → col K;
-  │                        #   append row A–L at first empty row; transfer = 2 paired
-  │                        #   rows (col L = ID Pasangan)
+  │                        #   (SA); dedupe by Ref ID (col I); upload photo → col K;
+  │                        #   append row A–K at first empty row; transfer = 2 paired
+  │                        #   rows sharing the same Ref ID in col I
   → on failure: push_pending() → pending.jsonl
   → flush_pending()        # retried each polling cycle (no image → col K empty)
   → tg_send()              # reply: worksheet + row + receipt link
@@ -56,8 +56,8 @@ Photo/caption → Telegram → poll_loop() → handle_update()
 - **Sheets (service account)**: all cell writes. Folder `Cash Report` is shared to `client_email` as Editor — files created inside inherit access.
 - Target: file `Cash Report <tahun>` inside year folder → sheet `TRANSAKSI` (flat ledger, Bizschool style). Period cell `RECAP OVERVIEW!B3` = `=DATE(<tahun>,1,1)` written once on copy; RECAP/YEARLY/EXPENSE/INCOME are all derived via SUMIFS.
 - Template built by `cash_report/build_template.py` (7 sheets, year-agnostic); verified by `cash_report/verify_template.py`.
-- Columns A–L: Tanggal, Kantong, Masuk, Keluar, Kategori, Keterangan, Ref ID, Status, Catatan, Sumber File, Link Bukti, ID Pasangan.
-- `Status` (col H) defaults to "draft" on all written rows. Transfer pairs share Ref ID in col G + col L.
+- Columns A–K: Tanggal, Kantong, Masuk, Keluar, Kategori, Keterangan, Status, Catatan, Ref ID, Sumber File, Link Bukti.
+- `Status` (col G) defaults to "draft" on all written rows. Transfer pairs = two rows sharing the same Ref ID in col I (pair marker; no separate column).
 - Keterangan = LLM output with Telegram caption appended (`LLM — caption`) via `_gabung_keterangan`; no Confidence/Caption columns (dropped — no requirement, redundant).
 
 ### Failure Queue
