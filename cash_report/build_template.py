@@ -28,20 +28,26 @@ SHEETS = [
     "YEARLY OVERVIEW", "EXPENSE DETAIL", "INCOME STATEMENT",
 ]
 
+from cash_report import categories as KAT  # noqa: E402  (daftar kategori tunggal)
+
 KANTONG = ["BRI", "BNI", "Jago", "UANG KAS"]
-KAT_INCOME = ["Penjualan", "Transfer Antar Bank", "Lainnya"]
-KAT_EXPENSE = [
-    "Bahan Baku", "Biaya-Gaji Karyawan", "Biaya-Konsumsi",
-    "Biaya-Perlengkapan Kantor dan Administrasi", "Biaya-Transportasi",
-    "Biaya-Ongkir", "Biaya-Perbaikan Bangunan", "Biaya-Operasional",
-    "Biaya-Pembelian Aset", "Biaya-Sosial", "Administrasi Bank", "Pajak",
-    "Bunga", "Admin Flip", "Transfer Antar Bank", "Lainnya",
+
+# Kategori pemasukan + Transfer Antar Bank (bukan pendapatan, tetapi muncul di
+# kolom masuk/kantong tujuan sehingga perlu ditampung di SETUP).
+KAT_INCOME = KAT.PENDAPATAN + KAT.PERPINDAHAN
+
+# Kolom kategori pengeluaran di SETUP memuat semua nilai yang mungkin muncul di
+# TRANSAKSI, termasuk Transfer Antar Bank dan penanda Perlu Ditinjau.
+KAT_EXPENSE = KAT.PENGELUARAN_SOP + KAT.PENGELUARAN_TAMBAHAN + [
+    "Transfer Antar Bank",
+    KAT.PERLU_DITINJAU,
 ]
-# Kategori pengeluaran tanpa Transfer Antar Bank (dipakai EXPENSE DETAIL & PnL)
-KAT_NO_TF = [k for k in KAT_EXPENSE if k != "Transfer Antar Bank"]
-# Posisi baris EXPENSE DETAIL: kategori mulai baris 6 (tanpa Transfer)
-EXP_ROW = {k: 6 + i for i, k in enumerate(KAT_NO_TF)}  # Bahan Baku=6, Pajak=17, Bunga=18
-EXP_TOTAL_ROW = 6 + len(KAT_NO_TF)  # 21
+
+# EXPENSE DETAIL & laba rugi hanya memuat beban sungguhan: Transfer Antar Bank
+# dan Perlu Ditinjau dikecualikan.
+KAT_NO_TF = KAT.PENGELUARAN_SOP + KAT.PENGELUARAN_TAMBAHAN
+EXP_ROW = {k: 6 + i for i, k in enumerate(KAT_NO_TF)}
+EXP_TOTAL_ROW = 6 + len(KAT_NO_TF)
 
 TRANSAKSI_HEADERS = [
     "Tanggal", "Kantong", "Masuk", "Keluar", "Kategori", "Keterangan",
@@ -134,7 +140,7 @@ def _setup(ws) -> None:
     put(ws, "A3", rows)
     put(ws, "A21", [["Kantong = kantong uang perusahaan: BRI, BNI, Jago, UANG KAS.\n"
                      "UANG KAS = kas operasional (tunai). Antar-bank via FLIP tetap dicatat\n"
-                     "dari kantong asal + kategori Admin Flip untuk biayanya."]])
+                     "dari kantong asal + kategori Biaya-Administrasi Flip dan Bank untuk biayanya."]])
 
 
 def _account(ws) -> None:
@@ -229,7 +235,7 @@ def _expense(ws) -> None:
                 + [f"=SUM(N6:N{EXP_TOTAL_ROW - 1})"])
     put(ws, "A6", rows)
 
-    memo = EXP_TOTAL_ROW + 2  # 23
+    memo = EXP_TOTAL_ROW + 2
     m = [
         ["MEMO — COST OF GOODS SOLD (opsional, isi manual)"] + [""] * 13,
         ["Beginning Inventory"] + [""] * 13,
@@ -246,7 +252,11 @@ def _expense(ws) -> None:
 def _income(ws) -> None:
     put(ws, "A1", [["📑 INCOME STATEMENT — laba rugi per bulan (otomatis)"]])
     put(ws, "A3", [["Bulan"] + [f"='YEARLY OVERVIEW'!{c}5" for c in MONTH_COLS] + ["Total"]])
-    T, BB, PJ, BG = EXP_TOTAL_ROW, EXP_ROW["Bahan Baku"], EXP_ROW["Pajak"], EXP_ROW["Bunga"]
+    # Nama kategori mengikuti cash_report/categories.py; jangan hardcode nama lama.
+    T = EXP_TOTAL_ROW
+    BB = EXP_ROW["Bahan Baku"]
+    PJ = EXP_ROW["Biaya-Pajak"]
+    BG = EXP_ROW["Biaya-Bunga Bank"]
     tpl = [
         ("PENDAPATAN", "='YEARLY OVERVIEW'!{c}6"),
         ("(-) HPP / Bahan Baku", f"='EXPENSE DETAIL'!{{c}}{BB}"),
@@ -256,7 +266,7 @@ def _income(ws) -> None:
          f"-'EXPENSE DETAIL'!{{c}}{PJ}-'EXPENSE DETAIL'!{{c}}{BG}"),
         ("LABA SEBELUM PAJAK", "={c}7-{c}8"),
         ("(-) Pajak", f"='EXPENSE DETAIL'!{{c}}{PJ}"),
-        ("(-) Bunga", f"='EXPENSE DETAIL'!{{c}}{BG}"),
+        ("(-) Biaya Bunga Bank", f"='EXPENSE DETAIL'!{{c}}{BG}"),
         ("LABA BERSIH", "={c}9-{c}10-{c}11"),
     ]
     rows = [[label] + [t.format(c=c) for c in MONTH_COLS] + [t.format(c="N")]

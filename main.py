@@ -28,6 +28,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 import sentry_setup
+from cash_report import categories as KAT
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -98,10 +99,7 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
         "Ekstrak data transaksi dari bukti ini. Balas HANYA JSON tanpa teks lain: "
         '{"tanggal":"YYYY-MM-DD","keterangan":"...","nominal":number,'
         '"arah":"masuk|keluar|transfer",'
-        '"kategori":"satu dari: Bahan Baku, Biaya-Gaji Karyawan, Biaya-Konsumsi, '
-        'Biaya-Perlengkapan Kantor dan Administrasi, Biaya-Transportasi, Biaya-Ongkir, '
-        'Biaya-Perbaikan Bangunan, Biaya-Operasional, Biaya-Pembelian Aset, Biaya-Sosial, '
-        'Administrasi Bank, Pajak, Bunga, Admin Flip, Transfer Antar Bank, Penjualan, Lainnya",'
+        f'"kategori":"satu dari: {KAT.PROMPT_KATEGORI}",'
         '"bank":"kantong asal dana — salah satu dari: BRI, BNI, Jago, TUNAI; '
         'kosong bila tidak terbaca",'
         '"kantong_tujuan":"hanya bila arah=transfer — kantong tujuan: '
@@ -149,8 +147,13 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
         notes.append("nominal tidak terbaca — isi manual")
     if not str(data.get("bank") or "").strip():
         notes.append("kantong tidak terbaca — pakai default")
-    if not str(data.get("kategori") or "").strip():
-        notes.append("kategori tidak terbaca — isi manual")
+    kategori_mentah = str(data.get("kategori") or "").strip()
+    kategori = KAT.normalize(kategori_mentah)
+    if kategori == KAT.PERLU_DITINJAU:
+        if kategori_mentah:
+            notes.append(f"kategori '{kategori_mentah}' tidak dikenali — isi manual")
+        else:
+            notes.append("kategori tidak terbaca — isi manual")
     catatan = "Ekstraksi AI — wajib ditinjau sebelum dipakai."
     if notes:
         catatan += " (" + ", ".join(notes) + ")"
@@ -160,7 +163,7 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
         "keterangan": keterangan,
         "nominal": int(data["nominal"]) if data.get("nominal") else None,
         "arah": arah if arah in ("masuk", "keluar", "transfer") else "keluar",
-        "kategori": str(data.get("kategori") or ""),
+        "kategori": kategori,
         "catatan": catatan,
         "bank": str(data.get("bank") or "").strip().upper(),
         "kantong_tujuan": str(data.get("kantong_tujuan") or "").strip().upper(),

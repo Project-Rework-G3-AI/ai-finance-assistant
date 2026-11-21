@@ -17,6 +17,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import main  # noqa: E402
+from cash_report import categories as KAT  # noqa: E402
+
+# Posisi baris EXPENSE DETAIL dihitung dari daftar kategori, bukan angka mati,
+# supaya verifikasi tidak patah saat daftar kategori berubah.
+_KAT_BEBAN = KAT.PENGELUARAN_SOP + KAT.PENGELUARAN_TAMBAHAN
+EXP_TOTAL_ROW = 6 + len(_KAT_BEBAN)   # baris TOTAL PENGELUARAN
+COGS_ROW = EXP_TOTAL_ROW + 6          # memo dimulai +2, COGS 4 baris setelahnya
 
 SHEETS = [
     "SETUP", "ACCOUNT", "TRANSAKSI", "RECAP OVERVIEW",
@@ -82,10 +89,12 @@ def main_verify() -> int:
     exp = sh.worksheet("EXPENSE DETAIL")
     cek("EXPENSE B6 SUMIFS", "SUMIFS" in str(fcell(exp, 6, 2)),
         f"dapat: {fcell(exp, 6, 2)}")
-    cek("EXPENSE A21 TOTAL PENGELUARAN", str(exp.cell(21, 1).value) == "TOTAL PENGELUARAN",
-        f"dapat: {exp.cell(21, 1).value}")
-    cek("EXPENSE B27 COGS aman dari sel kosong", "COUNT" in str(fcell(exp, 27, 2)),
-        f"dapat: {fcell(exp, 27, 2)}")
+    cek(f"EXPENSE A{EXP_TOTAL_ROW} TOTAL PENGELUARAN",
+        str(exp.cell(EXP_TOTAL_ROW, 1).value) == "TOTAL PENGELUARAN",
+        f"dapat: {exp.cell(EXP_TOTAL_ROW, 1).value}")
+    cek(f"EXPENSE B{COGS_ROW} COGS aman dari sel kosong",
+        "COUNT" in str(fcell(exp, COGS_ROW, 2)),
+        f"dapat: {fcell(exp, COGS_ROW, 2)}")
 
     inc = sh.worksheet("INCOME STATEMENT")
     cek("INCOME A12 LABA BERSIH", str(inc.cell(12, 1).value) == "LABA BERSIH",

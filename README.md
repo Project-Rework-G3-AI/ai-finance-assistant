@@ -108,7 +108,7 @@ Isi template (7 sheet, year-agnostic):
 
 | Sheet | Isi |
 |---|---|
-| SETUP | daftar kantong (BRI, BNI, Jago, UANG KAS) & kategori — master buat AI |
+| SETUP | daftar kantong (BRI, BNI, Jago, UANG KAS) & kategori — master buat AI. Daftar kategori bersumber dari `cash_report/categories.py`, lihat `cash_report/KATEGORI.md` |
 | ACCOUNT | saldo awal per kantong (input manual) + Masuk/Keluar (SUMIFS) |
 | TRANSAKSI | **flat ledger** — satu-satunya sheet yang ditulis bot |
 | RECAP OVERVIEW | rentang periode + pendapatan/pengeluaran/selisih per kategori (SUMIFS, transfer dikecualikan) |
@@ -174,7 +174,7 @@ Flat ledger — baris 1 header, data mulai baris 2, append di baris pertama kolo
 | B Kantong | BRI / BNI / Jago / UANG KAS | dari ekstraksi (`bank`), fallback `CR_DEFAULT_BANK` |
 | C Masuk | nominal | terisi bila arah = masuk (atau sisi tujuan transfer) |
 | D Keluar | nominal | terisi bila arah = keluar (atau sisi asal transfer) |
-| E Kategori | daftar di sheet SETUP | dari ekstraksi; reviewer boleh koreksi |
+| E Kategori | daftar di sheet SETUP (sumber: `cash_report/categories.py`) | dari ekstraksi, dinormalkan ke nama baku; reviewer boleh koreksi |
 | F Keterangan | hasil ekstraksi LLM, caption digabung dengan ` — ` bila berbeda | reviewer boleh rapikan |
 | G Status | `draft` saat tulis; reviewer → `verified` | |
 | H Catatan | catatan sistem (bukan LLM): "wajib ditinjau", nilai tidak terbaca, anomali | |
