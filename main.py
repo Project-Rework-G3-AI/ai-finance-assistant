@@ -288,8 +288,14 @@ def _init_year_dates(spreadsheet_id: str, year: str) -> None:
 
     Sheet RECAP/YEARLY/EXPENSE/INCOME semuanya turunan dari sel ini, jadi
     cukup satu tulisan.
+
+    Formula di bawah memakai koma sebagai pemisah argumen, jadi locale harus
+    dipaksa en_US lebih dulu. Berkas hasil copy mewarisi locale template; bila
+    locale-nya Indonesia (in_ID), Google Sheets membaca formula berkoma sebagai
+    parse error dan sel jadi #ERROR!.
     """
     sh = _open_spreadsheet(spreadsheet_id)
+    sh.update_locale("en_US")
     sh.worksheet("RECAP OVERVIEW").update(
         values=[[f"=DATE({year},1,1)"]],
         range_name="B3",
