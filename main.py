@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import os
 import re
 import time
@@ -26,7 +27,15 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+import sentry_setup
+
 load_dotenv(Path(__file__).parent / ".env")
+
+# Logging dan Sentry dipasang sebelum apa pun yang bisa gagal, supaya error saat
+# inisialisasi ikut terlaporkan.
+sentry_setup.setup_logging()
+SENTRY_AKTIF = sentry_setup.init_sentry()
+log = logging.getLogger("bot")
 
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TG_ALLOWED = {int(x) for x in os.getenv("TELEGRAM_ALLOWED_CHAT_IDS", "").replace(" ", "").split(",") if x.strip()}
@@ -153,6 +162,10 @@ async def extract(client: httpx.AsyncClient, filename: str, image_bytes: bytes, 
         try:
             return await _vision_extract(client, filename, image_bytes, caption)
         except Exception as e:  # fallback: alur tetap jalan saat AI gagal
+            # Fallback ini menelan error, jadi tanpa capture_exception kegagalan
+            # AI tidak pernah terlihat di Sentry.
+            log.warning("Ekstraksi AI gagal, jatuh ke mock: %s: %s", type(e).__name__, e)
+            sentry_setup.capture_exception(e)
             res = _mock_extract(filename, caption)
             res["catatan"] = f"AI gagal ({type(e).__name__}: {e}) — jatuh ke mock. {CATATAN_MOCK}"
             return res
@@ -343,8 +356,9 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
         try:
             link = upload_drive(image_bytes, filename or rec.get("sumber_file") or "receipt.jpg")
         except Exception as e:
-            # baris tetap tersimpan; kolom Link Bukti kosong — jejak di log
-            print(f"Drive upload gagal: {type(e).__name__}: {e}")
+            # baris tetap tersimpan; kolom Link Bukti kosong
+            log.warning("Upload Drive gagal, link bukti dikosongkan: %s: %s", type(e).__name__, e)
+            sentry_setup.capture_exception(e)
 
     col_a = ws.col_values(1)
     row = next((i + 1 for i, v in enumerate(col_a) if not str(v).strip()), len(col_a) + 1)
@@ -402,6 +416,9 @@ def flush_pending(client: httpx.AsyncClient) -> int:
         try:
             write_cash_report(rec)  # tanpa gambar: retry hanya barisnya, link kosong
         except Exception as e:
+            # Retry gagal berarti transaksi belum tercatat; ini perlu terlihat.
+            log.warning("Retry antrean gagal, dikembalikan ke pending: %s: %s", type(e).__name__, e)
+            sentry_setup.capture_exception(e)
             push_pending(rec, f"retry gagal: {e}")
             sisa.append(ln)
     return len(sisa)
@@ -462,6 +479,9 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
     try:
         hasil = await asyncio.to_thread(write_cash_report, rec, img.content, filename)
     except Exception as e:
+        # log.exception() level ERROR sudah dikirim sebagai event oleh
+        # LoggingIntegration, jadi tidak perlu capture_exception() lagi.
+        log.exception("Tulis Cash Report gagal, masuk antrean")
         push_pending(rec, str(e))
         await tg_send(client, chat_id, f"⚠️ Ekstraksi OK, tapi tulis ke Cash Report gagal ({type(e).__name__}). Masuk antrean, dikirim ulang otomatis.")
         return
@@ -496,10 +516,18 @@ async def poll_loop() -> None:
                     try:
                         await handle_update(client, upd)
                     except Exception as e:
+                        # Satu update gagal tidak boleh menghentikan loop, tapi
+                        # kegagalannya tetap harus terlihat di Sentry.
+                        # log.exception() level ERROR sudah dikirim sebagai event
+                        # oleh LoggingIntegration, jadi tidak perlu capture lagi.
+                        log.exception("Gagal memproses update Telegram")
                         chat = (upd.get("message") or {}).get("chat", {}).get("id")
                         if chat:
                             await tg_send(client, chat, f"❌ Gagal memproses: {type(e).__name__}: {e}")
             except Exception:
+                # Loop terluar: menelan semua error agar bot tetap hidup. Tanpa
+                # laporan di sini, bot bisa diam berjam-jam tanpa jejak apa pun.
+                log.exception("poll_loop gagal, ulang dalam 3 detik")
                 await asyncio.sleep(3)
 
 
@@ -516,8 +544,9 @@ async def lifespan(app: FastAPI):
     task = None
     if TG_TOKEN and TG_ALLOWED:
         task = asyncio.create_task(poll_loop())
+        log.info("Bot Telegram aktif, long polling dimulai")
     else:
-        print("Telegram nonaktif: isi TELEGRAM_BOT_TOKEN & TELEGRAM_ALLOWED_CHAT_IDS di .env")
+        log.warning("Telegram nonaktif: isi TELEGRAM_BOT_TOKEN & TELEGRAM_ALLOWED_CHAT_IDS di .env")
     yield
     if task:
         task.cancel()
@@ -535,6 +564,7 @@ def health():
         "ai": "vision" if AI_KEY else "mock",
         "drive": _drive_ready(),
         "pending": PENDING.exists(),
+        "sentry": SENTRY_AKTIF,
     }
 
 
@@ -548,6 +578,9 @@ async def api_extract(req: ExtractReq):
         try:
             hasil = await asyncio.to_thread(write_cash_report, rec, raw, req.filename)
         except Exception as e:
+            # log.exception() level ERROR sudah dikirim sebagai event oleh
+            # LoggingIntegration, jadi tidak perlu capture_exception() lagi.
+            log.exception("Tulis Cash Report gagal via API, masuk antrean")
             push_pending(rec, str(e))
             return {**rec, "sheet": "pending", "error": str(e)}
         return {**rec, "sheet": hasil["status"], "worksheet": hasil["worksheet"],

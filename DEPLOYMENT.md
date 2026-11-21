@@ -55,13 +55,53 @@ Kredensial **tidak** ada di repository — hanya di environment variable Render 
 Buka health check; jawaban yang benar:
 
 ```json
-{"ok": true, "telegram": true, "sheets": true, "ai": "vision", "pending": false}
+{"ok": true, "telegram": true, "sheets": true, "ai": "vision", "pending": false, "sentry": true}
 ```
 
 - `telegram: false` → token/chat_id belum terisi atau belum terbaca.
 - `sheets: false` → `CASH_REPORT_FOLDER_ID` / `CASH_REPORT_TEMPLATE_ID` belum terisi.
 - `ai: "mock"` → `AI_API_KEY` kosong (ekstraksi hanya dari caption).
 - `pending: true` → ada antrean yang belum terkirim ke Sheet (lihat log).
+- `sentry: false` → `SENTRY_DSN` kosong; bot tetap jalan, hanya observability yang mati.
+
+## Observability (Sentry)
+
+Sentry dipakai untuk menangkap error, tracing request, dan log terpusat. Konfigurasinya ada di `sentry_setup.py`, dipanggil sekali di awal `main.py`.
+
+**Yang perlu disiapkan:** satu project Sentry platform **Python → FastAPI**, lalu salin **DSN**-nya. DSN bukan token API: DSN hanya untuk *mengirim* data, tidak bisa dipakai membaca project. Jadi tidak perlu membuat Auth Token.
+
+| Key | Nilai | Wajib |
+|---|---|---|
+| `SENTRY_DSN` | DSN dari Settings → Projects → Client Keys | untuk aktif |
+| `SENTRY_ENVIRONMENT` | `production` di Render, `development` di lokal | disarankan |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.1` (10% request direkam) | opsional |
+| `SENTRY_RELEASE` | mis. `ai-finance-assistant@a1b2c3d` | opsional |
+| `LOG_LEVEL` | `INFO` (default), `DEBUG` saat investigasi | opsional |
+
+Tanpa `SENTRY_DSN`, seluruh fungsi observability jadi no-op dan bot berjalan seperti biasa.
+
+**Data sensitif disamarkan sebelum keluar dari server.** Aplikasi ini memproses bukti transaksi keuangan dan menyimpan kredensial di environment, jadi `sentry_setup.py` menetapkan `send_default_pii=False`, `max_request_body_size="never"`, dan `before_send` yang menyamarkan:
+
+- nilai variabel bernama token/secret/refresh_token/client_secret/Authorization
+- token bot di dalam URL `api.telegram.org/bot<token>/...`
+- kredensial di query string (`?api_key=`, `&token=`)
+- nilai dict dengan kunci sensitif, termasuk di variabel lokal stack trace
+
+Gambar bukti transaksi tidak pernah dikirim karena body request tidak direkam.
+
+**Error yang dilaporkan.** Selain exception yang lolos ke FastAPI (otomatis), ada 7 jalur yang menangani error sendiri dan sekarang memanggil `capture_exception()`:
+
+| Lokasi | Kejadian |
+|---|---|
+| `extract()` | AI gagal, jatuh ke mode mock |
+| `write_cash_report()` | upload Drive gagal (baris tetap tersimpan) |
+| `handle_update()` | tulis Cash Report gagal, masuk antrean |
+| `api_extract()` | tulis Cash Report gagal via endpoint API |
+| `flush_pending()` | retry antrean gagal |
+| `poll_loop()` | satu update gagal diproses |
+| `poll_loop()` | loop Telegram gagal, ulang 3 detik |
+
+Sebelum perubahan ini, ketujuh jalur tersebut hanya menulis ke stdout atau tidak meninggalkan jejak sama sekali.
 
 ## Operasional
 
