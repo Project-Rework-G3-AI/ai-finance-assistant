@@ -13,6 +13,30 @@ SOP hanya mengatur uang keluar. Tidak ada dokumen perusahaan yang mengatur
 kategori pemasukan, jadi tiga kategori `Pendapatan Usaha (...)` diambil dari
 dropdown file Excel.
 
+### Cara daftar ini diverifikasi
+
+Daftar ini tidak disusun dari ingatan. `tests/test_categories_fidelity.py`
+membaca langsung ketiga file Excel perusahaan dan memeriksa dua arah:
+
+| Arah | Aturan |
+|---|---|
+| Dataset ke repo | setiap kategori di dropdown harus dikenali, langsung atau lewat alias |
+| Repo ke dataset | setiap nama di `KATEGORI` harus ada **byte-identik** di file Excel, kecuali penanda internal |
+
+Hal yang mudah terlewat dan sudah ditangani:
+
+- **Satu sheet bisa punya beberapa blok dropdown** dengan daftar berbeda.
+  `Cash Report Operasional` Januari dan Maret masing-masing punya dua blok
+  (`D5:D25` dan `D26:D39`), dan isinya tidak sama.
+- **Excel memecah daftar panjang** menjadi beberapa potongan string yang
+  disambung `&`. Parser yang berhenti di potongan pertama akan kehilangan
+  sebagian kategori.
+- **Kolom D memuat sel header** bernama `KATEGORI` yang bukan kategori.
+
+Angka acuan: **37 kategori unik** dari 22 sheet di 3 file. Semua terwakili di
+`categories.py`; 31 berdiri sebagai nama final, 6 sisanya varian ejaan yang
+sah dan dipetakan lewat `ALIAS`.
+
 ## Daftar final (31)
 
 ### Saldo awal (1)
@@ -157,21 +181,26 @@ Kelompok itu dipakai untuk menentukan **di mana sebuah kategori ditampung**:
 |---|---|---|
 | `SALDO_AWAL` | SETUP kolom `KATEGORI NERACA` | tidak |
 | `PENDAPATAN` | SETUP kolom `KATEGORI PENDAPATAN` | ya, sebagai pendapatan |
-| `PERPINDAHAN` | SETUP kolom `KATEGORI PENDAPATAN` | **tidak**, dikecualikan SUMIFS |
+| `PERPINDAHAN` | SETUP kolom `KATEGORI LAIN` | **tidak**, dikecualikan SUMIFS |
 | `NERACA` | SETUP kolom `KATEGORI NERACA` | tidak |
 | `PENGELUARAN_SOP` | SETUP kolom `KATEGORI PENGELUARAN` | ya, sebagai beban |
 | `PENGELUARAN_TAMBAHAN` | SETUP kolom `KATEGORI PENGELUARAN` | ya, sebagai beban |
+| penanda `Perlu Ditinjau` | SETUP kolom `KATEGORI LAIN` | tidak |
 
-Sheet `SETUP` memakai **empat kolom**: `KANTONG`, `KATEGORI PENDAPATAN`,
-`KATEGORI NERACA`, `KATEGORI PENGELUARAN`. Kolom neraca dipisah karena
-`Persediaan`, `Aset Tetap`, dan `Utang/Piutang` bukan beban, sehingga tidak
-boleh muncul di EXPENSE DETAIL maupun INCOME STATEMENT.
+Sheet `SETUP` memakai **lima kolom**: `KANTONG`, `KATEGORI PENDAPATAN`,
+`KATEGORI NERACA`, `KATEGORI PENGELUARAN`, `KATEGORI LAIN`. Kolom neraca
+dipisah karena `Persediaan`, `Aset Tetap`, dan `Utang/Piutang` bukan beban,
+sehingga tidak boleh muncul di EXPENSE DETAIL maupun INCOME STATEMENT.
 
-Alasan `PERPINDAHAN` ikut kolom pendapatan: `Transfer Antar Bank` perlu muncul
-di dropdown kolom kategori saat admin mengisi manual, tetapi SUMIFS di RECAP,
+**Setiap kategori menempati tepat satu kolom.** Sebelumnya `Transfer Antar
+Bank` masuk kolom pendapatan sekaligus pengeluaran, sehingga admin melihatnya
+dua kali di dropdown dengan makna berbeda. Sekarang ia hanya ada di
+`KATEGORI LAIN`, bersama penanda `Perlu Ditinjau`.
+
+`Transfer Antar Bank` tetap muncul sebagai pilihan, tetapi SUMIFS di RECAP,
 YEARLY, EXPENSE DETAIL, dan INCOME STATEMENT semuanya mengecualikannya dengan
-`TRANSAKSI!E:E,"<>Transfer Antar Bank"`. Jadi ia tampil sebagai pilihan tanpa
-ikut terhitung sebagai pendapatan.
+`TRANSAKSI!E:E,"<>Transfer Antar Bank"`, jadi tidak ikut terhitung sebagai
+pendapatan maupun beban.
 
 ## Cara pakai
 
@@ -206,10 +235,15 @@ tercatat, hanya ditandai supaya bisa diperiksa manusia.
 
 1. **Jangan ubah string kategori** tanpa memperbarui template. SUMIFS di
    RECAP, EXPENSE DETAIL, dan INCOME STATEMENT mencocokkan string secara persis.
-2. `build_template.py` memakai `EXP_ROW` yang diturunkan dari urutan
-   `KAT_EXPENSE`. Baris 231 mengambil `EXP_ROW["Pajak"]` dan `EXP_ROW["Bunga"]`;
-   kalau nama berubah, kunci itu harus ikut berubah.
-3. Setelah mengubah daftar, jalankan `cash_report/verify_template.py` untuk
-   memastikan 17 pemeriksaan masih lulus.
+2. `build_template.py` menurunkan `EXP_ROW` dari urutan `KAT_EXPENSE`; kalau
+   nama kategori berubah, kunci `EXP_ROW` ikut berubah. Jangan menulis nama
+   kategori sebagai literal di sana.
+3. Setelah mengubah daftar, jalankan:
+   ```bash
+   DATASET_DIR="/path/ke/Cash Report dan Mutasi Rekening" pytest tests/ -v
+   python cash_report/verify_template.py
+   ```
+   Tes pertama membandingkan daftar dengan file Excel asli; tes kedua memeriksa
+   template Google Sheets yang sudah dibangun.
 4. Template Google Sheets yang sudah ada perlu dibangun ulang
    (`build_template.py`) karena isi sheet SETUP adalah nilai statis.
