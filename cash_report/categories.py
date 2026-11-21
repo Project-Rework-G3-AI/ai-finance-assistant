@@ -57,7 +57,21 @@ PENGELUARAN_TAMBAHAN = [
     "Biaya-Pajak",
     "Biaya-Bunga Bank",
     "Biaya-Administrasi Flip dan Bank",
+    # Rincian operasional yang dipakai perusahaan di tab Salinan. Dipisah dari
+    # Biaya-Operasional karena perusahaan memang mencatatnya terpisah, dan
+    # menyatukannya menghapus informasi yang sudah ada di data asli.
+    "Biaya-Listrik dan Internet",
+    "Biaya-R&D",
+    "Biaya-Pelatihan",
     "Beban Lain",
+]
+
+# --- Saldo awal -------------------------------------------------------------
+# Bukan transaksi, tetapi muncul di setiap sheet Cash Report sebagai baris
+# pembuka dan dipakai 11 kali pada data Jan-Jul 2026. Harus dikenali supaya
+# tidak jatuh ke PERLU_DITINJAU.
+SALDO_AWAL = [
+    "Saldo Awal",
 ]
 
 # --- Penanda: bukan kategori akuntansi -------------------------------------
@@ -66,7 +80,8 @@ PENGELUARAN_TAMBAHAN = [
 PERLU_DITINJAU = "Perlu Ditinjau"
 
 KATEGORI = (
-    PENDAPATAN
+    SALDO_AWAL
+    + PENDAPATAN
     + PERPINDAHAN
     + NERACA
     + PENGELUARAN_SOP
@@ -74,9 +89,12 @@ KATEGORI = (
     + [PERLU_DITINJAU]
 )
 
-# Kategori yang boleh dipilih model. PERLU_DITINJAU tidak ditawarkan:
-# penanda itu diisi kode, bukan dipilih model.
-KATEGORI_UNTUK_MODEL = [k for k in KATEGORI if k != PERLU_DITINJAU]
+# Kategori yang boleh dipilih model. Dua yang dikecualikan:
+#   - PERLU_DITINJAU : penanda, diisi kode saat model tidak yakin
+#   - Saldo Awal     : baris pembuka buku, bukan transaksi yang difoto
+KATEGORI_UNTUK_MODEL = [
+    k for k in KATEGORI if k not in (PERLU_DITINJAU, "Saldo Awal")
+]
 
 # Teks siap tempel untuk prompt.
 PROMPT_KATEGORI = ", ".join(KATEGORI_UNTUK_MODEL)
@@ -88,14 +106,14 @@ PROMPT_KATEGORI = ", ".join(KATEGORI_UNTUK_MODEL)
 #   - nama ringkas yang mungkin dihasilkan model
 ALIAS = {
     "Beban Operasional-Gaji Karyawan": "Biaya-Gaji Karyawan",
-    "Beban Operasional-Listrik dan Internet": "Biaya-Operasional",
+    "Beban Operasional-Listrik dan Internet": "Biaya-Listrik dan Internet",
     "Beban Operasional-Konsumsi": "Biaya-Konsumsi",
     "Beban Operasional - Perlengkapan Kantor dan Administrasi":
         "Biaya-Perlengkapan Kantor dan Administrasi",
     "Beban Operasional - Transportasi": "Biaya-Transportasi",
-    "Beban Operasional-R&D": "Biaya-Operasional",
-    "Beban Operasional-RD": "Biaya-Operasional",
-    "Beban Operasional-Pelatihan": "Biaya-Operasional",
+    "Beban Operasional-R&D": "Biaya-R&D",
+    "Beban Operasional-RD": "Biaya-R&D",
+    "Beban Operasional-Pelatihan": "Biaya-Pelatihan",
     "Biaya-Perlengkapan Kantor dan Aministrasi":
         "Biaya-Perlengkapan Kantor dan Administrasi",
     "Biaya-Transporrtasi": "Biaya-Transportasi",

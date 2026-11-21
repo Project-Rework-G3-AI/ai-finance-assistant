@@ -13,7 +13,13 @@ SOP hanya mengatur uang keluar. Tidak ada dokumen perusahaan yang mengatur
 kategori pemasukan, jadi tiga kategori `Pendapatan Usaha (...)` diambil dari
 dropdown file Excel.
 
-## Daftar final (23)
+## Daftar final (27)
+
+### Saldo awal (1)
+
+| Kategori | Catatan |
+|---|---|
+| `Saldo Awal` | Baris pembuka buku, dipakai 11 kali Jan-Jul 2026. Dikenali kode, **tidak ditawarkan ke model** karena bukan transaksi yang difoto |
 
 ### Pemasukan (4)
 
@@ -53,14 +59,17 @@ dropdown file Excel.
 | `Biaya-Pembelian Aset` | pembelian peralatan/aset |
 | `Biaya-Sosial` | bantuan/kegiatan sosial |
 
-### Pengeluaran — tambahan dari dropdown (4)
+### Pengeluaran — tambahan dari dropdown (7)
 
-| Kategori |
-|---|
-| `Biaya-Pajak` |
-| `Biaya-Bunga Bank` |
-| `Biaya-Administrasi Flip dan Bank` |
-| `Beban Lain` |
+| Kategori | Asal |
+|---|---|
+| `Biaya-Pajak` | dropdown, 18 sheet |
+| `Biaya-Bunga Bank` | dropdown, 18 sheet |
+| `Biaya-Administrasi Flip dan Bank` | dropdown, 18 sheet |
+| `Biaya-Listrik dan Internet` | dropdown tab Salinan, rincian `Biaya-Operasional` |
+| `Biaya-R&D` | dropdown tab Salinan, dipakai 2 kali di BRI Januari |
+| `Biaya-Pelatihan` | dropdown tab Salinan, dipakai 2 kali di BRI Januari |
+| `Beban Lain` | dropdown, 18 sheet |
 
 ### Penanda, bukan kategori akuntansi (1)
 
@@ -68,32 +77,44 @@ dropdown file Excel.
 |---|---|
 | `Perlu Ditinjau` | Diisi kode saat model tidak yakin. **Tidak ditawarkan ke model** |
 
-## Yang sengaja tidak dimasukkan
+## Cakupan terhadap 37 kategori dropdown
 
-Kategori berikut ada di file perusahaan tetapi ditolak, dengan alasan:
+Ada 37 nilai unik di seluruh dropdown kolom `D` dari 3 file xlsx (22 sheet).
+Nasib setiap nilai:
 
-| Kategori | Alasan |
-|---|---|
-| `Saldo Awal` | Baris pembuka, bukan transaksi |
-| `Beban Operasional-Gaji Karyawan` | Duplikat `Biaya-Gaji Karyawan` (skema berbeda) |
-| `Beban Operasional - Perlengkapan Kantor dan Administrasi` | Duplikat `Biaya-Perlengkapan Kantor dan Administrasi` |
-| `Beban Operasional - Transportasi` | Duplikat `Biaya-Transportasi` |
-| `Beban Operasional-Konsumsi` | Duplikat `Biaya-Konsumsi` |
-| `Beban Operasional-Listrik dan Internet` | Tercakup `Biaya-Operasional` |
-| `Beban Operasional-R&D` | Tercakup `Biaya-Operasional` |
-| `Beban Operasional-Pelatihan` | Tercakup `Biaya-Operasional` |
-| `Marketing` | Tercakup `Biaya-Operasional` |
-| `Royalti BRIN` | 0 pemakaian |
-| `Profit Share Bangunan` | 0 pemakaian |
-| `Bagi Hasil` | 0 pemakaian |
-| `Pajak` | Duplikat `Biaya-Pajak` |
-| `Biaya Sosial` | Duplikat `Biaya-Sosial` (kurang tanda hubung) |
-| `Modal dan Prive` | Hanya ada di Diagram Alir, tidak di dropdown |
+| Nasib | Jumlah | Keterangan |
+|---|---|---|
+| Ada langsung di daftar final | 23 | nama sama persis |
+| Dikenali lewat alias | 10 | ejaan/skema berbeda, dipetakan ke nama baku |
+| **Tidak ada di repo** | 4 | lihat di bawah |
 
-Kategori yang ditolak tetap bisa dikenali lewat `ALIAS` sehingga tidak hilang
-tanpa jejak, kecuali empat yang memang tidak punya padanan:
-`Bagi Hasil`, `Marketing`, `Profit Share Bangunan`, `Royalti BRIN`.
-Keempatnya akan menjadi `Perlu Ditinjau` bila muncul.
+### Empat kategori dropdown yang tidak masuk repo
+
+| Kategori | Muncul di | Pemakaian Jan-Jul 2026 |
+|---|---|---|
+| `Royalti BRIN` | 2 sheet (tab Salinan BNI & BRI) | **0 baris** |
+| `Profit Share Bangunan` | 2 sheet (tab Salinan BNI & BRI) | **0 baris** |
+| `Bagi Hasil` | 2 sheet (tab Salinan BNI & BRI) | **0 baris** |
+| `Marketing` | 2 sheet (tab Salinan BNI & BRI) | **0 baris** |
+
+Keempatnya hanya ada di tab `Salinan`, tidak pernah dipakai di 361 baris
+Jan-Jul 2026, dan tidak disebut di SOP mana pun. Bila muncul, `normalize()`
+mengembalikan `Perlu Ditinjau` sehingga tidak hilang diam-diam.
+
+### Yang digabung atau diganti nama (10 alias)
+
+| Varian | Menjadi | Alasan |
+|---|---|---|
+| `Beban Operasional-Gaji Karyawan` | `Biaya-Gaji Karyawan` | skema `Beban Operasional-*` vs `Biaya-*` |
+| `Beban Operasional-Konsumsi` | `Biaya-Konsumsi` | idem |
+| `Beban Operasional - Transportasi` | `Biaya-Transportasi` | idem |
+| `Beban Operasional - Perlengkapan Kantor dan Administrasi` | `Biaya-Perlengkapan Kantor dan Administrasi` | idem |
+| `Beban Operasional-Listrik dan Internet` | `Biaya-Listrik dan Internet` | idem |
+| `Beban Operasional-R&D` | `Biaya-R&D` | idem |
+| `Beban Operasional-Pelatihan` | `Biaya-Pelatihan` | idem |
+| `Biaya-Perlengkapan Kantor dan Aministrasi` | `Biaya-Perlengkapan Kantor dan Administrasi` | typo asli, kurang huruf `d` |
+| `Biaya Sosial` | `Biaya-Sosial` | kurang tanda hubung |
+| `Pajak` | `Biaya-Pajak` | nama ringkas di tab Salinan |
 
 ## Pengelompokan bukan kolom baru
 
@@ -109,6 +130,7 @@ Kelompok itu dipakai untuk menentukan **di mana sebuah kategori ditampung**:
 
 | Kelompok | Ditampung di | Masuk laba rugi |
 |---|---|---|
+| `SALDO_AWAL` | SETUP kolom `KATEGORI NERACA` | tidak |
 | `PENDAPATAN` | SETUP kolom `KATEGORI PENDAPATAN` | ya, sebagai pendapatan |
 | `PERPINDAHAN` | SETUP kolom `KATEGORI PENDAPATAN` | **tidak**, dikecualikan SUMIFS |
 | `NERACA` | SETUP kolom `KATEGORI NERACA` | tidak |
@@ -131,9 +153,9 @@ ikut terhitung sebagai pendapatan.
 ```python
 from cash_report import categories as C
 
-C.PROMPT_KATEGORI        # teks siap tempel untuk prompt (22 kategori)
-C.KATEGORI               # 23, termasuk penanda
-C.KATEGORI_UNTUK_MODEL   # 22, tanpa penanda
+C.PROMPT_KATEGORI        # teks siap tempel untuk prompt (25 kategori)
+C.KATEGORI               # 27, termasuk Saldo Awal dan penanda
+C.KATEGORI_UNTUK_MODEL   # 25, tanpa Saldo Awal dan tanpa penanda
 C.normalize(nilai)       # nama final, atau 'Perlu Ditinjau'
 C.valid(nilai)           # True bila kategori sungguhan
 ```

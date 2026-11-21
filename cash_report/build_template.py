@@ -45,7 +45,9 @@ KAT_EXPENSE = KAT.PENGELUARAN_SOP + KAT.PENGELUARAN_TAMBAHAN + [
 
 # Kategori neraca: bukan pendapatan dan bukan beban, jadi tidak masuk RECAP
 # maupun laba rugi. Tetap ditampung di SETUP agar cocok dengan daftar model.
-KAT_NERACA = KAT.NERACA
+# Saldo Awal ikut di sini: bukan transaksi, tetapi diisi admin sebagai baris
+# pembuka, jadi harus tersedia di dropdown.
+KAT_NERACA = KAT.SALDO_AWAL + KAT.NERACA
 
 # EXPENSE DETAIL & laba rugi hanya memuat beban sungguhan: Transfer Antar Bank
 # dan Perlu Ditinjau dikecualikan.
@@ -148,9 +150,13 @@ def _setup(ws) -> None:
             KAT_EXPENSE[i] if i < len(KAT_EXPENSE) else "",
         ])
     put(ws, "A3", rows)
-    put(ws, "A21", [["Kantong = kantong uang perusahaan: BRI, BNI, Jago, UANG KAS.\n"
-                     "UANG KAS = kas operasional (tunai). Antar-bank via FLIP tetap dicatat\n"
-                     "dari kantong asal + kategori Biaya-Administrasi Flip dan Bank untuk biayanya."]])
+    # Catatan diletakkan setelah tabel, bukan di baris mati, supaya tidak
+    # tertimpa ketika daftar kategori bertambah.
+    catatan_row = 3 + len(rows) + 1
+    put(ws, f"A{catatan_row}",
+        [["Kantong = kantong uang perusahaan: BRI, BNI, Jago, UANG KAS.\n"
+          "UANG KAS = kas operasional (tunai). Antar-bank via FLIP tetap dicatat\n"
+          "dari kantong asal + kategori Biaya-Administrasi Flip dan Bank untuk biayanya."]])
 
 
 def _account(ws) -> None:
