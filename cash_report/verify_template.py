@@ -67,6 +67,29 @@ def main_verify() -> int:
     cek("baris data TRANSAKSI masih kosong",
         not any(str(v).strip() for v in ws.row_values(2)))
 
+    setup = sh.worksheet("SETUP")
+    header = setup.row_values(1)[:5]
+    cek("SETUP 5 kolom kategori",
+        header == ["KANTONG", "KATEGORI PENDAPATAN", "KATEGORI NERACA",
+                   "KATEGORI PENGELUARAN", "KATEGORI LAIN"],
+        f"dapat: {header}")
+
+    # Setiap kategori harus muncul TEPAT SEKALI. Duplikat antar kolom pernah
+    # terjadi: "Transfer Antar Bank" masuk kolom pendapatan sekaligus
+    # pengeluaran, sehingga admin melihatnya dua kali dengan makna berbeda.
+    isi_setup = []
+    for kolom in range(2, 6):
+        for r in range(2, 60):
+            v = setup.cell(r, kolom).value
+            if isinstance(v, str) and v.strip():
+                isi_setup.append(v.strip())
+    dobel = sorted({k for k in isi_setup if isi_setup.count(k) > 1})
+    cek("SETUP tidak ada kategori duplikat", not dobel, f"duplikat: {dobel}")
+
+    hilang_setup = [k for k in KAT.KATEGORI if k not in isi_setup]
+    cek("SETUP memuat semua kategori", not hilang_setup,
+        f"hilang: {hilang_setup}")
+
     recap = sh.worksheet("RECAP OVERVIEW")
     cek("RECAP B3 formula DATE", str(fcell(recap, 3, 2)).startswith("=DATE("),
         f"dapat: {fcell(recap, 3, 2)}")

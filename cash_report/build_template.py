@@ -32,16 +32,18 @@ from cash_report import categories as KAT  # noqa: E402  (daftar kategori tungga
 
 KANTONG = ["BRI", "BNI", "Jago", "UANG KAS"]
 
-# Kategori pemasukan + Transfer Antar Bank (bukan pendapatan, tetapi muncul di
-# kolom masuk/kantong tujuan sehingga perlu ditampung di SETUP).
-KAT_INCOME = KAT.PENDAPATAN + KAT.PERPINDAHAN
+# Setiap kategori menempati TEPAT SATU kolom di SETUP. Sebelumnya
+# "Transfer Antar Bank" masuk dua kolom sekaligus (pendapatan dan pengeluaran),
+# sehingga admin melihatnya dua kali di dropdown dengan makna berbeda.
+KAT_INCOME = list(KAT.PENDAPATAN)
 
-# Kolom kategori pengeluaran di SETUP memuat semua nilai yang mungkin muncul di
-# TRANSAKSI, termasuk Transfer Antar Bank dan penanda Perlu Ditinjau.
-KAT_EXPENSE = KAT.PENGELUARAN_SOP + KAT.PENGELUARAN_TAMBAHAN + [
-    "Transfer Antar Bank",
-    KAT.PERLU_DITINJAU,
-]
+# Kolom pengeluaran hanya berisi beban sungguhan. Transfer Antar Bank bukan
+# beban, dan penanda bukan kategori akuntansi: keduanya pindah ke kolom sendiri.
+KAT_EXPENSE = KAT.PENGELUARAN_SOP + KAT.PENGELUARAN_TAMBAHAN
+
+# Perpindahan dana dan penanda internal: bukan pendapatan, bukan beban, bukan
+# neraca. Tetap butuh tempat agar baris TRANSAKSI bisa memakainya.
+KAT_LAIN = list(KAT.PERPINDAHAN) + [KAT.PERLU_DITINJAU]
 
 # Kategori neraca: bukan pendapatan dan bukan beban, jadi tidak masuk RECAP
 # maupun laba rugi. Tetap ditampung di SETUP agar cocok dengan daftar model.
@@ -136,18 +138,22 @@ def build() -> str:
 
 def _setup(ws) -> None:
     put(ws, "A1", [["⚙️ SETUP — daftar kantong & kategori (edit sesuai kebutuhan)"]])
-    # Empat kolom: kantong, kategori pemasukan, kategori neraca, kategori pengeluaran.
+    # Lima kolom: kantong, pendapatan, neraca, pengeluaran, dan kategori lain.
     # Neraca dipisah dari pengeluaran karena Persediaan/Aset Tetap/Utang-Piutang
     # bukan beban dan tidak boleh masuk EXPENSE DETAIL maupun laba rugi.
+    # Kategori lain menampung perpindahan dana dan penanda internal, supaya
+    # setiap kategori muncul tepat sekali dan admin tidak melihat duplikat.
     rows = [["KANTONG", "KATEGORI PENDAPATAN", "KATEGORI NERACA",
-             "KATEGORI PENGELUARAN"]]
-    n = max(len(KANTONG), len(KAT_INCOME), len(KAT_NERACA), len(KAT_EXPENSE))
+             "KATEGORI PENGELUARAN", "KATEGORI LAIN"]]
+    n = max(len(KANTONG), len(KAT_INCOME), len(KAT_NERACA), len(KAT_EXPENSE),
+            len(KAT_LAIN))
     for i in range(n):
         rows.append([
             KANTONG[i] if i < len(KANTONG) else "",
             KAT_INCOME[i] if i < len(KAT_INCOME) else "",
             KAT_NERACA[i] if i < len(KAT_NERACA) else "",
             KAT_EXPENSE[i] if i < len(KAT_EXPENSE) else "",
+            KAT_LAIN[i] if i < len(KAT_LAIN) else "",
         ])
     put(ws, "A3", rows)
     # Catatan diletakkan setelah tabel, bukan di baris mati, supaya tidak
@@ -203,9 +209,8 @@ def _recap(ws) -> None:
                     ["Kategori", "Jumlah"]])
     exp = []
     r = 18
+    # KAT_EXPENSE hanya berisi beban sungguhan, jadi tidak perlu pengecualian.
     for i, k in enumerate(KAT_EXPENSE):
-        if k == "Transfer Antar Bank":
-            continue
         exp.append([f"=SETUP!D{4 + i}",
                     f'=SUMIFS(TRANSAKSI!D:D,TRANSAKSI!E:E,$A{r},{rng})'])
         r += 1
