@@ -43,6 +43,10 @@ KAT_EXPENSE = KAT.PENGELUARAN_SOP + KAT.PENGELUARAN_TAMBAHAN + [
     KAT.PERLU_DITINJAU,
 ]
 
+# Kategori neraca: bukan pendapatan dan bukan beban, jadi tidak masuk RECAP
+# maupun laba rugi. Tetap ditampung di SETUP agar cocok dengan daftar model.
+KAT_NERACA = KAT.NERACA
+
 # EXPENSE DETAIL & laba rugi hanya memuat beban sungguhan: Transfer Antar Bank
 # dan Perlu Ditinjau dikecualikan.
 KAT_NO_TF = KAT.PENGELUARAN_SOP + KAT.PENGELUARAN_TAMBAHAN
@@ -130,11 +134,17 @@ def build() -> str:
 
 def _setup(ws) -> None:
     put(ws, "A1", [["⚙️ SETUP — daftar kantong & kategori (edit sesuai kebutuhan)"]])
-    rows = [["KANTONG", "KATEGORI PENDAPATAN", "KATEGORI PENGELUARAN"]]
-    for i in range(max(len(KANTONG), len(KAT_INCOME), len(KAT_EXPENSE))):
+    # Empat kolom: kantong, kategori pemasukan, kategori neraca, kategori pengeluaran.
+    # Neraca dipisah dari pengeluaran karena Persediaan/Aset Tetap/Utang-Piutang
+    # bukan beban dan tidak boleh masuk EXPENSE DETAIL maupun laba rugi.
+    rows = [["KANTONG", "KATEGORI PENDAPATAN", "KATEGORI NERACA",
+             "KATEGORI PENGELUARAN"]]
+    n = max(len(KANTONG), len(KAT_INCOME), len(KAT_NERACA), len(KAT_EXPENSE))
+    for i in range(n):
         rows.append([
             KANTONG[i] if i < len(KANTONG) else "",
             KAT_INCOME[i] if i < len(KAT_INCOME) else "",
+            KAT_NERACA[i] if i < len(KAT_NERACA) else "",
             KAT_EXPENSE[i] if i < len(KAT_EXPENSE) else "",
         ])
     put(ws, "A3", rows)
@@ -190,7 +200,7 @@ def _recap(ws) -> None:
     for i, k in enumerate(KAT_EXPENSE):
         if k == "Transfer Antar Bank":
             continue
-        exp.append([f"=SETUP!C{4 + i}",
+        exp.append([f"=SETUP!D{4 + i}",
                     f'=SUMIFS(TRANSAKSI!D:D,TRANSAKSI!E:E,$A{r},{rng})'])
         r += 1
     exp.append(["TOTAL PENGELUARAN", f"=SUM(B18:B{r - 1})"])
@@ -225,7 +235,7 @@ def _expense(ws) -> None:
     for k in KAT_NO_TF:
         r = EXP_ROW[k]
         rows.append(
-            [f"=SETUP!C{4 + KAT_EXPENSE.index(k)}"]
+            [f"=SETUP!D{4 + KAT_EXPENSE.index(k)}"]
             + [f'=SUMIFS(TRANSAKSI!D:D,TRANSAKSI!E:E,$A{r},'
                f'TRANSAKSI!A:A,">="&{c}$3,TRANSAKSI!A:A,"<="&EOMONTH({c}$3,0))'
                for c in MONTH_COLS]

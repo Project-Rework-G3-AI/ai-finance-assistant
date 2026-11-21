@@ -95,6 +95,37 @@ tanpa jejak, kecuali empat yang memang tidak punya padanan:
 `Bagi Hasil`, `Marketing`, `Profit Share Bangunan`, `Royalti BRIN`.
 Keempatnya akan menjadi `Perlu Ditinjau` bila muncul.
 
+## Pengelompokan bukan kolom baru
+
+Lima kelompok di `categories.py` adalah **struktur kode**, bukan kolom di
+ledger. Sheet `TRANSAKSI` tetap 11 kolom dan hanya menyimpan **satu** nilai
+kategori per baris:
+
+| Kolom | Isi |
+|---|---|
+| E `Kategori` | satu nama dari daftar final |
+
+Kelompok itu dipakai untuk menentukan **di mana sebuah kategori ditampung**:
+
+| Kelompok | Ditampung di | Masuk laba rugi |
+|---|---|---|
+| `PENDAPATAN` | SETUP kolom `KATEGORI PENDAPATAN` | ya, sebagai pendapatan |
+| `PERPINDAHAN` | SETUP kolom `KATEGORI PENDAPATAN` | **tidak**, dikecualikan SUMIFS |
+| `NERACA` | SETUP kolom `KATEGORI NERACA` | tidak |
+| `PENGELUARAN_SOP` | SETUP kolom `KATEGORI PENGELUARAN` | ya, sebagai beban |
+| `PENGELUARAN_TAMBAHAN` | SETUP kolom `KATEGORI PENGELUARAN` | ya, sebagai beban |
+
+Sheet `SETUP` memakai **empat kolom**: `KANTONG`, `KATEGORI PENDAPATAN`,
+`KATEGORI NERACA`, `KATEGORI PENGELUARAN`. Kolom neraca dipisah karena
+`Persediaan`, `Aset Tetap`, dan `Utang/Piutang` bukan beban, sehingga tidak
+boleh muncul di EXPENSE DETAIL maupun INCOME STATEMENT.
+
+Alasan `PERPINDAHAN` ikut kolom pendapatan: `Transfer Antar Bank` perlu muncul
+di dropdown kolom kategori saat admin mengisi manual, tetapi SUMIFS di RECAP,
+YEARLY, EXPENSE DETAIL, dan INCOME STATEMENT semuanya mengecualikannya dengan
+`TRANSAKSI!E:E,"<>Transfer Antar Bank"`. Jadi ia tampil sebagai pilihan tanpa
+ikut terhitung sebagai pendapatan.
+
 ## Cara pakai
 
 ```python
