@@ -89,12 +89,14 @@ Kalau dikosongkan, SDK memakai `production` (default Sentry). Untuk lokal, isi `
 
 Tanpa `SENTRY_DSN`, seluruh fungsi observability jadi no-op dan bot berjalan seperti biasa.
 
-**Data sensitif disamarkan sebelum keluar dari server.** Aplikasi ini memproses bukti transaksi keuangan dan menyimpan kredensial di environment, jadi `sentry_setup.py` menetapkan `send_default_pii=False`, `max_request_body_size="never"`, dan `before_send` yang menyamarkan:
+**Data sensitif disamarkan sebelum keluar dari server.** Aplikasi ini memproses bukti transaksi keuangan dan menyimpan kredensial di environment, jadi `sentry_setup.py` menetapkan `send_default_pii=False`, `max_request_body_size="never"`, `include_local_variables=False`, dan `before_send` yang menyamarkan:
 
 - nilai variabel bernama token/secret/refresh_token/client_secret/Authorization
 - token bot di dalam URL `api.telegram.org/bot<token>/...`
 - kredensial di query string (`?api_key=`, `&token=`)
-- nilai dict dengan kunci sensitif, termasuk di variabel lokal stack trace
+- nilai dict dengan kunci sensitif
+
+`include_local_variables=False` perlu karena argumen fungsi ikut tersimpan sebagai variabel lokal. Tanpa opsi ini, byte gambar bukti transaksi dan isi dict transaksi ikut terkirim lewat stack trace — bukan lewat request body. Nama file, nomor baris, nama fungsi, dan pesan exception tetap utuh, jadi event masih berguna untuk debugging.
 
 Gambar bukti transaksi tidak pernah dikirim karena body request tidak direkam.
 
@@ -107,10 +109,12 @@ Gambar bukti transaksi tidak pernah dikirim karena body request tidak direkam.
 | `handle_update()` | tulis Cash Report gagal, masuk antrean |
 | `api_extract()` | tulis Cash Report gagal via endpoint API |
 | `flush_pending()` | retry antrean gagal |
+| `flush_pending()` | baris antrean rusak (bukan JSON valid) |
+| `tg_send()` | pesan Telegram gagal terkirim (bot diblokir, 429) |
 | `poll_loop()` | satu update gagal diproses |
 | `poll_loop()` | loop Telegram gagal, ulang 3 detik |
 
-Sebelum perubahan ini, ketujuh jalur tersebut hanya menulis ke stdout atau tidak meninggalkan jejak sama sekali.
+Sebelum perubahan ini, jalur-jalur tersebut hanya menulis ke stdout atau tidak meninggalkan jejak sama sekali. `tg_send()` sebelumnya memakai `suppress(Exception)`, sehingga bot yang diblokir pengguna atau kena rate limit tidak meninggalkan bukti apa pun padahal pengguna tidak menerima balasan.
 
 ## Operasional
 

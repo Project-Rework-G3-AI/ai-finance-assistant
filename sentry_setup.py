@@ -131,6 +131,12 @@ def init_sentry() -> bool:
         send_default_pii=False,
         # Body request tidak pernah direkam: isinya gambar bukti transaksi.
         max_request_body_size="never",
+        # Variabel lokal TIDAK ikut dikirim. Ini penting: argumen fungsi ikut
+        # tersimpan sebagai variabel lokal, sehingga byte gambar bukti transaksi
+        # (dan isi dict transaksi) akan bocor lewat stack trace. Diverifikasi:
+        # dengan opsi ini False, penanda gambar tidak lagi muncul di payload,
+        # sedangkan nama file, nomor baris, dan pesan exception tetap utuh.
+        include_local_variables=False,
         before_send=before_send,
         before_send_transaction=before_send_transaction,
         integrations=[

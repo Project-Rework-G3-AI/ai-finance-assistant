@@ -17,7 +17,7 @@ import logging
 import os
 import re
 import time
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -401,16 +401,29 @@ def push_pending(rec: dict, error: str) -> None:
 
 
 def flush_pending(client: httpx.AsyncClient) -> int:
-    """Kirim ulang antrean. Return jumlah yang masih tersisa."""
+    """Kirim ulang antrean. Return jumlah yang masih tersisa.
+
+    Baris dibaca satu per satu dan dikumpulkan dulu, baru file ditulis ulang.
+    Versi sebelumnya menghapus file sebelum memproses, sehingga satu baris JSON
+    rusak membuat seluruh antrean transaksi hilang tanpa bisa dipulihkan.
+    """
     if not PENDING.exists():
         return 0
     lines = PENDING.read_text(encoding="utf-8").strip().splitlines()
-    PENDING.unlink(missing_ok=True)
     sisa = []
     for ln in lines:
         if not ln.strip():
             continue
-        rec = json.loads(ln)
+        try:
+            rec = json.loads(ln)
+        except json.JSONDecodeError as e:
+            # Baris rusak disimpan apa adanya agar tidak hilang. WARNING +
+            # capture: satu event berisi traceback, tanpa dobel lewat
+            # LoggingIntegration (yang hanya bereaksi pada level ERROR).
+            log.warning("Baris antrean tidak bisa dibaca sebagai JSON: %s", e)
+            sentry_setup.capture_exception(e)
+            sisa.append(ln)
+            continue
         rec.pop("_error", None)
         rec.pop("_ts", None)
         try:
@@ -419,8 +432,17 @@ def flush_pending(client: httpx.AsyncClient) -> int:
             # Retry gagal berarti transaksi belum tercatat; ini perlu terlihat.
             log.warning("Retry antrean gagal, dikembalikan ke pending: %s: %s", type(e).__name__, e)
             sentry_setup.capture_exception(e)
-            push_pending(rec, f"retry gagal: {e}")
-            sisa.append(ln)
+            # Simpan dengan anotasi error; ditulis sekali di akhir, bukan
+            # append per baris, agar isi file tidak tercampur dua sumber.
+            sisa.append(json.dumps({**rec, "_error": f"retry gagal: {e}", "_ts": int(time.time())},
+                                   ensure_ascii=False))
+
+    # Tulis ulang hanya bila masih ada sisa; file kosong dihapus agar /health
+    # melaporkan pending=false dengan benar.
+    if sisa:
+        PENDING.write_text("\n".join(sisa) + "\n", encoding="utf-8")
+    else:
+        PENDING.unlink(missing_ok=True)
     return len(sisa)
 
 
@@ -438,8 +460,19 @@ async def tg_call(client: httpx.AsyncClient, method: str, **payload) -> dict:
 
 
 async def tg_send(client: httpx.AsyncClient, chat_id: int, text: str) -> None:
-    with suppress(Exception):
+    """Kirim pesan Telegram; kegagalan tidak boleh menghentikan alur.
+
+    Sebelumnya memakai suppress(Exception) tanpa jejak. Akibatnya kasus nyata
+    seperti bot diblokir user atau 429 rate limit hilang tanpa bekas, padahal
+    user tidak menerima balasan apa pun. Sekarang kegagalan tetap dicatat.
+    """
+    try:
         await tg_call(client, "sendMessage", chat_id=chat_id, text=text, parse_mode="HTML")
+    except Exception as e:
+        # WARNING + capture: pesan gagal terkirim bukan kegagalan fatal, tapi
+        # perlu terlihat karena user tidak menerima notifikasi apa pun.
+        log.warning("Kirim pesan Telegram gagal (chat %s): %s: %s", chat_id, type(e).__name__, e)
+        sentry_setup.capture_exception(e)
 
 
 async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
