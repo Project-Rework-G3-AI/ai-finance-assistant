@@ -60,9 +60,12 @@ PENGELUARAN_TAMBAHAN = [
     # Rincian operasional yang dipakai perusahaan di tab Salinan. Dipisah dari
     # Biaya-Operasional karena perusahaan memang mencatatnya terpisah, dan
     # menyatukannya menghapus informasi yang sudah ada di data asli.
-    "Biaya-Listrik dan Internet",
-    "Biaya-R&D",
-    "Biaya-Pelatihan",
+    # Tiga kategori ini HANYA ada dalam ejaan "Beban Operasional-*" di tab
+    # Salinan; tidak ada padanan "Biaya-*" di file perusahaan. Nama final
+    # mengikuti ejaan dataset apa adanya, bukan dibakukan ke pola SOP.
+    "Beban Operasional-Listrik dan Internet",
+    "Beban Operasional-R&D",
+    "Beban Operasional-Pelatihan",
     "Beban Lain",
     # Kategori yang hanya ada di tab "Salinan" dan belum pernah dipakai pada
     # data Jan-Jul 2026. Tetap disediakan karena dropdown adalah kontrak dengan
@@ -114,14 +117,18 @@ PROMPT_KATEGORI = ", ".join(KATEGORI_UNTUK_MODEL)
 #   - nama ringkas yang mungkin dihasilkan model
 ALIAS = {
     "Beban Operasional-Gaji Karyawan": "Biaya-Gaji Karyawan",
-    "Beban Operasional-Listrik dan Internet": "Biaya-Listrik dan Internet",
     "Beban Operasional-Konsumsi": "Biaya-Konsumsi",
     "Beban Operasional - Perlengkapan Kantor dan Administrasi":
         "Biaya-Perlengkapan Kantor dan Administrasi",
     "Beban Operasional - Transportasi": "Biaya-Transportasi",
-    "Beban Operasional-R&D": "Biaya-R&D",
-    "Beban Operasional-RD": "Biaya-R&D",
-    "Beban Operasional-Pelatihan": "Biaya-Pelatihan",
+    # Tiga kategori di bawah ini TIDAK punya padanan "Biaya-*" di dataset,
+    # jadi nama finalnya memakai ejaan asli "Beban Operasional-*". Alias hanya
+    # untuk varian penulisan lain yang mungkin muncul.
+    "Beban Operasional-RD": "Beban Operasional-R&D",
+    "Beban Operasional R&D": "Beban Operasional-R&D",
+    "Beban Operasional Listrik dan Internet":
+        "Beban Operasional-Listrik dan Internet",
+    "Beban Operasional Pelatihan": "Beban Operasional-Pelatihan",
     "Biaya-Perlengkapan Kantor dan Aministrasi":
         "Biaya-Perlengkapan Kantor dan Administrasi",
     "Biaya-Transporrtasi": "Biaya-Transportasi",

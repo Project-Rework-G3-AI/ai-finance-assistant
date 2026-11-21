@@ -66,9 +66,9 @@ dropdown file Excel.
 | `Biaya-Pajak` | dropdown, 18 sheet |
 | `Biaya-Bunga Bank` | dropdown, 18 sheet |
 | `Biaya-Administrasi Flip dan Bank` | dropdown, 18 sheet |
-| `Biaya-Listrik dan Internet` | dropdown tab Salinan, rincian `Biaya-Operasional` |
-| `Biaya-R&D` | dropdown tab Salinan, dipakai 2 kali di BRI Januari |
-| `Biaya-Pelatihan` | dropdown tab Salinan, dipakai 2 kali di BRI Januari |
+| `Beban Operasional-Listrik dan Internet` | dropdown tab Salinan, ejaan asli dipertahankan |
+| `Beban Operasional-R&D` | dropdown tab Salinan, dipakai 2 kali di BRI Januari |
+| `Beban Operasional-Pelatihan` | dropdown tab Salinan, dipakai 2 kali di BRI Januari |
 | `Beban Lain` | dropdown, 18 sheet |
 | `Marketing` | dropdown tab Salinan, disebut di Diagram Alir |
 | `Royalti BRIN` | dropdown tab Salinan, belum dipakai |
@@ -116,12 +116,30 @@ Seluruh 37 nilai dropdown dikenali. Tidak ada yang jatuh ke `Perlu Ditinjau`.
 | `Beban Operasional-Konsumsi` | `Biaya-Konsumsi` | idem |
 | `Beban Operasional - Transportasi` | `Biaya-Transportasi` | idem |
 | `Beban Operasional - Perlengkapan Kantor dan Administrasi` | `Biaya-Perlengkapan Kantor dan Administrasi` | idem |
-| `Beban Operasional-Listrik dan Internet` | `Biaya-Listrik dan Internet` | idem |
-| `Beban Operasional-R&D` | `Biaya-R&D` | idem |
-| `Beban Operasional-Pelatihan` | `Biaya-Pelatihan` | idem |
+| `Beban Operasional-RD` | `Beban Operasional-R&D` | varian tanpa `&`, salah ketik |
 | `Biaya-Perlengkapan Kantor dan Aministrasi` | `Biaya-Perlengkapan Kantor dan Administrasi` | typo asli, kurang huruf `d` |
 | `Biaya Sosial` | `Biaya-Sosial` | kurang tanda hubung |
 | `Pajak` | `Biaya-Pajak` | nama ringkas di tab Salinan |
+
+## Nama kategori memakai ejaan dataset
+
+30 dari 31 nama di `categories.py` **persis sama** dengan string di file
+perusahaan. Satu-satunya yang bukan berasal dari dataset adalah `Perlu
+Ditinjau`, penanda internal yang tidak ditawarkan ke model.
+
+Tiga kategori hanya ada dalam ejaan `Beban Operasional-*` di tab Salinan, tanpa
+padanan `Biaya-*` di file mana pun:
+
+| Nama di dataset | Dipakai |
+|---|---|
+| `Beban Operasional-Listrik dan Internet` | 0 baris |
+| `Beban Operasional-R&D` | 2 baris (BRI Januari) |
+| `Beban Operasional-Pelatihan` | 2 baris (BRI Januari) |
+
+Ketiganya sengaja **tidak** dibakukan ke pola `Biaya-*` seperti tujuh kategori
+lain. Membakukan nama yang tidak pernah ada di file perusahaan akan menghasilkan
+string baru yang tidak dikenali siapa pun, dan membuat sistem tidak bisa
+mencocokkan data lama.
 
 ## Pengelompokan bukan kolom baru
 
