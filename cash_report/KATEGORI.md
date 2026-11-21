@@ -13,7 +13,7 @@ SOP hanya mengatur uang keluar. Tidak ada dokumen perusahaan yang mengatur
 kategori pemasukan, jadi tiga kategori `Pendapatan Usaha (...)` diambil dari
 dropdown file Excel.
 
-## Daftar final (27)
+## Daftar final (31)
 
 ### Saldo awal (1)
 
@@ -59,7 +59,7 @@ dropdown file Excel.
 | `Biaya-Pembelian Aset` | pembelian peralatan/aset |
 | `Biaya-Sosial` | bantuan/kegiatan sosial |
 
-### Pengeluaran — tambahan dari dropdown (7)
+### Pengeluaran — tambahan dari dropdown (11)
 
 | Kategori | Asal |
 |---|---|
@@ -70,6 +70,24 @@ dropdown file Excel.
 | `Biaya-R&D` | dropdown tab Salinan, dipakai 2 kali di BRI Januari |
 | `Biaya-Pelatihan` | dropdown tab Salinan, dipakai 2 kali di BRI Januari |
 | `Beban Lain` | dropdown, 18 sheet |
+| `Marketing` | dropdown tab Salinan, disebut di Diagram Alir |
+| `Royalti BRIN` | dropdown tab Salinan, belum dipakai |
+| `Profit Share Bangunan` | dropdown tab Salinan, belum dipakai |
+| `Bagi Hasil` | dropdown tab Salinan, belum dipakai |
+
+### Kategori dropdown yang belum pernah dipakai (4)
+
+Tersedia di dropdown tab `Salinan` tetapi belum ada barisnya di data
+Jan-Jul 2026. Tetap dimasukkan karena dropdown adalah kontrak dengan admin:
+bulan mendatang bisa saja memakainya, dan menghilangkannya membuat admin tidak
+bisa memilih kategori yang tersedia di file perusahaannya.
+
+| Kategori | Dasar |
+|---|---|
+| `Marketing` | disebut eksplisit di Diagram Alir sebagai bagian beban operasional |
+| `Royalti BRIN` | hanya ada di dropdown tab Salinan, tidak disebut di SOP |
+| `Profit Share Bangunan` | idem |
+| `Bagi Hasil` | idem |
 
 ### Penanda, bukan kategori akuntansi (1)
 
@@ -84,22 +102,11 @@ Nasib setiap nilai:
 
 | Nasib | Jumlah | Keterangan |
 |---|---|---|
-| Ada langsung di daftar final | 23 | nama sama persis |
+| Ada langsung di daftar final | 27 | nama sama persis |
 | Dikenali lewat alias | 10 | ejaan/skema berbeda, dipetakan ke nama baku |
-| **Tidak ada di repo** | 4 | lihat di bawah |
+| **Tidak ada di repo** | **0** | semua tercakup |
 
-### Empat kategori dropdown yang tidak masuk repo
-
-| Kategori | Muncul di | Pemakaian Jan-Jul 2026 |
-|---|---|---|
-| `Royalti BRIN` | 2 sheet (tab Salinan BNI & BRI) | **0 baris** |
-| `Profit Share Bangunan` | 2 sheet (tab Salinan BNI & BRI) | **0 baris** |
-| `Bagi Hasil` | 2 sheet (tab Salinan BNI & BRI) | **0 baris** |
-| `Marketing` | 2 sheet (tab Salinan BNI & BRI) | **0 baris** |
-
-Keempatnya hanya ada di tab `Salinan`, tidak pernah dipakai di 361 baris
-Jan-Jul 2026, dan tidak disebut di SOP mana pun. Bila muncul, `normalize()`
-mengembalikan `Perlu Ditinjau` sehingga tidak hilang diam-diam.
+Seluruh 37 nilai dropdown dikenali. Tidak ada yang jatuh ke `Perlu Ditinjau`.
 
 ### Yang digabung atau diganti nama (10 alias)
 
@@ -153,9 +160,9 @@ ikut terhitung sebagai pendapatan.
 ```python
 from cash_report import categories as C
 
-C.PROMPT_KATEGORI        # teks siap tempel untuk prompt (25 kategori)
-C.KATEGORI               # 27, termasuk Saldo Awal dan penanda
-C.KATEGORI_UNTUK_MODEL   # 25, tanpa Saldo Awal dan tanpa penanda
+C.PROMPT_KATEGORI        # teks siap tempel untuk prompt (29 kategori)
+C.KATEGORI               # 31, termasuk Saldo Awal dan penanda
+C.KATEGORI_UNTUK_MODEL   # 29, tanpa Saldo Awal dan tanpa penanda
 C.normalize(nilai)       # nama final, atau 'Perlu Ditinjau'
 C.valid(nilai)           # True bila kategori sungguhan
 ```

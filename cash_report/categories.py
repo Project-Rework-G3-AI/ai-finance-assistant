@@ -64,6 +64,14 @@ PENGELUARAN_TAMBAHAN = [
     "Biaya-R&D",
     "Biaya-Pelatihan",
     "Beban Lain",
+    # Kategori yang hanya ada di tab "Salinan" dan belum pernah dipakai pada
+    # data Jan-Jul 2026. Tetap disediakan karena dropdown adalah kontrak dengan
+    # admin: bulan mendatang bisa saja memakainya, dan menghilangkannya membuat
+    # admin tidak bisa memilih kategori yang tersedia di file perusahaannya.
+    "Marketing",              # SOP Diagram Alir: bagian beban operasional
+    "Royalti BRIN",
+    "Profit Share Bangunan",
+    "Bagi Hasil",
 ]
 
 # --- Saldo awal -------------------------------------------------------------
