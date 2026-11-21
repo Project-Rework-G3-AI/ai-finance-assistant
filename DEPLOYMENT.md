@@ -78,6 +78,15 @@ Sentry dipakai untuk menangkap error, tracing request, dan log terpusat. Konfigu
 | `SENTRY_RELEASE` | mis. `ai-finance-assistant@a1b2c3d` | opsional |
 | `LOG_LEVEL` | `INFO` (default), `DEBUG` saat investigasi | opsional |
 
+`SENTRY_ENVIRONMENT` hanya label: nilainya ditempelkan ke setiap event, tidak mengubah cara SDK bekerja. Yang berubah ada di sisi dashboard Sentry:
+
+- **Filter environment.** Dashboard punya pemilih environment; filter yang tidak cocok akan menyembunyikan issue. Bila variabel ini salah isi, error produksi bisa tidak terlihat karena tersaring atau tercampur dengan error dari laptop.
+- **Alert rules.** Aturan alert bisa dibatasi ke environment tertentu, mis. hanya kirim notifikasi untuk `production`.
+- **Release health.** Angka crash-free session dan user dihitung per environment.
+- **Quota.** Semua environment memakai kuota project yang sama, jadi error saat development ikut memakan jatah.
+
+Kalau dikosongkan, SDK memakai `production` (default Sentry). Untuk lokal, isi `development` secara eksplisit agar tidak tercampur.
+
 Tanpa `SENTRY_DSN`, seluruh fungsi observability jadi no-op dan bot berjalan seperti biasa.
 
 **Data sensitif disamarkan sebelum keluar dari server.** Aplikasi ini memproses bukti transaksi keuangan dan menyimpan kredensial di environment, jadi `sentry_setup.py` menetapkan `send_default_pii=False`, `max_request_body_size="never"`, dan `before_send` yang menyamarkan:

@@ -119,7 +119,11 @@ def init_sentry() -> bool:
 
     sentry_sdk.init(
         dsn=dsn,
-        environment=os.getenv("SENTRY_ENVIRONMENT", "development").strip(),
+        # Default mengikuti Sentry: bila tidak diisi, event dianggap production.
+        # Ini pilihan yang aman — lupa mengisi di server tidak membuat error
+        # produksi tersamar sebagai development dan lolos dari filter dashboard.
+        # Untuk lokal, set SENTRY_ENVIRONMENT=development di .env.
+        environment=os.getenv("SENTRY_ENVIRONMENT", "production").strip(),
         release=os.getenv("SENTRY_RELEASE", "").strip() or None,
         # Persentase request yang direkam untuk tracing. 0 mematikan tracing.
         traces_sample_rate=_env_float("SENTRY_TRACES_SAMPLE_RATE", 0.1),
@@ -139,7 +143,7 @@ def init_sentry() -> bool:
     )
     log.info(
         "Sentry aktif — environment=%s release=%s traces=%s",
-        os.getenv("SENTRY_ENVIRONMENT", "development"),
+        os.getenv("SENTRY_ENVIRONMENT", "production").strip(),
         os.getenv("SENTRY_RELEASE", "") or "(tidak diisi)",
         _env_float("SENTRY_TRACES_SAMPLE_RATE", 0.1),
     )
