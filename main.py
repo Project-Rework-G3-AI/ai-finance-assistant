@@ -17,7 +17,7 @@ import logging
 import os
 import re
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -122,7 +122,18 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
         },
         timeout=90,
     )
-    r.raise_for_status()
+    try:
+        r.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        # raise_for_status() hanya membawa kode status. Isi respons dari provider
+        # (mis. {"error":{"message":...}}) menjelaskan penyebab sebenarnya, jadi
+        # dilampirkan sebelum diteruskan.
+        body = ""
+        with suppress(Exception):
+            body = e.response.text[:800]
+        raise RuntimeError(
+            f"AI HTTP {e.response.status_code} dari {AI_BASE}: {body or '(respons kosong)'}"
+        ) from e
     text = r.json()["choices"][0]["message"]["content"]
     m = re.search(r"\{.*\}", text, re.S)
     if not m:
@@ -455,7 +466,12 @@ async def tg_call(client: httpx.AsyncClient, method: str, **payload) -> dict:
     r = await client.post(TG_API.format(token=TG_TOKEN, method=method), json=payload, timeout=90)
     data = r.json()
     if not data.get("ok"):
-        raise RuntimeError(f"Telegram {method}: {data.get('description')}")
+        # Sertakan kode error asli Telegram (bukan hanya description) supaya
+        # kasus seperti 429 rate limit atau 403 bot diblokir bisa dibedakan.
+        raise RuntimeError(
+            f"Telegram {method} gagal: error_code={data.get('error_code')} "
+            f"description={data.get('description')!r}"
+        )
     return data["result"]
 
 
