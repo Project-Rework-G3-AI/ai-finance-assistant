@@ -7,3 +7,8 @@ __pycache__/
 .venv/
 .DS_Store
 .commandcode/
+
+# Keluaran evaluasi SC-01: berisi data transaksi dan hasil model, tidak untuk repo
+sc01-out/
+hasil_per_baris.csv
+metrik.json
