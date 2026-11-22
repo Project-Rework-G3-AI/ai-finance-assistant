@@ -9,25 +9,29 @@ berkas pendukungnya disertakan agar hasil bisa diperiksa ulang.
 
 ## Ringkasan
 
-| Metrik | Run 1 | Run 2 | Run 3 |
-|---|---|---|---|
-| Total pasangan diuji | 65 | 65 | 65 |
-| Benar | 10 | 9 | 8 |
-| **Akurasi** | **15,4%** | **13,8%** | **12,3%** |
-| Baseline kelas mayoritas | 75,4% | 75,4% | 75,4% |
-| **Lift atas baseline** | **−60,0%** | **−61,5%** | **−63,1%** |
-| Macro-average recall | 52,9% | 52,4% | 42,4% |
-| Target BRD | 85% | 85% | 85% |
-| Status | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** |
+| Metrik | Run 1 | Run 2 | Run 3 | Run 4 |
+|---|---|---|---|---|
+| Total pasangan diuji | 65 | 65 | 65 | 65 |
+| Benar | 10 | 9 | 8 | 3 |
+| **Akurasi** | **15,4%** | **13,8%** | **12,3%** | **4,6%** |
+| Baseline kelas mayoritas | 75,4% | 75,4% | 75,4% | 75,4% |
+| **Lift atas baseline** | **−60,0%** | **−61,5%** | **−63,1%** | **−70,8%** |
+| Macro-average recall | 52,9% | 52,4% | 42,4% | 40,4% |
+| Target BRD | 85% | 85% | 85% | 85% |
+| Status | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** |
 
-Tiga eksekusi pada data yang sama memberi hasil berbeda: akurasi bergerak antara
-**12,3% dan 15,4%**, rentang 3,1 poin persen. Kode sudah mengirim
-`temperature: 0`, tetapi model penalaran lewat API pihak ketiga tidak menjamin
-determinisme penuh, dan tidak ada parameter `seed`.
+Empat eksekusi pada data yang sama memberi akurasi antara **4,6% dan 15,4%**,
+rentang **10,8 poin persen**. Kode sudah mengirim `temperature: 0`, tetapi model
+penalaran lewat API pihak ketiga tidak menjamin determinisme penuh, dan tidak
+ada parameter `seed`.
 
-Karena itu angka di sini dibaca sebagai besaran, bukan angka pasti. Yang penting
-dan stabil di ketiga run: akurasi berada jauh di bawah baseline 75,4% dan jauh
-dari target 85%.
+Keempat run memakai kode yang sama pada 65 gambar yang sama, semuanya bermode
+`vision` tanpa satu pun galat atau kategori kosong. Model memang menjawab
+berbeda-beda, bukan gagal. Pada run terakhir model memilih 17 kategori berbeda.
+
+Karena itu satu angka saja menyesatkan. Yang stabil di keempat run: akurasi
+berada jauh di bawah baseline 75,4% dan jauh dari target 85%. Bahkan pada run
+terbaik, model kalah 60 poin persen dari tebakan konstan.
 
 Akurasi belasan persen berada di bawah baseline. Artinya model bukan hanya belum
 mencapai target, tetapi lebih buruk daripada menjawab `Transfer Antar Bank` untuk

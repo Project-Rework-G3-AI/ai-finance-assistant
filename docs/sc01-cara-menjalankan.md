@@ -147,17 +147,20 @@ Folder `sc01-out/` masuk `.gitignore` karena berisi data transaksi.
 ## Catatan tentang kestabilan angka
 
 Kode sudah mengirim `temperature: 0` pada payload `_vision_extract()`, tetapi
-hasilnya tidak sepenuhnya dapat diulang. Tiga eksekusi berturut-turut pada 65
-gambar yang sama memberi akurasi 15,4%, 13,8%, dan 12,3% — rentang 3,1 poin
-persen, dengan 21 dari 65 jawaban berubah antara run pertama dan kedua.
+hasilnya tidak dapat diulang. Empat eksekusi berturut-turut pada 65 gambar yang
+sama memberi akurasi 15,4%, 13,8%, 12,3%, dan 4,6% — rentang 10,8 poin persen.
+
+Keempatnya memakai kode identik dan semuanya bermode `vision`, tanpa galat dan
+tanpa kategori kosong. Jadi ini bukan kegagalan teknis, melainkan model yang
+memang menjawab berbeda-beda antar-run.
 
 Penyebab yang paling mungkin adalah model penalaran (`deepseek-v4.1-flash-1017`)
 yang tidak menjamin determinisme penuh lewat API pihak ketiga, ditambah tidak
-adanya parameter `seed`. Artinya angka SC-01 sebaiknya dibaca sebagai besaran,
-bukan angka pasti: selisih sekitar tiga poin persen antar-run wajar, sedangkan
-selisih belasan poin menunjukkan perubahan yang nyata.
+adanya parameter `seed`.
 
-Untuk angka yang lebih kuat, jalankan beberapa kali lalu laporkan rentangnya:
+Konsekuensinya penting untuk pelaporan: satu angka tidak cukup. Laporkan rentang
+dari beberapa run, jangan satu hasil. Selisih sepuluh poin persen antar-run sudah
+cukup untuk mengubah kesimpulan bila hanya satu run yang dilaporkan.
 
 ```bash
 python3 tests/sc01_harness.py --repeat 3
