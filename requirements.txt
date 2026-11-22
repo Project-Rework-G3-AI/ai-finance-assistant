@@ -1,7 +1,7 @@
 fastapi
 uvicorn[standard]
 httpx
-gspread
+gspread>=6.0          # fetch_sheet_metadata(params=...) dipakai verify_template
 google-api-python-client
 google-auth-oauthlib
 python-dotenv

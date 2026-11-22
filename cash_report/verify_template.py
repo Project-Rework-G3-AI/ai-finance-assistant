@@ -145,13 +145,14 @@ def main_verify() -> int:
         f"dapat {sum(1 for x in isi_dropdown if x)} dari {len(KAT.KATEGORI)}")
 
     # Kolom Kategori di TRANSAKSI harus punya validasi yang menunjuk rentang itu.
-    # gspread tidak menyediakannya, jadi dibaca lewat Sheets API langsung.
-    grid = main._sheets().spreadsheets().get(
-        spreadsheetId=sid,
-        ranges=["TRANSAKSI!E2"],
-        includeGridData=True,
-        fields="sheets(data(rowData(values(dataValidation))))",
-    ).execute()
+    # gspread tidak menyediakan pembaca validasi, jadi dipakai fetch_sheet_metadata
+    # milik objek spreadsheet. main._sheets() mengembalikan client gspread, BUKAN
+    # resource googleapiclient, sehingga client.spreadsheets() tidak ada.
+    grid = _coba_ulang(sh.fetch_sheet_metadata, params={
+        "ranges": ["TRANSAKSI!E2"],
+        "includeGridData": True,
+        "fields": "sheets(data(rowData(values(dataValidation))))",
+    })
     dv, kondisi, rentang = None, {}, ""
     try:
         dv = (grid["sheets"][0]["data"][0]["rowData"][0]["values"][0]
