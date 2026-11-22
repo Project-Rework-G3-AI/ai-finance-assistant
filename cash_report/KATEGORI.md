@@ -187,8 +187,9 @@ Kelompok itu dipakai untuk menentukan **di mana sebuah kategori ditampung**:
 | `PENGELUARAN_TAMBAHAN` | SETUP kolom `KATEGORI PENGELUARAN` | ya, sebagai beban |
 | penanda `Perlu Ditinjau` | SETUP kolom `KATEGORI LAIN` | tidak |
 
-Sheet `SETUP` memakai **lima kolom**: `KANTONG`, `KATEGORI PENDAPATAN`,
-`KATEGORI NERACA`, `KATEGORI PENGELUARAN`, `KATEGORI LAIN`. Kolom neraca
+Sheet `SETUP` memakai **enam kolom**: `KANTONG`, `KATEGORI PENDAPATAN`,
+`KATEGORI NERACA`, `KATEGORI PENGELUARAN`, `KATEGORI LAIN`, dan
+`DAFTAR DROPDOWN KATEGORI`. Kolom neraca
 dipisah karena `Persediaan`, `Aset Tetap`, dan `Utang/Piutang` bukan beban,
 sehingga tidak boleh muncul di EXPENSE DETAIL maupun INCOME STATEMENT.
 
@@ -196,6 +197,29 @@ sehingga tidak boleh muncul di EXPENSE DETAIL maupun INCOME STATEMENT.
 Bank` masuk kolom pendapatan sekaligus pengeluaran, sehingga admin melihatnya
 dua kali di dropdown dengan makna berbeda. Sekarang ia hanya ada di
 `KATEGORI LAIN`, bersama penanda `Perlu Ditinjau`.
+
+### Dropdown kolom Kategori di TRANSAKSI
+
+Kolom `E` di sheet `TRANSAKSI` diberi validasi data oleh `build_template.py`,
+jadi admin memilih dari daftar, bukan mengetik bebas. Sumbernya kolom
+`DAFTAR DROPDOWN KATEGORI` di `SETUP`, bukan daftar inline:
+
+| | |
+|---|---|
+| Jenis validasi | `ONE_OF_RANGE` ke `SETUP!$F$4:$F$34` |
+| Jangkauan | `E2:E5000` |
+| `strict` | `false` |
+
+Alasan memakai rentang, bukan daftar inline:
+
+- Daftar inline dibatasi sekitar **256 karakter**, sedangkan 31 kategori
+  sudah **614 karakter**. Daftar inline tidak muat.
+- Rentang membuat perubahan daftar di `SETUP` langsung berlaku tanpa
+  menyentuh validasinya.
+
+Alasan `strict: false`: file yang sudah ada bisa memuat nilai di luar daftar,
+misalnya hasil pemetaan lama. Dengan `strict: true`, nilai itu memicu tanda
+galat saat file dibuka, padahal datanya sah dan hanya perlu dirapikan.
 
 `Transfer Antar Bank` tetap muncul sebagai pilihan, tetapi SUMIFS di RECAP,
 YEARLY, EXPENSE DETAIL, dan INCOME STATEMENT semuanya mengecualikannya dengan
@@ -246,4 +270,5 @@ tercatat, hanya ditandai supaya bisa diperiksa manusia.
    Tes pertama membandingkan daftar dengan file Excel asli; tes kedua memeriksa
    template Google Sheets yang sudah dibangun.
 4. Template Google Sheets yang sudah ada perlu dibangun ulang
-   (`build_template.py`) karena isi sheet SETUP adalah nilai statis.
+   (`build_template.py`) karena isi sheet SETUP dan validasi kolom Kategori
+   adalah nilai statis yang ditulis saat build, bukan formula.

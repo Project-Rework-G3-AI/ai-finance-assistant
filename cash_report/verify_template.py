@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import main  # noqa: E402
+from cash_report import build_template as BT  # noqa: E402
 from cash_report import categories as KAT  # noqa: E402
 
 # Posisi baris EXPENSE DETAIL dihitung dari daftar kategori, bukan angka mati,
@@ -89,6 +90,40 @@ def main_verify() -> int:
     hilang_setup = [k for k in KAT.KATEGORI if k not in isi_setup]
     cek("SETUP memuat semua kategori", not hilang_setup,
         f"hilang: {hilang_setup}")
+
+    # Sumber dropdown di SETUP harus memuat seluruh kategori, berurutan, tanpa
+    # sel kosong. Sel kosong di tengah rentang muncul sebagai pilihan kosong.
+    awal = BT.BARIS_AWAL_DROPDOWN
+    akhir = awal + len(BT.KAT_DROPDOWN) - 1
+    kol = BT._col_letter(BT.KOL_DROPDOWN)
+    isi_dropdown = [setup.cell(r, BT.KOL_DROPDOWN + 1).value
+                    for r in range(awal, akhir + 1)]
+    cek("SETUP sumber dropdown lengkap",
+        isi_dropdown == list(KAT.KATEGORI),
+        f"dapat {sum(1 for x in isi_dropdown if x)} dari {len(KAT.KATEGORI)}")
+
+    # Kolom Kategori di TRANSAKSI harus punya validasi yang menunjuk rentang itu.
+    # gspread tidak menyediakannya, jadi dibaca lewat Sheets API langsung.
+    grid = main._sheets().spreadsheets().get(
+        spreadsheetId=sid,
+        ranges=["TRANSAKSI!E2"],
+        includeGridData=True,
+        fields="sheets(data(rowData(values(dataValidation))))",
+    ).execute()
+    dv, kondisi, rentang = None, {}, ""
+    try:
+        dv = (grid["sheets"][0]["data"][0]["rowData"][0]["values"][0]
+              ["dataValidation"])
+        kondisi = dv.get("condition", {})
+        rentang = (kondisi.get("values") or [{}])[0].get("userEnteredValue", "")
+    except (KeyError, IndexError):
+        pass
+    cek("TRANSAKSI kolom E punya dropdown",
+        dv is not None and kondisi.get("type") == "ONE_OF_RANGE",
+        f"dapat: {dv}")
+    cek("dropdown menunjuk daftar di SETUP",
+        f"SETUP!${kol}" in str(rentang),
+        f"dapat: {rentang}")
 
     recap = sh.worksheet("RECAP OVERVIEW")
     cek("RECAP B3 formula DATE", str(fcell(recap, 3, 2)).startswith("=DATE("),

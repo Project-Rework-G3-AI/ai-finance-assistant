@@ -185,3 +185,46 @@ def test_setup_memuat_setiap_kategori_tepat_sekali():
 
     asing = sorted(set(semua) - set(C.KATEGORI))
     assert not asing, f"SETUP memuat kategori di luar KATEGORI: {asing}"
+
+
+def test_dropdown_transaksi_merujuk_daftar_lengkap():
+    """Dropdown kolom Kategori harus memuat ke-31 kategori, tanpa sel kosong.
+
+    Dropdown-nya memakai ONE_OF_RANGE ke SETUP, bukan daftar inline: 31
+    kategori sudah 614 karakter, sedangkan batas daftar inline sekitar 256.
+    """
+    from cash_report import build_template as BT
+
+    assert BT.KAT_DROPDOWN == list(C.KATEGORI), (
+        "daftar dropdown tidak sama dengan KATEGORI")
+    assert all(isinstance(k, str) and k.strip() for k in BT.KAT_DROPDOWN), (
+        "ada entri kosong di daftar dropdown; sel kosong muncul sebagai pilihan")
+
+    # Kolom sumber harus DI LUAR kolom B-E yang berkelompok: kolom itu
+    # panjangnya tidak sama, sehingga sel kosongnya jadi pilihan kosong.
+    # Batas ini ditulis sebagai angka, bukan diturunkan dari KOL_DROPDOWN,
+    # supaya tes tidak ikut berubah ketika konstantanya salah diubah.
+    assert BT.KOL_DROPDOWN >= 5, (
+        f"kolom sumber dropdown ({BT._col_letter(BT.KOL_DROPDOWN)}) menabrak "
+        "kolom B-E yang berkelompok dan berisi sel kosong")
+    assert BT.BARIS_AWAL_DROPDOWN > 3, (
+        f"baris awal dropdown ({BT.BARIS_AWAL_DROPDOWN}) menabrak header baris 3")
+
+    req = BT._validasi_dropdown(1)["setDataValidation"]
+    rentang = req["rule"]["condition"]["values"][0]["userEnteredValue"]
+    kol = BT._col_letter(BT.KOL_DROPDOWN)
+    awal = BT.BARIS_AWAL_DROPDOWN
+    akhir = awal + len(BT.KAT_DROPDOWN) - 1
+    assert rentang == f"=SETUP!${kol}${awal}:${kol}${akhir}", (
+        f"rentang dropdown salah: {rentang}")
+
+    # Kolom Kategori = E (indeks 4), mulai baris 2.
+    assert req["range"]["startColumnIndex"] == 4
+    assert req["range"]["startRowIndex"] == 1
+
+
+def test_dropdown_tidak_memblokir_nilai_lama():
+    """strict=False: file lama yang memuat nilai di luar daftar tidak jadi galat."""
+    from cash_report import build_template as BT
+
+    assert BT._validasi_dropdown(1)["setDataValidation"]["rule"]["strict"] is False

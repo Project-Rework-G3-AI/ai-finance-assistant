@@ -45,6 +45,16 @@ KAT_EXPENSE = KAT.PENGELUARAN_SOP + KAT.PENGELUARAN_TAMBAHAN
 # neraca. Tetap butuh tempat agar baris TRANSAKSI bisa memakainya.
 KAT_LAIN = list(KAT.PERPINDAHAN) + [KAT.PERLU_DITINJAU]
 
+# Sumber dropdown kolom Kategori di TRANSAKSI: satu kolom berisi SELURUH
+# kategori secara berurutan tanpa sel kosong. Kolom B-E di SETUP sengaja
+# berkelompok dan panjangnya tidak sama, sehingga tidak bisa dipakai langsung
+# sebagai rujukan validasi: sel kosong di tengahnya akan muncul sebagai pilihan
+# kosong di dropdown.
+KAT_DROPDOWN = list(KAT.KATEGORI)
+KOL_DROPDOWN = 5          # indeks 0-based: kolom F di SETUP
+BARIS_AWAL_DROPDOWN = 4   # baris 4, tepat di bawah header baris 3
+BARIS_VALIDASI = 5000     # sejauh mana kolom TRANSAKSI diberi dropdown
+
 # Kategori neraca: bukan pendapatan dan bukan beban, jadi tidak masuk RECAP
 # maupun laba rugi. Tetap ditampung di SETUP agar cocok dengan daftar model.
 # Saldo Awal ikut di sini: bukan transaksi, tetapi diisi admin sebagai baris
@@ -112,7 +122,7 @@ def build() -> str:
     # formula sesuai locale, dan formula di sini memakai koma.
     _force_locale(sh)
 
-    sh.add_worksheet(title="SETUP", rows=60, cols=10)
+    sh.add_worksheet(title="SETUP", rows=60, cols=10)  # 6 kolom terpakai
     sh.del_worksheet(sh.sheet1)  # sheet default "Sheet1"
     for name in SHEETS[1:]:
         sh.add_worksheet(title=name, rows=200, cols=20)
@@ -136,6 +146,42 @@ def build() -> str:
 
 # ---------- isi sheet ----------
 
+def _col_letter(idx: int) -> str:
+    """Indeks kolom 0-based -> huruf kolom (0 -> A, 5 -> F)."""
+    return chr(ord("A") + idx) if idx < 26 else f"A{chr(ord('A') + idx - 26)}"
+
+
+def _validasi_dropdown(sheet_id: int) -> dict:
+    """Request setDataValidation untuk kolom Kategori di TRANSAKSI.
+
+    Nilai dropdown diambil dari rentang SETUP, bukan ditulis sebagai daftar
+    inline: batas panjang daftar inline sekitar 256 karakter, sedangkan 31
+    kategori sudah lebih panjang. Rentang juga membuat perubahan daftar di
+    SETUP langsung berlaku tanpa menyentuh validasinya.
+    """
+    return {"setDataValidation": {
+        "range": {
+            "sheetId": sheet_id,
+            "startRowIndex": 1,              # baris 2 (baris 1 = header)
+            "endRowIndex": BARIS_VALIDASI,
+            "startColumnIndex": 4,           # kolom E (indeks 0-based)
+            "endColumnIndex": 5,
+        },
+        "rule": {
+            "condition": {
+                "type": "ONE_OF_RANGE",
+                "values": [{"userEnteredValue": "=SETUP!${kol}${awal}:${kol}${akhir}".format(
+                    kol=_col_letter(KOL_DROPDOWN),
+                    awal=BARIS_AWAL_DROPDOWN,
+                    akhir=BARIS_AWAL_DROPDOWN + len(KAT_DROPDOWN) - 1,
+                )}],
+            },
+            "strict": False,   # nilai lama di luar daftar tidak dianggap galat
+            "showCustomUi": True,
+        },
+    }}
+
+
 def _setup(ws) -> None:
     put(ws, "A1", [["⚙️ SETUP — daftar kantong & kategori (edit sesuai kebutuhan)"]])
     # Lima kolom: kantong, pendapatan, neraca, pengeluaran, dan kategori lain.
@@ -156,6 +202,15 @@ def _setup(ws) -> None:
             KAT_LAIN[i] if i < len(KAT_LAIN) else "",
         ])
     put(ws, "A3", rows)
+
+    # Kolom F: satu daftar tunggal untuk dropdown TRANSAKSI. Dipisah dari lima
+    # kolom di atas karena dropdown butuh rentang tanpa sel kosong; kolom B-E
+    # panjangnya tidak sama, sehingga sel kosongnya akan muncul sebagai pilihan
+    # kosong bila dipakai langsung sebagai rujukan validasi.
+    kolom_dropdown = [["DAFTAR DROPDOWN KATEGORI"]]
+    kolom_dropdown += [[k] for k in KAT_DROPDOWN]
+    put(ws, f"{_col_letter(KOL_DROPDOWN)}3", kolom_dropdown)
+
     # Catatan diletakkan setelah tabel, bukan di baris mati, supaya tidak
     # tertimpa ketika daftar kategori bertambah.
     catatan_row = 3 + len(rows) + 1
@@ -338,6 +393,8 @@ def _format(sh, sheets: dict) -> None:
         req("INCOME STATEMENT", 11, 12, 0, 14, bold, "userEnteredFormat.textFormat.bold"),  # LABA BERSIH
         req("INCOME STATEMENT", 6, 7, 0, 1, bold, "userEnteredFormat.textFormat.bold"),      # LABA KOTOR
         req("INCOME STATEMENT", 8, 9, 0, 1, bold, "userEnteredFormat.textFormat.bold"),      # LABA SEBELUM PAJAK
+        # Dropdown kolom Kategori di TRANSAKSI, sumbernya daftar di SETUP.
+        _validasi_dropdown(sheets["TRANSAKSI"].id),
     ]
     widths = [100, 90, 110, 110, 200, 260, 80, 240, 150, 170, 200]
     for i, w in enumerate(widths):
