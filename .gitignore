@@ -12,3 +12,7 @@ __pycache__/
 sc01-out/
 hasil_per_baris.csv
 metrik.json
+
+# Dataset lokal untuk evaluasi SC-01 (gambar bukti + daftar pasangan).
+# Berisi transaksi perusahaan; sumber aslinya ada di repo dataset privat.
+dataset/

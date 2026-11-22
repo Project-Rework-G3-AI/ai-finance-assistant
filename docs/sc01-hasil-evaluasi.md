@@ -9,25 +9,29 @@ berkas pendukungnya disertakan agar hasil bisa diperiksa ulang.
 
 ## Ringkasan
 
-| Metrik | Run 1 | Run 2 |
-|---|---|---|
-| Total pasangan diuji | 65 | 65 |
-| Benar | 10 | 9 |
-| **Akurasi** | **15,4%** | **13,8%** |
-| Baseline kelas mayoritas | 75,4% | 75,4% |
-| **Lift atas baseline** | **−60,0%** | **−61,5%** |
-| Macro-average recall | 52,9% | 52,4% |
-| Target BRD | 85% | 85% |
-| Status | **Belum tercapai** | **Belum tercapai** |
+| Metrik | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| Total pasangan diuji | 65 | 65 | 65 |
+| Benar | 10 | 9 | 8 |
+| **Akurasi** | **15,4%** | **13,8%** | **12,3%** |
+| Baseline kelas mayoritas | 75,4% | 75,4% | 75,4% |
+| **Lift atas baseline** | **−60,0%** | **−61,5%** | **−63,1%** |
+| Macro-average recall | 52,9% | 52,4% | 42,4% |
+| Target BRD | 85% | 85% | 85% |
+| Status | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** |
 
-Dua eksekusi pada data yang sama memberi hasil sedikit berbeda: 21 dari 65
-jawaban berubah meski kode sudah mengirim `temperature: 0`. Karena itu angka di
-sini dibaca sebagai besaran, bukan angka pasti. Yang penting: pada kedua run,
-akurasi berada jauh di bawah baseline dan jauh dari target.
+Tiga eksekusi pada data yang sama memberi hasil berbeda: akurasi bergerak antara
+**12,3% dan 15,4%**, rentang 3,1 poin persen. Kode sudah mengirim
+`temperature: 0`, tetapi model penalaran lewat API pihak ketiga tidak menjamin
+determinisme penuh, dan tidak ada parameter `seed`.
 
-Akurasi belasan persen berada di bawah baseline 75,4%. Artinya model bukan hanya
-belum mencapai target, tetapi lebih buruk daripada menjawab `Transfer Antar Bank`
-untuk setiap gambar tanpa melihat isinya.
+Karena itu angka di sini dibaca sebagai besaran, bukan angka pasti. Yang penting
+dan stabil di ketiga run: akurasi berada jauh di bawah baseline 75,4% dan jauh
+dari target 85%.
+
+Akurasi belasan persen berada di bawah baseline. Artinya model bukan hanya belum
+mencapai target, tetapi lebih buruk daripada menjawab `Transfer Antar Bank` untuk
+setiap gambar tanpa melihat isinya.
 
 ## Cara pengukuran
 
@@ -35,7 +39,7 @@ Langkah menjalankan evaluasi ini di komputer lokal ada di
 [`sc01-cara-menjalankan.md`](sc01-cara-menjalankan.md). Ringkasnya:
 
 ```bash
-python3 tests/sc01_harness.py --siapkan   # unduh 65 gambar (sekali)
+python3 tests/sc01_harness.py --download   # unduh 65 gambar (sekali)
 python3 tests/sc01_harness.py             # jalankan evaluasi
 ```
 
@@ -58,11 +62,11 @@ publik dan datanya berisi transaksi perusahaan.
 
 | Berkas | Lokasi |
 |---|---|
-| Daftar 65 pasangan | `sc01/set_uji_1to1.csv` di repo privat `NafisHandoko/ReworkAcademy` |
+| Daftar 65 pasangan | `sc01/sc01_pairs.csv` di repo privat `NafisHandoko/ReworkAcademy` |
 | 118 gambar bukti | `Bukti Transaksi Januari 2026/` di repo yang sama |
 | Harness dan test | `tests/sc01_*.py` di repo ini |
 
-`--siapkan` mengunduh gambar dari repo privat memakai `GITHUB_TOKEN`. Setelah
+`--download` mengunduh gambar dari repo privat memakai `GITHUB_TOKEN`. Setelah
 ada di disk, evaluasi berjalan lokal sepenuhnya.
 
 ## Mengapa 65, bukan 132

@@ -14,8 +14,8 @@ perusahaan tidak tersentuh dan hasil bisa diulang.
 Persiapan sekali saja (lihat README):
 
     cp .env.example .env
-    # isi AI_API_KEY, SC01_SET_UJI, SC01_IMG_DIR, GITHUB_TOKEN
-    python3 tests/sc01_harness.py --siapkan     # unduh 65 gambar
+    # isi AI_API_KEY, SC01_PAIRS, SC01_IMAGES, GITHUB_TOKEN
+    python3 tests/sc01_harness.py --download     # unduh 65 gambar
 
 Menjalankan:
 

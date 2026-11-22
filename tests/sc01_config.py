@@ -6,9 +6,9 @@ tetap menang, berguna untuk CI atau saat ingin menimpa sementara.
 
 Kunci yang dikenali:
 
-    SC01_SET_UJI      daftar pasangan gambar -> baris (CSV)
-    SC01_IMG_DIR      folder gambar bukti transaksi
-    GITHUB_TOKEN      dipakai hanya oleh `--siapkan` untuk mengunduh gambar
+    SC01_PAIRS      daftar pasangan gambar -> baris (CSV)
+    SC01_IMAGES      folder gambar bukti transaksi
+    GITHUB_TOKEN      dipakai hanya oleh `--download` untuk mengunduh gambar
                       dari repo dataset privat
     GITHUB_DATASET_REPO   default: NafisHandoko/ReworkAcademy
     GITHUB_DATASET_DIR    folder dataset di dalam repo tersebut
@@ -29,8 +29,8 @@ DIR_DATASET = os.getenv(
     "GITHUB_DATASET_DIR",
     "final_project/Dataset PT Lokal Komoditi Indonesia",
 ).strip()
-SUB_DIR_GAMBAR = "Bukti Transaksi Januari 2026"
-SUB_DIR_SET_UJI = "sc01/set_uji_1to1.csv"
+SUB_DIR_IMAGES = "Bukti Transaksi Januari 2026"
+SUB_DIR_PAIRS = "sc01/sc01_pairs.csv"
 
 
 def muat_env() -> None:
@@ -49,13 +49,13 @@ def _path(nilai: str) -> Path:
 
 def set_uji() -> Path | None:
     """Lokasi CSV daftar pasangan, atau None bila belum diatur."""
-    nilai = os.getenv("SC01_SET_UJI", "").strip()
+    nilai = os.getenv("SC01_PAIRS", "").strip()
     return _path(nilai) if nilai else None
 
 
 def img_dir() -> Path | None:
     """Folder gambar bukti transaksi, atau None bila belum diatur."""
-    nilai = os.getenv("SC01_IMG_DIR", "").strip()
+    nilai = os.getenv("SC01_IMAGES", "").strip()
     return _path(nilai) if nilai else None
 
 
@@ -67,15 +67,15 @@ def siap(abaikan_ai: bool = False) -> tuple[bool, str]:
     """
     su = set_uji()
     if su is None:
-        return False, "SC01_SET_UJI belum diisi di .env"
+        return False, "SC01_PAIRS belum diisi di .env"
     if not su.is_file():
-        return False, f"SC01_SET_UJI menunjuk file yang tidak ada: {su}"
+        return False, f"SC01_PAIRS menunjuk file yang tidak ada: {su}"
 
     folder = img_dir()
     if folder is None:
-        return False, "SC01_IMG_DIR belum diisi di .env"
+        return False, "SC01_IMAGES belum diisi di .env"
     if not folder.is_dir():
-        return False, f"SC01_IMG_DIR bukan folder: {folder}"
+        return False, f"SC01_IMAGES bukan folder: {folder}"
 
     if not abaikan_ai and not os.getenv("AI_API_KEY", "").strip():
         return False, "AI_API_KEY kosong; SC-01 mengukur model asli, bukan mock"
@@ -89,7 +89,7 @@ def siap(abaikan_ai: bool = False) -> tuple[bool, str]:
               if not (folder / r["file"].strip()).is_file()]
     if hilang:
         return False, (f"{len(hilang)} dari {len(baris)} gambar tidak ada di {folder}. "
-                       f"Jalankan: python3 tests/sc01_harness.py --siapkan")
+                       f"Jalankan: python3 tests/sc01_harness.py --download")
     return True, f"{len(baris)} pasangan siap diuji"
 
 
@@ -116,7 +116,7 @@ def unduh_gambar(tujuan: Path, token: str | None = None,
 
     su = set_uji()
     if su is None:
-        raise SystemExit("SC01_SET_UJI belum diisi; tidak tahu gambar mana yang perlu diunduh")
+        raise SystemExit("SC01_PAIRS belum diisi; tidak tahu gambar mana yang perlu diunduh")
 
     perlu = berkas or [r["file"].strip() for r in baca_pasangan(su)]
     tujuan.mkdir(parents=True, exist_ok=True)
@@ -127,7 +127,7 @@ def unduh_gambar(tujuan: Path, token: str | None = None,
         if dst.is_file() and dst.stat().st_size > 1000:
             lewat += 1
             continue
-        jalur = f"{DIR_DATASET}/{SUB_DIR_GAMBAR}/{nama}"
+        jalur = f"{DIR_DATASET}/{SUB_DIR_IMAGES}/{nama}"
         url = (f"https://api.github.com/repos/{REPO_DATASET}/contents/"
                f"{urllib.parse.quote(jalur)}")
         req = urllib.request.Request(url)

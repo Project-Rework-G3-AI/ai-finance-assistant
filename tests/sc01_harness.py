@@ -13,15 +13,15 @@ terlanjur ditulis.
 Pemakaian:
 
     # 1. unduh gambar dataset (sekali saja, butuh GITHUB_TOKEN)
-    python3 tests/sc01_harness.py --siapkan
+    python3 tests/sc01_harness.py --download
 
     # 2. jalankan evaluasi (butuh AI_API_KEY)
     python3 tests/sc01_harness.py
 
     # 3. hitung ulang metrik dari CSV yang sudah ada (tanpa memanggil AI)
-    python3 tests/sc01_harness.py --hitung-saja
+    python3 tests/sc01_harness.py --metrics-only
 
-Lokasi dataset diatur di `.env` lewat SC01_SET_UJI dan SC01_IMG_DIR.
+Lokasi dataset diatur di `.env` lewat SC01_PAIRS dan SC01_IMAGES.
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ def baca_hasil(path: Path) -> dict[str, dict]:
 
 async def jalankan(pasangan: list[dict], img_dir: Path, out: Path,
                    ulang: bool = False) -> list[dict]:
-    import main  # diimpor di dalam agar `--siapkan` tidak butuh AI_API_KEY
+    import main  # diimpor di dalam agar `--download` tidak butuh AI_API_KEY
 
     sudah = {} if ulang else baca_hasil(out)
     hasil = list(sudah.values())
@@ -197,28 +197,28 @@ def tulis_laporan(hasil: list[dict], out: Path) -> dict:
 def main_cli() -> int:
     ap = argparse.ArgumentParser(
         description="Runner evaluasi SC-01 (akurasi kategori)")
-    ap.add_argument("--siapkan", action="store_true",
+    ap.add_argument("--download", action="store_true",
                     help="unduh gambar dataset dari repo privat, lalu berhenti")
-    ap.add_argument("--set-uji", default="", help="timpa SC01_SET_UJI")
-    ap.add_argument("--img-dir", default="", help="timpa SC01_IMG_DIR")
+    ap.add_argument("--pairs", default="", help="timpa SC01_PAIRS")
+    ap.add_argument("--images", default="", help="timpa SC01_IMAGES")
     ap.add_argument("--out", default="sc01-out", help="folder keluaran (default: sc01-out)")
-    ap.add_argument("--ulang", action="store_true", help="abaikan hasil lama, proses dari awal")
-    ap.add_argument("--ulangi", type=int, default=1, metavar="N",
+    ap.add_argument("--restart", action="store_true", help="abaikan hasil lama, proses dari awal")
+    ap.add_argument("--repeat", type=int, default=1, metavar="N",
                     help="jalankan N kali lalu laporkan rentang akurasi (untuk mengukur kestabilan)")
-    ap.add_argument("--hitung-saja", action="store_true", help="hitung metrik tanpa memanggil AI")
+    ap.add_argument("--metrics-only", action="store_true", help="hitung metrik tanpa memanggil AI")
     a = ap.parse_args()
 
     # Argumen CLI menang atas .env, supaya bisa dipakai tanpa menyunting file.
-    if a.set_uji:
-        os.environ["SC01_SET_UJI"] = a.set_uji
-    if a.img_dir:
-        os.environ["SC01_IMG_DIR"] = a.img_dir
+    if a.pairs:
+        os.environ["SC01_PAIRS"] = a.pairs
+    if a.images:
+        os.environ["SC01_IMAGES"] = a.images
 
-    if a.siapkan:
+    if a.download:
         folder = cfg.img_dir()
         if folder is None:
-            raise SystemExit("SC01_IMG_DIR belum diisi. Contoh:\n"
-                             "  --img-dir ./dataset/Bukti\\ Transaksi\\ Januari\\ 2026")
+            raise SystemExit("SC01_IMAGES belum diisi. Contoh:\n"
+                             "  --images ./dataset/Bukti\\ Transaksi\\ Januari\\ 2026")
         print(f"mengunduh gambar ke: {folder}")
         baru, lewat = cfg.unduh_gambar(folder)
         print(f"selesai: {baru} diunduh, {lewat} sudah ada")
@@ -231,7 +231,7 @@ def main_cli() -> int:
         out = AKAR / out
     out.mkdir(parents=True, exist_ok=True)
 
-    if a.hitung_saja:
+    if a.metrics_only:
         hasil = list(baca_hasil(out / "hasil_per_baris.csv").values())
         if not hasil:
             raise SystemExit(f"tidak ada hasil di {out / 'hasil_per_baris.csv'}")
@@ -246,12 +246,12 @@ def main_cli() -> int:
     pasangan = cfg.baca_pasangan(cfg.set_uji())
     print(f"pasangan: {len(pasangan)}")
 
-    if a.ulangi > 1:
+    if a.repeat > 1:
         # Dijalankan berulang untuk melihat sebaran angka. Model tidak menjamin
         # hasil identik antar-run, jadi satu angka saja bisa menyesatkan.
         semua = []
-        for n in range(1, a.ulangi + 1):
-            print(f"\n===== run {n} dari {a.ulangi} =====")
+        for n in range(1, a.repeat + 1):
+            print(f"\n===== run {n} dari {a.repeat} =====")
             sub = out / f"run-{n}"
             sub.mkdir(parents=True, exist_ok=True)
             hasil_n = asyncio.run(jalankan(pasangan, cfg.img_dir(),
@@ -261,7 +261,7 @@ def main_cli() -> int:
             print(r["teks"])
         akurasi = [h.akurasi for h in semua]
         baris = [
-            f"SC-01 — sebaran {a.ulangi} run", "=" * 60,
+            f"SC-01 — sebaran {a.repeat} run", "=" * 60,
             f"akurasi terendah : {min(akurasi):.1%}",
             f"akurasi tertinggi: {max(akurasi):.1%}",
             f"rata-rata        : {sum(akurasi)/len(akurasi):.1%}",
@@ -274,7 +274,7 @@ def main_cli() -> int:
         return 0
 
     hasil = asyncio.run(jalankan(pasangan, cfg.img_dir(),
-                                 out / "hasil_per_baris.csv", a.ulang))
+                                 out / "hasil_per_baris.csv", a.restart))
     r = tulis_laporan(hasil, out)
     print("\n" + r["teks"])
     return 0

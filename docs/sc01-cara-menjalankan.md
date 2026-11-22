@@ -15,7 +15,7 @@ pip install -r requirements.txt
 
 cp .env.example .env               # lalu isi 4 nilai (lihat bawah)
 
-python3 tests/sc01_harness.py --siapkan    # unduh 65 gambar
+python3 tests/sc01_harness.py --download    # unduh 65 gambar
 python3 tests/sc01_harness.py              # jalankan evaluasi
 ```
 
@@ -30,10 +30,10 @@ bersifat publik, sedangkan bukti transaksi berisi data keuangan perusahaan.
 | Berkas | Lokasi | Repo |
 |---|---|---|
 | 118 gambar bukti transaksi | `final_project/Dataset PT Lokal Komoditi Indonesia/Bukti Transaksi Januari 2026/` | `NafisHandoko/ReworkAcademy` (**privat**) |
-| Daftar 65 pasangan | `final_project/Dataset PT Lokal Komoditi Indonesia/sc01/set_uji_1to1.csv` | `NafisHandoko/ReworkAcademy` (**privat**) |
+| Daftar 65 pasangan | `final_project/Dataset PT Lokal Komoditi Indonesia/sc01/sc01_pairs.csv` | `NafisHandoko/ReworkAcademy` (**privat**) |
 | Harness dan test | `tests/sc01_*.py` | `ai-finance-assistant` (publik) |
 
-Karena itu langkah `--siapkan` mengunduh gambar dari repo privat memakai
+Karena itu langkah `--download` mengunduh gambar dari repo privat memakai
 `GITHUB_TOKEN`. Setelah gambar ada di disk, evaluasi berjalan sepenuhnya lokal
 dan tidak lagi menyentuh GitHub.
 
@@ -58,23 +58,23 @@ AI_API_KEY=sk-or-v1-...              # kunci OpenRouter
 AI_BASE_URL=https://openrouter.ai/api/v1
 AI_MODEL=deepseek/deepseek-v4.1-flash-1017
 
-SC01_SET_UJI=dataset/sc01/set_uji_1to1.csv
-SC01_IMG_DIR=dataset/Bukti Transaksi Januari 2026
+SC01_PAIRS=dataset/sc01/sc01_pairs.csv
+SC01_IMAGES=dataset/Bukti Transaksi Januari 2026
 
-GITHUB_TOKEN=ghp_...                 # hanya untuk --siapkan
+GITHUB_TOKEN=ghp_...                 # hanya untuk --download
 ```
 
-`SC01_SET_UJI` adalah daftar pasangan; unduh sekali dari repo privat:
+`SC01_PAIRS` adalah daftar pasangan; unduh sekali dari repo privat:
 
 ```bash
 mkdir -p dataset/sc01
 curl -L -H "Authorization: Bearer $GITHUB_TOKEN" \
-  "https://api.github.com/repos/NafisHandoko/ReworkAcademy/contents/final_project/Dataset%20PT%20Lokal%20Komoditi%20Indonesia/sc01/set_uji_1to1.csv" \
+  "https://api.github.com/repos/NafisHandoko/ReworkAcademy/contents/final_project/Dataset%20PT%20Lokal%20Komoditi%20Indonesia/sc01/sc01_pairs.csv" \
   -H "Accept: application/vnd.github.raw" \
-  -o dataset/sc01/set_uji_1to1.csv
+  -o dataset/sc01/sc01_pairs.csv
 ```
 
-`SC01_IMG_DIR` boleh di mana saja. Bila dibiarkan kosong, `--siapkan` akan
+`SC01_IMAGES` boleh di mana saja. Bila dibiarkan kosong, `--download` akan
 meminta diisi lebih dulu.
 
 ## Tiga cara menjalankan
@@ -101,14 +101,14 @@ sama — yang sudah selesai tidak diulang.
 Untuk sekadar menghitung ulang dari hasil yang sudah ada, tanpa biaya:
 
 ```bash
-python3 tests/sc01_harness.py --hitung-saja
+python3 tests/sc01_harness.py --metrics-only
 ```
 
 Karena hasil antar-run bisa berbeda, untuk angka yang lebih dapat dipercaya
 jalankan beberapa kali lalu lihat sebarannya:
 
 ```bash
-python3 tests/sc01_harness.py --ulangi 3
+python3 tests/sc01_harness.py --repeat 3
 ```
 
 Setiap run disimpan di `sc01-out/run-N/`, dan ringkasan rentangnya di
@@ -137,8 +137,8 @@ Folder `sc01-out/` masuk `.gitignore` karena berisi data transaksi.
 
 | Gejala | Sebab dan solusi |
 |---|---|
-| `SC01_SET_UJI belum diisi di .env` | Isi variabelnya, atau pakai `--set-uji` |
-| `N dari 65 gambar tidak ada` | Jalankan `--siapkan`, atau periksa `SC01_IMG_DIR` |
+| `SC01_PAIRS belum diisi di .env` | Isi variabelnya, atau pakai `--pairs` |
+| `N dari 65 gambar tidak ada` | Jalankan `--download`, atau periksa `SC01_IMAGES` |
 | `GITHUB_TOKEN kosong` | Tambahkan token dengan akses baca ke `NafisHandoko/ReworkAcademy` |
 | `AI_API_KEY kosong` | Isi kunci; SC-01 mengukur model asli, bukan mock |
 | `mode=mock` pada hasil | Panggilan AI gagal, lihat kolom `catatan` di CSV |
@@ -147,15 +147,18 @@ Folder `sc01-out/` masuk `.gitignore` karena berisi data transaksi.
 ## Catatan tentang kestabilan angka
 
 Kode sudah mengirim `temperature: 0` pada payload `_vision_extract()`, tetapi
-hasilnya tetap tidak sepenuhnya dapat diulang. Dua eksekusi berturut-turut pada
-65 gambar yang sama menghasilkan jawaban berbeda pada **21 baris**, sehingga
-akurasi bergeser dari 15,4% ke 13,8%.
+hasilnya tidak sepenuhnya dapat diulang. Tiga eksekusi berturut-turut pada 65
+gambar yang sama memberi akurasi 15,4%, 13,8%, dan 12,3% — rentang 3,1 poin
+persen, dengan 21 dari 65 jawaban berubah antara run pertama dan kedua.
 
 Penyebab yang paling mungkin adalah model penalaran (`deepseek-v4.1-flash-1017`)
 yang tidak menjamin determinisme penuh lewat API pihak ketiga, ditambah tidak
 adanya parameter `seed`. Artinya angka SC-01 sebaiknya dibaca sebagai besaran,
-bukan angka pasti: selisih sekitar dua poin persen antar-run wajar, sedangkan
+bukan angka pasti: selisih sekitar tiga poin persen antar-run wajar, sedangkan
 selisih belasan poin menunjukkan perubahan yang nyata.
 
-Bila butuh angka yang benar-benar dapat diulang, jalankan beberapa kali lalu
-laporkan rentangnya, atau tetapkan `seed` bila penyedia model mendukung.
+Untuk angka yang lebih kuat, jalankan beberapa kali lalu laporkan rentangnya:
+
+```bash
+python3 tests/sc01_harness.py --repeat 3
+```
