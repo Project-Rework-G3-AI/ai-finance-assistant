@@ -104,6 +104,16 @@ Untuk sekadar menghitung ulang dari hasil yang sudah ada, tanpa biaya:
 python3 tests/sc01_harness.py --hitung-saja
 ```
 
+Karena hasil antar-run bisa berbeda, untuk angka yang lebih dapat dipercaya
+jalankan beberapa kali lalu lihat sebarannya:
+
+```bash
+python3 tests/sc01_harness.py --ulangi 3
+```
+
+Setiap run disimpan di `sc01-out/run-N/`, dan ringkasan rentangnya di
+`sc01-out/sebaran.txt`. Biaya dan waktu berlipat sesuai jumlah run.
+
 ### 3. Test model sebagai assertion (opsional)
 
 ```bash
@@ -136,10 +146,16 @@ Folder `sc01-out/` masuk `.gitignore` karena berisi data transaksi.
 
 ## Catatan tentang kestabilan angka
 
-Model tidak dijalankan dengan `temperature 0`, dan kode tidak mengirim
-parameter itu. Akibatnya hasil bisa berbeda sedikit antar-run. Angka pada
-`docs/sc01-hasil-evaluasi.md` berasal dari satu eksekusi tertentu dan sebaiknya
-dibaca sebagai besaran, bukan angka pasti.
+Kode sudah mengirim `temperature: 0` pada payload `_vision_extract()`, tetapi
+hasilnya tetap tidak sepenuhnya dapat diulang. Dua eksekusi berturut-turut pada
+65 gambar yang sama menghasilkan jawaban berbeda pada **21 baris**, sehingga
+akurasi bergeser dari 15,4% ke 13,8%.
 
-Bila butuh angka yang benar-benar dapat diulang, tambahkan `temperature: 0` pada
-payload di `_vision_extract()` lebih dulu, lalu ukur ulang.
+Penyebab yang paling mungkin adalah model penalaran (`deepseek-v4.1-flash-1017`)
+yang tidak menjamin determinisme penuh lewat API pihak ketiga, ditambah tidak
+adanya parameter `seed`. Artinya angka SC-01 sebaiknya dibaca sebagai besaran,
+bukan angka pasti: selisih sekitar dua poin persen antar-run wajar, sedangkan
+selisih belasan poin menunjukkan perubahan yang nyata.
+
+Bila butuh angka yang benar-benar dapat diulang, jalankan beberapa kali lalu
+laporkan rentangnya, atau tetapkan `seed` bila penyedia model mendukung.

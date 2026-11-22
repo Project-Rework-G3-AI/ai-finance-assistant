@@ -203,6 +203,8 @@ def main_cli() -> int:
     ap.add_argument("--img-dir", default="", help="timpa SC01_IMG_DIR")
     ap.add_argument("--out", default="sc01-out", help="folder keluaran (default: sc01-out)")
     ap.add_argument("--ulang", action="store_true", help="abaikan hasil lama, proses dari awal")
+    ap.add_argument("--ulangi", type=int, default=1, metavar="N",
+                    help="jalankan N kali lalu laporkan rentang akurasi (untuk mengukur kestabilan)")
     ap.add_argument("--hitung-saja", action="store_true", help="hitung metrik tanpa memanggil AI")
     a = ap.parse_args()
 
@@ -243,6 +245,34 @@ def main_cli() -> int:
 
     pasangan = cfg.baca_pasangan(cfg.set_uji())
     print(f"pasangan: {len(pasangan)}")
+
+    if a.ulangi > 1:
+        # Dijalankan berulang untuk melihat sebaran angka. Model tidak menjamin
+        # hasil identik antar-run, jadi satu angka saja bisa menyesatkan.
+        semua = []
+        for n in range(1, a.ulangi + 1):
+            print(f"\n===== run {n} dari {a.ulangi} =====")
+            sub = out / f"run-{n}"
+            sub.mkdir(parents=True, exist_ok=True)
+            hasil_n = asyncio.run(jalankan(pasangan, cfg.img_dir(),
+                                           sub / "hasil_per_baris.csv", True))
+            r = tulis_laporan(hasil_n, sub)
+            semua.append(r["hasil"])
+            print(r["teks"])
+        akurasi = [h.akurasi for h in semua]
+        baris = [
+            f"SC-01 — sebaran {a.ulangi} run", "=" * 60,
+            f"akurasi terendah : {min(akurasi):.1%}",
+            f"akurasi tertinggi: {max(akurasi):.1%}",
+            f"rata-rata        : {sum(akurasi)/len(akurasi):.1%}",
+            f"rentang          : {(max(akurasi)-min(akurasi))*100:.1f} poin persen",
+            f"baseline         : {semua[0].baseline:.1%} ({semua[0].baseline_label})",
+        ]
+        teks = "\n".join(baris)
+        (out / "sebaran.txt").write_text(teks, encoding="utf-8")
+        print("\n" + teks)
+        return 0
+
     hasil = asyncio.run(jalankan(pasangan, cfg.img_dir(),
                                  out / "hasil_per_baris.csv", a.ulang))
     r = tulis_laporan(hasil, out)

@@ -9,18 +9,23 @@ berkas pendukungnya disertakan agar hasil bisa diperiksa ulang.
 
 ## Ringkasan
 
-| Metrik | Nilai |
-|---|---|
-| Total pasangan diuji | 65 |
-| Benar | 10 |
-| **Akurasi** | **15,4%** |
-| Baseline kelas mayoritas | 75,4% (`Transfer Antar Bank`, 49 dari 65) |
-| **Lift atas baseline** | **−60,0%** |
-| Macro-average recall | 52,9% (5 kategori) |
-| Target BRD | 85% |
-| Status | **Belum tercapai** |
+| Metrik | Run 1 | Run 2 |
+|---|---|---|
+| Total pasangan diuji | 65 | 65 |
+| Benar | 10 | 9 |
+| **Akurasi** | **15,4%** | **13,8%** |
+| Baseline kelas mayoritas | 75,4% | 75,4% |
+| **Lift atas baseline** | **−60,0%** | **−61,5%** |
+| Macro-average recall | 52,9% | 52,4% |
+| Target BRD | 85% | 85% |
+| Status | **Belum tercapai** | **Belum tercapai** |
 
-Akurasi 15,4% berada jauh di bawah baseline 75,4%. Artinya model bukan hanya
+Dua eksekusi pada data yang sama memberi hasil sedikit berbeda: 21 dari 65
+jawaban berubah meski kode sudah mengirim `temperature: 0`. Karena itu angka di
+sini dibaca sebagai besaran, bukan angka pasti. Yang penting: pada kedua run,
+akurasi berada jauh di bawah baseline dan jauh dari target.
+
+Akurasi belasan persen berada di bawah baseline 75,4%. Artinya model bukan hanya
 belum mencapai target, tetapi lebih buruk daripada menjawab `Transfer Antar Bank`
 untuk setiap gambar tanpa melihat isinya.
 
@@ -145,8 +150,10 @@ berbayar; penulisan bertahap inilah yang menyelamatkan hasilnya.
 ## Kesimpulan
 
 SC-01 belum tercapai dan tidak dapat dicapai tanpa lebih dulu menyelesaikan
-masalah granularitas kategori. Dua langkah yang masuk akal, dan keduanya perlu
-keputusan pemilik produk:
+masalah granularitas kategori. Kesimpulan ini berlaku pada kedua run, terlepas
+dari selisih dua poin persen di antaranya.
+
+Dua langkah yang masuk akal, dan keduanya perlu keputusan pemilik produk:
 
 1. **Menyamakan granularitas.** Tetapkan satu tingkat kerincian untuk kolom
    kategori, lalu ukur ulang. Bila acuan memakai tingkat rinci, model yang
@@ -155,6 +162,6 @@ keputusan pemilik produk:
    yang acuannya bukan `Transfer Antar Bank`, lalu laporkan sisanya terpisah
    sebagai kasus yang tidak dapat dinilai.
 
-Yang tidak boleh dilakukan adalah melaporkan angka 15,4% tanpa menyebut baseline
-75,4%, karena pembaca akan menyimpulkan modelnya hampir benar padahal kalah dari
-tebakan konstan.
+Yang tidak boleh dilakukan adalah melaporkan angka belasan persen tanpa menyebut
+baseline 75,4%, karena pembaca akan menyimpulkan modelnya hampir benar padahal
+kalah dari tebakan konstan.
