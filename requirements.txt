@@ -1,8 +1,12 @@
 fastapi
 uvicorn[standard]
 httpx
-gspread
+gspread>=6.0          # fetch_sheet_metadata(params=...) dipakai verify_template
 google-api-python-client
 google-auth-oauthlib
 python-dotenv
 sentry-sdk[fastapi]>=2.0,<3
+
+# Pengembangan dan pengujian
+pytest>=8
+openpyxl>=3.1

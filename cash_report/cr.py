@@ -1,5 +1,10 @@
 import os
 import logging
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from cash_report import categories as KAT  # noqa: E402  (daftar kategori tunggal)
 import asyncio
 from zoneinfo import ZoneInfo
 from datetime import datetime
@@ -144,7 +149,11 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 # 2. Extraction instructions
 # =========================================
 
-SYSTEM_PROMPT = """
+_KATEGORI_BLOCK = "\n".join(
+    f"        {chr(97 + i)}. {k}" for i, k in enumerate(KAT.KATEGORI_UNTUK_MODEL)
+)
+
+SYSTEM_PROMPT = f"""
 You are an expert financial document extraction system
 specializing in Indonesian online banking transfer receipts.
 
@@ -255,25 +264,14 @@ EXTRACTION RULES:
 
 9. CATEGORY
    - The category which transaction detail falls into
-   - Possible categories: 
-        a. Pendapatan Usaha (Penjualan Produk)
-        b. Pendapatan Usaha (Penjualan Lainnya)
-        c. Pendapatan Usaha (Workshop)
-        d. Bahan Baku
-        e. Biaya-Gaji Karyawan
-        f. Biaya-Konsumsi
-        g. Biaya-Perlengkapan Kantor dan Administrasi
-        h. Biaya-Transporrtasi
-        i. Biaya-Ongkir
-        j. Biaya-Perbaikan Bangunan
-        k. Biaya-Operasional
-        l. Biaya-Pembelian Aset
-        m. Biaya-Sosial
+   - Possible categories:
+{categories_block}
    - Select exactly ONE category from the provided list.
    - Never generate a category outside the provided list.
    - Prioritize the Telegram caption when it provides sufficient information to classify the transaction.
    - Otherwise, use the extracted transaction_detail.
    - If neither provides sufficient information, return null.
+   - Never use "Lainnya"; if nothing fits, return null.
 
 10. MISSING INFORMATION
    - Use null when information is unavailable or uncertain.
