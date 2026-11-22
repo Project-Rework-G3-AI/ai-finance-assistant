@@ -52,6 +52,7 @@ KAT_LAIN = list(KAT.PERPINDAHAN) + [KAT.PERLU_DITINJAU]
 # kosong di dropdown.
 KAT_DROPDOWN = list(KAT.KATEGORI)
 KOL_DROPDOWN = 5          # indeks 0-based: kolom F di SETUP
+BARIS_HEADER = 3          # header tabel SETUP (baris 1 judul, baris 2 kosong)
 BARIS_AWAL_DROPDOWN = 4   # baris 4, tepat di bawah header baris 3
 BARIS_VALIDASI = 5000     # sejauh mana kolom TRANSAKSI diberi dropdown
 
@@ -201,7 +202,7 @@ def _setup(ws) -> None:
             KAT_EXPENSE[i] if i < len(KAT_EXPENSE) else "",
             KAT_LAIN[i] if i < len(KAT_LAIN) else "",
         ])
-    put(ws, "A3", rows)
+    put(ws, f"A{BARIS_HEADER}", rows)
 
     # Kolom F: satu daftar tunggal untuk dropdown TRANSAKSI. Dipisah dari lima
     # kolom di atas karena dropdown butuh rentang tanpa sel kosong; kolom B-E
@@ -209,11 +210,11 @@ def _setup(ws) -> None:
     # kosong bila dipakai langsung sebagai rujukan validasi.
     kolom_dropdown = [["DAFTAR DROPDOWN KATEGORI"]]
     kolom_dropdown += [[k] for k in KAT_DROPDOWN]
-    put(ws, f"{_col_letter(KOL_DROPDOWN)}3", kolom_dropdown)
+    put(ws, f"{_col_letter(KOL_DROPDOWN)}{BARIS_HEADER}", kolom_dropdown)
 
     # Catatan diletakkan setelah tabel, bukan di baris mati, supaya tidak
     # tertimpa ketika daftar kategori bertambah.
-    catatan_row = 3 + len(rows) + 1
+    catatan_row = BARIS_HEADER + len(rows) + 1
     put(ws, f"A{catatan_row}",
         [["Kantong = kantong uang perusahaan: BRI, BNI, Jago, UANG KAS.\n"
           "UANG KAS = kas operasional (tunai). Antar-bank via FLIP tetap dicatat\n"
