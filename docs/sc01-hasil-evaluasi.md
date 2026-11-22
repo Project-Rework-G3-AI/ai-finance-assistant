@@ -26,6 +26,14 @@ untuk setiap gambar tanpa melihat isinya.
 
 ## Cara pengukuran
 
+Langkah menjalankan evaluasi ini di komputer lokal ada di
+[`sc01-cara-menjalankan.md`](sc01-cara-menjalankan.md). Ringkasnya:
+
+```bash
+python3 tests/sc01_harness.py --siapkan   # unduh 65 gambar (sekali)
+python3 tests/sc01_harness.py             # jalankan evaluasi
+```
+
 | Komponen | Perlakuan |
 |---|---|
 | Model | Asli — `deepseek/deepseek-v4.1-flash-1017` lewat OpenRouter |
@@ -38,14 +46,19 @@ Penulisan ke Sheets dan Drive sengaja tidak dijalankan agar spreadsheet
 perusahaan tidak tersentuh dan hasil bisa diulang. Batas ini dijaga oleh
 `test_runner_tidak_menulis_ke_sheets_atau_drive`.
 
-Perintah yang dipakai:
+## Lokasi data
 
-```bash
-python3 tests/sc01_harness.py \
-    --set-uji /path/set_uji_1to1.csv \
-    --img-dir /path/gambar \
-    --out /path/hasil
-```
+Daftar pasangan dan gambarnya tidak disimpan di repo ini karena repo bersifat
+publik dan datanya berisi transaksi perusahaan.
+
+| Berkas | Lokasi |
+|---|---|
+| Daftar 65 pasangan | `sc01/set_uji_1to1.csv` di repo privat `NafisHandoko/ReworkAcademy` |
+| 118 gambar bukti | `Bukti Transaksi Januari 2026/` di repo yang sama |
+| Harness dan test | `tests/sc01_*.py` di repo ini |
+
+`--siapkan` mengunduh gambar dari repo privat memakai `GITHUB_TOKEN`. Setelah
+ada di disk, evaluasi berjalan lokal sepenuhnya.
 
 ## Mengapa 65, bukan 132
 

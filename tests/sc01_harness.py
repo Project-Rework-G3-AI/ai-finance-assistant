@@ -12,12 +12,16 @@ terlanjur ditulis.
 
 Pemakaian:
 
-    # butuh AI_API_KEY, dataset, dan daftar pasangan
-    python3 tests/sc01_harness.py --set-uji /path/set_uji_1to1.csv \
-        --img-dir /path/gambar --out /path/hasil
+    # 1. unduh gambar dataset (sekali saja, butuh GITHUB_TOKEN)
+    python3 tests/sc01_harness.py --siapkan
 
-    # hitung ulang metrik dari CSV yang sudah ada (tanpa memanggil AI)
-    python3 tests/sc01_harness.py --set-uji ... --out ... --hitung-saja
+    # 2. jalankan evaluasi (butuh AI_API_KEY)
+    python3 tests/sc01_harness.py
+
+    # 3. hitung ulang metrik dari CSV yang sudah ada (tanpa memanggil AI)
+    python3 tests/sc01_harness.py --hitung-saja
+
+Lokasi dataset diatur di `.env` lewat SC01_SET_UJI dan SC01_IMG_DIR.
 """
 
 from __future__ import annotations
@@ -35,9 +39,12 @@ AKAR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AKAR))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import sc01_config as cfg  # noqa: E402
+
+cfg.muat_env()
+
 import httpx  # noqa: E402
 
-import main  # noqa: E402
 from sc01_metrics import hitung  # noqa: E402
 
 KOLOM_KELUARAN = [
@@ -46,11 +53,6 @@ KOLOM_KELUARAN = [
     "tanggal_acuan", "tanggal_usulan",
     "mode", "catatan", "keterangan_model", "detik",
 ]
-
-
-def baca_pasangan(path: str) -> list[dict]:
-    with open(path, encoding="utf-8-sig", newline="") as f:
-        return [r for r in csv.DictReader(f) if (r.get("file") or "").strip()]
 
 
 def baca_hasil(path: Path) -> dict[str, dict]:
@@ -63,6 +65,8 @@ def baca_hasil(path: Path) -> dict[str, dict]:
 
 async def jalankan(pasangan: list[dict], img_dir: Path, out: Path,
                    ulang: bool = False) -> list[dict]:
+    import main  # diimpor di dalam agar `--siapkan` tidak butuh AI_API_KEY
+
     sudah = {} if ulang else baca_hasil(out)
     hasil = list(sudah.values())
 
@@ -145,7 +149,7 @@ def _selisih(acuan, usulan) -> str:
 
 
 def tulis_laporan(hasil: list[dict], out: Path) -> dict:
-    """Hitung metrik lalu tulis laporan teks + confusion matrix ke disk."""
+    """Hitung metrik lalu tulis laporan teks + metrik.json ke disk."""
     pasangan = [{"kategori_acuan": r["kategori_acuan"],
                  "kategori_usulan": r["kategori_usulan"],
                  "file": r["file"]} for r in hasil if r.get("kategori_acuan")]
@@ -168,7 +172,6 @@ def tulis_laporan(hasil: list[dict], out: Path) -> dict:
                      f"{d['recall']:6.0%}")
 
     baris += ["", "Confusion matrix (baris = acuan, kolom = usulan)", "-" * 60]
-    semua_label = sorted({*h.confusion, *{u for d in h.confusion.values() for u in d}})
     for a in h.confusion:
         untuk = ", ".join(f"{u}={n}" for u, n in
                           sorted(h.confusion[a].items(), key=lambda kv: -kv[1]))
@@ -192,29 +195,56 @@ def tulis_laporan(hasil: list[dict], out: Path) -> dict:
 
 
 def main_cli() -> int:
-    ap = argparse.ArgumentParser(description="Runner evaluasi SC-01")
-    ap.add_argument("--set-uji", required=True, help="CSV berisi kolom file & kategori_acuan")
-    ap.add_argument("--img-dir", default="", help="folder gambar bukti transaksi")
-    ap.add_argument("--out", required=True, help="folder keluaran")
+    ap = argparse.ArgumentParser(
+        description="Runner evaluasi SC-01 (akurasi kategori)")
+    ap.add_argument("--siapkan", action="store_true",
+                    help="unduh gambar dataset dari repo privat, lalu berhenti")
+    ap.add_argument("--set-uji", default="", help="timpa SC01_SET_UJI")
+    ap.add_argument("--img-dir", default="", help="timpa SC01_IMG_DIR")
+    ap.add_argument("--out", default="sc01-out", help="folder keluaran (default: sc01-out)")
     ap.add_argument("--ulang", action="store_true", help="abaikan hasil lama, proses dari awal")
     ap.add_argument("--hitung-saja", action="store_true", help="hitung metrik tanpa memanggil AI")
     a = ap.parse_args()
 
+    # Argumen CLI menang atas .env, supaya bisa dipakai tanpa menyunting file.
+    if a.set_uji:
+        os.environ["SC01_SET_UJI"] = a.set_uji
+    if a.img_dir:
+        os.environ["SC01_IMG_DIR"] = a.img_dir
+
+    if a.siapkan:
+        folder = cfg.img_dir()
+        if folder is None:
+            raise SystemExit("SC01_IMG_DIR belum diisi. Contoh:\n"
+                             "  --img-dir ./dataset/Bukti\\ Transaksi\\ Januari\\ 2026")
+        print(f"mengunduh gambar ke: {folder}")
+        baru, lewat = cfg.unduh_gambar(folder)
+        print(f"selesai: {baru} diunduh, {lewat} sudah ada")
+        siap, alasan = cfg.siap(abaikan_ai=True)
+        print(f"status: {'siap' if siap else 'BELUM siap'} — {alasan}")
+        return 0 if siap else 1
+
     out = Path(a.out)
+    if not out.is_absolute():
+        out = AKAR / out
     out.mkdir(parents=True, exist_ok=True)
-    pasangan = baca_pasangan(a.set_uji)
-    print(f"pasangan: {len(pasangan)}")
 
-    csv_hasil = out / "hasil_per_baris.csv"
     if a.hitung_saja:
-        hasil = list(baca_hasil(csv_hasil).values())
+        hasil = list(baca_hasil(out / "hasil_per_baris.csv").values())
         if not hasil:
-            raise SystemExit(f"tidak ada hasil di {csv_hasil}")
-    else:
-        if not a.img_dir:
-            raise SystemExit("--img-dir wajib kecuali memakai --hitung-saja")
-        hasil = asyncio.run(jalankan(pasangan, Path(a.img_dir), csv_hasil, a.ulang))
+            raise SystemExit(f"tidak ada hasil di {out / 'hasil_per_baris.csv'}")
+        r = tulis_laporan(hasil, out)
+        print(r["teks"])
+        return 0
 
+    siap, alasan = cfg.siap()
+    if not siap:
+        raise SystemExit(f"belum siap: {alasan}")
+
+    pasangan = cfg.baca_pasangan(cfg.set_uji())
+    print(f"pasangan: {len(pasangan)}")
+    hasil = asyncio.run(jalankan(pasangan, cfg.img_dir(),
+                                 out / "hasil_per_baris.csv", a.ulang))
     r = tulis_laporan(hasil, out)
     print("\n" + r["teks"])
     return 0
