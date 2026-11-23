@@ -260,13 +260,19 @@ def format_total(awal: date, tot: dict) -> str:
 def format_rekap(awal: date, items: list[tuple[str, dict]], tot: dict) -> str:
     lines = [f"📋 <b>Rekap {_periode_label(awal)}</b> per kategori"]
     for k, e in items[:15]:
+        if not (e["vn"] or e["dn"]):
+            continue
         bagian = []
-        if e["vn"] or e["dn"]:
-            if e["vn"]:
-                bagian.append(f"v {_rp(e['vm'] - e['vk'])}")
-            if e["dn"]:
-                bagian.append(f"d {_rp(e['dm'] - e['dk'])}")
-            lines.append(f"• {html.escape(k)} — {' · '.join(bagian)}")
+        if e["vn"]:
+            bagian.append(f"(verified) {_rp(e['vm'] - e['vk'])}")
+        if e["dn"]:
+            bagian.append(f"(draft) {_rp(e['dm'] - e['dk'])}")
+        baris = f"• {html.escape(k)} — {' · '.join(bagian)}"
+        if e["vn"] and e["dn"]:
+            # kategori campuran: total gabungan verified + draft di sampingnya
+            total = (e["vm"] - e["vk"]) + (e["dm"] - e["dk"])
+            baris += f" · total {_rp(total)}"
+        lines.append(baris)
     v, d = tot["verified"], tot["draft"]
     lines.append(f"Total verified: masuk {_rp(v['masuk'])} · keluar {_rp(v['keluar'])}")
     lines.append(f"Total draft: masuk {_rp(d['masuk'])} · keluar {_rp(d['keluar'])} ({d['n']} baris)")
@@ -274,22 +280,6 @@ def format_rekap(awal: date, items: list[tuple[str, dict]], tot: dict) -> str:
     if tr["n_verified"] or tr["n_draft"]:
         lines.append(
             f"Transfer: verified {_rp(tr['verified'])} · draft {_rp(tr['draft'])} (di luar total)"
-        )
-    lines.append("<i>Sumber: TRANSAKSI (Cash Report)</i>")
-    return "\n".join(lines)
-
-
-def format_rows(awal: date, rows: list[dict]) -> str:
-    if not rows:
-        return f"Tidak ada baris pada {_periode_label(awal)}."
-    lines = [f"🧾 <b>{len(rows)} baris</b> — {_periode_label(awal)}"]
-    for x in rows:
-        nominal = _rp(x["masuk"]) if x["masuk"] else _rp(x["keluar"])
-        arah = "+" if x["masuk"] else "-"
-        st = "v" if x["status"] == "verified" else "d"
-        lines.append(
-            f"{x['tanggal']} {arah}{nominal} {html.escape(x['kategori'] or '-')} "
-            f"[{st}] {html.escape(x['keterangan'][:40])}"
         )
     lines.append("<i>Sumber: TRANSAKSI (Cash Report)</i>")
     return "\n".join(lines)

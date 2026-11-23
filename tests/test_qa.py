@@ -85,6 +85,19 @@ def test_rekap_tanpa_transfer():
     assert items["Penjualan Produk"]["vm"] == 100000
 
 
+def test_format_rekap_inisial_dan_total_gabungan():
+    out = qa.format_rekap(AWAL, qa.rekap(ROWS, AWAL, AKHIR),
+                          qa.aggregate(ROWS, AWAL, AKHIR))
+    assert "v " not in out.replace("(verified)", "")  # tanpa inisial v/d
+    garis_listrik = next(l for l in out.splitlines() if "Listrik" in l)
+    garis_pendapatan = next(l for l in out.splitlines() if "Penjualan" in l)
+    assert "(verified) Rp70,000" in garis_listrik      # Listrik: verified net +70k
+    assert "(draft) Rp-50,000" in garis_listrik        # Listrik: draft net -50k
+    assert "total Rp20,000" in garis_listrik           # campuran: 70k - 50k
+    assert "total" not in garis_pendapatan             # kategori tunggal tanpa total
+    assert "(verified) Rp100,000" in garis_pendapatan
+
+
 def test_list_rows_limit_dan_status():
     baris = qa.list_rows(ROWS, AWAL, AKHIR, limit=2)
     assert len(baris) == 2
