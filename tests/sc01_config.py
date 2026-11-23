@@ -10,7 +10,7 @@ Kunci yang dikenali:
     SC01_IMAGES       folder gambar bukti transaksi
     GITHUB_TOKEN      dipakai hanya oleh `--download` untuk mengunduh dataset
                       dari repo privat
-    GITHUB_DATASET_REPO   default: NafisHandoko/rework-ai-finance-assistant-dataset
+    GITHUB_DATASET_REPO   default: Project-Rework-G3-AI/rework-ai-finance-assistant-dataset
     GITHUB_DATASET_DIR    folder dataset di dalam repo tersebut
 
 Kedua kunci SC01_* punya nilai bawaan yang masuk akal, jadi `.env` baru dari
@@ -29,7 +29,7 @@ AKAR = Path(__file__).resolve().parents[1]
 # dipindahkan ke repo aplikasi yang publik, dan jangan pakai repo pribadi
 # seseorang — semua anggota kelompok harus bisa mengaksesnya.
 REPO_DATASET = os.getenv(
-    "GITHUB_DATASET_REPO", "NafisHandoko/rework-ai-finance-assistant-dataset"
+    "GITHUB_DATASET_REPO", "Project-Rework-G3-AI/rework-ai-finance-assistant-dataset"
 ).strip()
 # Folder dataset di dalam repo tersebut. Kosong berarti berkas ada di akar repo.
 DIR_DATASET = os.getenv("GITHUB_DATASET_DIR", "").strip()

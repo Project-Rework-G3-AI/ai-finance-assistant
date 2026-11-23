@@ -58,36 +58,27 @@ di repo terpisah yang privat.
 
 | Repo | Isi | Akses |
 |---|---|---|
-| `NafisHandoko/rework-ai-finance-assistant-dataset` | Seluruh dataset: 118 foto, 3 Cash Report, 2 mutasi, SOP, dan `sc01/sc01_pairs.csv` | Privat, seluruh anggota kelompok diundang sebagai collaborator |
+| `Project-Rework-G3-AI/rework-ai-finance-assistant-dataset` | Seluruh dataset: 118 foto, 3 Cash Report, 2 mutasi, SOP, dan `sc01/sc01_pairs.csv` | Privat, terbaca seluruh anggota organisasi |
 | `Project-Rework-G3-AI/ai-finance-assistant` | Kode, test, dan dokumentasi | Publik |
 
-Repo dataset sengaja dipisah supaya satu orang tidak menjadi jalan satu-satunya.
-Setiap anggota kelompok memakai **token GitHub pribadinya** dan cukup diundang
-sekali sebagai collaborator.
+Repo dataset sengaja dipisah supaya data perusahaan tidak masuk repo publik.
+Keduanya sudah berada di organisasi yang sama, jadi **tidak perlu mengundang
+anggota satu per satu**: setelan organisasi memberi akses baca bawaan kepada
+semua anggota, sehingga repo dataset otomatis terbaca.
 
-### Mengundang anggota kelompok
-
-Repo dataset ada di akun pribadi, jadi anggota lain harus diundang dulu. Sekali
-saja, atas izin pemilik repo:
-
-1. Buka `https://github.com/NafisHandoko/rework-ai-finance-assistant-dataset`
-2. Masuk **Settings**, lalu **Collaborators**
-3. Klik **Add people**, masukkan username GitHub anggota, pilih akses **Read**
-4. Ulangi untuk setiap anggota
-
-Setelah diundang, anggota menerima email dan harus menyetujui undangan itu.
-Tanpa persetujuan, repo tetap tidak terlihat oleh mereka.
-
-Bila nanti repo dipindahkan ke organisasi `Project-Rework-G3-AI`, tidak perlu
-undang satu-satu lagi: setelan org saat ini memberi akses baca bawaan ke semua
-anggota, sehingga repo privat baru otomatis terbaca oleh seluruh anggota.
+Anggota yang baru bergabung cukup memastikan dirinya sudah masuk organisasi
+`Project-Rework-G3-AI`. Bila repo dataset tidak terlihat, minta pemilik
+organisasi memeriksa **People** di halaman organisasi.
 
 ### Token yang dipakai anggota
 
-Setiap anggota membuat token sendiri di
-`https://github.com/settings/tokens`, cukup dengan cakupan **`repo`** (klasik)
-atau **Contents: Read** pada repo dataset (fine-grained). Token milik pemilik
-repo tidak boleh dibagikan, dan memang tidak perlu.
+Setiap anggota memakai token GitHub pribadinya, dibuat di
+`https://github.com/settings/tokens`, dengan cakupan **`repo`** (klasik) atau
+**Contents: Read** pada repo dataset (fine-grained). Token milik orang lain tidak
+perlu dipinjam dan tidak boleh dibagikan.
+
+`GITHUB_TOKEN` hanya dibutuhkan bila memakai `--download`. Kalau dataset sudah
+di-clone manual, langkah itu tidak perlu dan token tidak dipakai.
 
 ### Isi repo dataset
 
