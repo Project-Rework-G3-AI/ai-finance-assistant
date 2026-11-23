@@ -9,25 +9,27 @@ berkas pendukungnya disertakan agar hasil bisa diperiksa ulang.
 
 ## Ringkasan
 
-| Metrik | Run 1 | Run 2 | Run 3 | Run 4 |
-|---|---|---|---|---|
-| Total pasangan diuji | 65 | 65 | 65 | 65 |
-| Benar | 10 | 9 | 8 | 3 |
-| **Akurasi** | **15,4%** | **13,8%** | **12,3%** | **4,6%** |
-| Baseline kelas mayoritas | 75,4% | 75,4% | 75,4% | 75,4% |
-| **Lift atas baseline** | **−60,0%** | **−61,5%** | **−63,1%** | **−70,8%** |
-| Macro-average recall | 52,9% | 52,4% | 42,4% | 40,4% |
-| Target BRD | 85% | 85% | 85% | 85% |
-| Status | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** |
+| Metrik | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 | Run 6 |
+|---|---|---|---|---|---|---|
+| Total pasangan diuji | 65 | 65 | 65 | 65 | 65 | 65 |
+| Benar | 10 | 9 | 8 | 3 | 5 | 7 |
+| **Akurasi** | **15,4%** | **13,8%** | **12,3%** | **4,6%** | **7,7%** | **10,8%** |
+| Baseline kelas mayoritas | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% |
+| **Lift atas baseline** | **−60,0%** | **−61,5%** | **−63,1%** | **−70,8%** | **−67,7%** | **−64,6%** |
+| Macro-average recall | 52,9% | 52,4% | 42,4% | 40,4% | 41,2% | 22,4% |
+| Target BRD | 85% | 85% | 85% | 85% | 85% | 85% |
+| Status | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** |
 
-Empat eksekusi pada data yang sama memberi akurasi antara **4,6% dan 15,4%**,
-rentang **10,8 poin persen**. Kode sudah mengirim `temperature: 0`, tetapi model
-penalaran lewat API pihak ketiga tidak menjamin determinisme penuh, dan tidak
-ada parameter `seed`.
+Enam eksekusi pada data yang sama memberi akurasi antara **4,6% dan 15,4%**,
+rentang **10,8 poin persen**, dengan rata-rata 10,8%. Kode sudah mengirim
+`temperature: 0`, tetapi model penalaran lewat API pihak ketiga tidak menjamin
+determinisme penuh, dan tidak ada parameter `seed`.
 
-Keempat run memakai kode yang sama pada 65 gambar yang sama, semuanya bermode
-`vision` tanpa satu pun galat atau kategori kosong. Model memang menjawab
-berbeda-beda, bukan gagal. Pada run terakhir model memilih 17 kategori berbeda.
+Model memang menjawab berbeda-beda, bukan gagal. Pada satu run ia memilih 17
+kategori berbeda untuk 65 gambar. Namun pada run 5 dan run 6 ada 1 dan 2 baris
+yang jatuh ke `mock` karena model membalas `content: null`, dan parser di
+`main.py` baris 135 belum menangani nilai kosong itu. Baris tersebut tercatat
+salah karena kategorinya kosong, sehingga ikut menekan akurasi.
 
 Karena itu satu angka saja menyesatkan. Yang stabil di keempat run: akurasi
 berada jauh di bawah baseline 75,4% dan jauh dari target 85%. Bahkan pada run

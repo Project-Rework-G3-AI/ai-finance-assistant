@@ -212,14 +212,21 @@ transaksi. Jangan hapus baris itu dari `.gitignore`.
 ## Catatan tentang kestabilan angka
 
 Kode sudah mengirim `temperature: 0` pada payload `_vision_extract()`, tetapi
-hasilnya tidak dapat diulang. Lima eksekusi berturut-turut pada 65 gambar yang
-sama memberi akurasi 15,4%, 13,8%, 12,3%, 4,6%, dan 7,7% — rentang 10,8 poin
-persen.
+hasilnya tidak dapat diulang. Enam eksekusi berturut-turut pada 65 gambar yang
+sama memberi akurasi 15,4%, 13,8%, 12,3%, 4,6%, 7,7%, dan 10,8% — rentang 10,8
+poin persen.
 
-Kelima run memakai kode identik dan hampir semuanya bermode `vision`. Satu baris
-pada run terakhir jatuh ke `mock` karena model membalas `content: null`, yang
-memicu galat di `main.py` baris 135 lalu ditangkap sebagai kegagalan. Jadi
-sebagian variasi berasal dari model, sebagian kecil dari jalur galat itu.
+Keenam run memakai kode identik dan hampir semuanya bermode `vision`. Pada run 5
+dan run 6 ada 1 dan 2 baris yang jatuh ke `mock` karena model membalas
+`content: null`, yang memicu galat di `main.py` baris 135 lalu ditangkap sebagai
+kegagalan. Baris seperti itu tercatat salah karena kategorinya kosong, jadi ikut
+menekan angka. Sebagian variasi berasal dari model, sebagian kecil dari jalur
+galat itu.
+
+Satu baris juga pernah memakan 515 detik karena model berpikir sangat panjang.
+Timeout 90 detik di `_vision_extract()` adalah timeout per operasi baca, bukan
+batas total, sehingga baris seperti itu tidak diputus. Untuk 65 gambar, sediakan
+waktu 10 sampai 25 menit.
 
 Penyebab yang paling mungkin adalah model penalaran (`deepseek-v4.1-flash-1017`)
 yang tidak menjamin determinisme penuh lewat API pihak ketiga, ditambah tidak
