@@ -1,7 +1,7 @@
 import httpx
 
-from pdf_processor import render_pdf_pages
-from vision_extractor import extract_statement_page
+from .pdf_processor import render_pdf_pages
+from .vision_extractor import extract_statement_page
 
 
 async def extract_bank_statement(
