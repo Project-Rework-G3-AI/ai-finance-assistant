@@ -203,11 +203,21 @@ Mekanisme agar ekstraksi tidak hilang ketika Drive/Sheets tidak bisa dijangkau:
 
 `pending.jsonl` sudah masuk `.gitignore` — tidak pernah ikut ter-commit.
 
+## Tanya-jawab (milestone 3)
+
+Routing: foto/dokumen → jalur ekstraksi (tidak pernah lewat LLM); teks → command `/` dulu (deterministik, gratis), lalu bahasa bebas lewat **satu panggilan LLM tool-calling** (modul `cash_report/qa.py`).
+
+- `/total [bulan]` — total masuk/keluar, **default bulan berjalan** (contoh: `/total Nov`, `/total 2026-11`)
+- `/rekap [bulan]` — rincian per kategori (default bulan ini)
+- `/help` — bantuan; pertanyaan bebas, mis. `"berapa pengeluaran November kategori Listrik?"`
+
+Aturan main: tool **baca-saja** (`aggregate`, `list_rows`, `get_receipt`); angka dihitung kode, LLM hanya merangkai kalimat dan wajib menyebut sumber (periode + TRANSAKSI). Angka **verified dan draft disebut terpisah**, termasuk rincian transfer; transfer antar kantong dikecualikan dari total (konsisten dengan RECAP). Tanpa `AI_API_KEY` atau AI gagal → balasan bantuan; **tidak ada env baru, tidak ada database**.
+
 ## Batasan (milestone 1)
 
 - Ekstraksi mock tanpa AI = nominal hanya dari caption (gambar tidak dibaca); tanpa caption, kolom `Nominal` kosong.
 - Klasifikasi awal kosong (kolom Kategori diisi AI bila vision aktif, sisanya manual).
-- Belum ada balancing (milestone 2) dan tanya-jawab (milestone 3).
+- Belum ada balancing (milestone 2); tanya-jawab (milestone 3) sudah aktif — lihat bagian **Tanya-jawab**.
 
 ## Pengembangan Berikutnya
 
@@ -215,9 +225,9 @@ Urutkan berdasarkan nilai buat brief (3 pilihan kelompok) dan usaha:
 
 1. **Balancing (inti Pilihan 1)** — baca mutasi bank (PDF/XLSX) → cocokkan baris Sheet via Ref ID/tanggal+nominal → status `cocok` / `belum cocok` / `tercatat di kas tapi tidak di mutasi` + laporan selisih per periode.
 2. **Web app baru (rekap/PnL)** — bangun dari awal, membaca Sheet yang sama via service account → rekap harian + draf PnL dari data bot.
-3. **Tanya-jawab & ringkasan (Pilihan 3)** — command bot (`/total Januari`) → query kode → angka dari kode, LLM hanya merangkai kalimat, jawaban wajib menunjuk baris sumber. Rancangan lengkapnya di bagian **Rancangan Tanya-Jawab & Data**.
+3. **Tanya-jawab & ringkasan** — ✅ sudah (milestone 3): command `/total`, `/rekap` + pertanyaan bebas via tool-calling, lihat bagian **Tanya-jawab**.
 4. **Kualitas** — pytest (extract/dedupe/pending), eval 10 foto sampel → bahan EV-xx Testing Report.
-5. **Integrasi lanjutan bila waktu cukup** — klasifikasi kategori otomatis (rule/Jev), command `/rekap`, ekstraksi invoice PDF, multi-kas, deploy always-on.
+5. **Integrasi lanjutan bila waktu cukup** — klasifikasi kategori otomatis (rule/Jev), ekstraksi invoice PDF, multi-kas, deploy always-on.
 
 Yang tidak perlu dibangun: database, login, dashboard analytics, n8n.
 

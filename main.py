@@ -29,6 +29,7 @@ from pydantic import BaseModel
 
 import sentry_setup
 from cash_report import categories as KAT
+from cash_report import qa
 
 # ---------- Bank statement reconciliation ----------
 from reconciliation.extractor import extract_bank_statement
@@ -668,6 +669,33 @@ async def tg_send(client: httpx.AsyncClient, chat_id: int, text: str) -> None:
         # perlu terlihat karena user tidak menerima notifikasi apa pun.
         log.warning("Kirim pesan Telegram gagal (chat %s): %s: %s", chat_id, type(e).__name__, e)
         sentry_setup.capture_exception(e)
+
+
+async def handle_text(client: httpx.AsyncClient, chat_id: int, text: str) -> None:
+    """Command / atau pertanyaan bebas (milestone 3). Kegagalan -> bantuan."""
+    try:
+        if text.startswith("/"):
+            reply = await asyncio.to_thread(qa.command_reply, text, _qa_load_rows)
+        else:
+            reply = await qa.answer_question(client, text, _qa_load_rows)
+    except Exception:
+        log.exception("Tanya-jawab gagal")
+        reply = qa.FALLBACK
+    await tg_send(client, chat_id, reply or qa.FALLBACK)
+
+
+def _qa_load_rows(year: str) -> list[list[str]]:
+    """Baca ledger tahun berjalan (provisioning sama dengan jalur tulis)."""
+    if not CR_FOLDER_ID or not CR_TEMPLATE_ID:
+        raise RuntimeError("CASH_REPORT_FOLDER_ID / CASH_REPORT_TEMPLATE_ID belum diisi")
+    year_folder = _find_or_create_folder(str(year), CR_FOLDER_ID)
+    ss_file = _find_or_create_spreadsheet(str(year), year_folder)
+    sh = _open_spreadsheet(ss_file["id"])
+    try:
+        ws = sh.worksheet("TRANSAKSI")
+    except Exception as e:
+        raise FileNotFoundError("Sheet TRANSAKSI tidak ditemukan — periksa CASH_REPORT_TEMPLATE_ID") from e
+    return ws.get_values("A2:K")
 
 
 async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
