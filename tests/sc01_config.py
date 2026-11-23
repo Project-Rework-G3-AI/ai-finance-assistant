@@ -6,12 +6,15 @@ tetap menang, berguna untuk CI atau saat ingin menimpa sementara.
 
 Kunci yang dikenali:
 
-    SC01_PAIRS      daftar pasangan gambar -> baris (CSV)
-    SC01_IMAGES      folder gambar bukti transaksi
-    GITHUB_TOKEN      dipakai hanya oleh `--download` untuk mengunduh gambar
-                      dari repo dataset privat
+    SC01_PAIRS        daftar pasangan gambar -> baris (CSV)
+    SC01_IMAGES       folder gambar bukti transaksi
+    GITHUB_TOKEN      dipakai hanya oleh `--download` untuk mengunduh dataset
+                      dari repo privat
     GITHUB_DATASET_REPO   default: NafisHandoko/ReworkAcademy
     GITHUB_DATASET_DIR    folder dataset di dalam repo tersebut
+
+Kedua kunci SC01_* punya nilai bawaan yang masuk akal, jadi `.env` baru dari
+`.env.example` sudah bisa dipakai tanpa disunting lebih dulu.
 """
 
 from __future__ import annotations
@@ -32,6 +35,10 @@ DIR_DATASET = os.getenv(
 SUB_DIR_IMAGES = "Bukti Transaksi Januari 2026"
 SUB_DIR_PAIRS = "sc01/sc01_pairs.csv"
 
+# Nilai bawaan: mengikuti susunan folder yang dibuat `--download`.
+DEFAULT_PAIRS = "dataset/sc01/sc01_pairs.csv"
+DEFAULT_IMAGES = "dataset/Bukti Transaksi Januari 2026"
+
 
 def muat_env() -> None:
     """Muat `.env` di akar repo tanpa menimpa variabel yang sudah ada."""
@@ -47,41 +54,49 @@ def _path(nilai: str) -> Path:
     return p if p.is_absolute() else (AKAR / p).resolve()
 
 
-def set_uji() -> Path | None:
-    """Lokasi CSV daftar pasangan, atau None bila belum diatur."""
-    nilai = os.getenv("SC01_PAIRS", "").strip()
-    return _path(nilai) if nilai else None
+def pairs_file() -> Path:
+    """Lokasi CSV daftar pasangan. Kembalikan nilai bawaan bila belum diatur."""
+    nilai = os.getenv("SC01_PAIRS", "").strip() or DEFAULT_PAIRS
+    return _path(nilai)
 
 
-def img_dir() -> Path | None:
-    """Folder gambar bukti transaksi, atau None bila belum diatur."""
-    nilai = os.getenv("SC01_IMAGES", "").strip()
-    return _path(nilai) if nilai else None
+def images_dir() -> Path:
+    """Folder gambar bukti transaksi. Kembalikan nilai bawaan bila belum diatur."""
+    nilai = os.getenv("SC01_IMAGES", "").strip() or DEFAULT_IMAGES
+    return _path(nilai)
 
 
-def siap(abaikan_ai: bool = False) -> tuple[bool, str]:
+def baca_pasangan(path: Path) -> list[dict]:
+    """Baca daftar pasangan. Beri pesan jelas bila berkasnya belum ada."""
+    if not Path(path).is_file():
+        raise SystemExit(
+            f"daftar pasangan belum ada: {path}\n"
+            "Jalankan lebih dulu: python3 tests/sc01_harness.py --download"
+        )
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        return [r for r in csv.DictReader(f) if (r.get("file") or "").strip()]
+
+
+def ready(abaikan_ai: bool = False) -> tuple[bool, str]:
     """Periksa kelengkapan sebelum menjalankan evaluasi.
 
     Mengembalikan (siap, alasan). Alasan selalu diisi agar pengguna tahu persis
     apa yang kurang, bukan sekadar "skip".
     """
-    su = set_uji()
-    if su is None:
-        return False, "SC01_PAIRS belum diisi di .env"
+    su = pairs_file()
     if not su.is_file():
-        return False, f"SC01_PAIRS menunjuk file yang tidak ada: {su}"
+        return False, (f"daftar pasangan belum ada: {su}. "
+                       f"Jalankan: python3 tests/sc01_harness.py --download")
 
-    folder = img_dir()
-    if folder is None:
-        return False, "SC01_IMAGES belum diisi di .env"
+    folder = images_dir()
     if not folder.is_dir():
-        return False, f"SC01_IMAGES bukan folder: {folder}"
+        return False, (f"folder gambar belum ada: {folder}. "
+                       f"Jalankan: python3 tests/sc01_harness.py --download")
 
     if not abaikan_ai and not os.getenv("AI_API_KEY", "").strip():
         return False, "AI_API_KEY kosong; SC-01 mengukur model asli, bukan mock"
 
-    with open(su, encoding="utf-8-sig", newline="") as f:
-        baris = [r for r in csv.DictReader(f) if (r.get("file") or "").strip()]
+    baris = baca_pasangan(su)
     if not baris:
         return False, f"daftar pasangan kosong: {su}"
 
@@ -93,53 +108,78 @@ def siap(abaikan_ai: bool = False) -> tuple[bool, str]:
     return True, f"{len(baris)} pasangan siap diuji"
 
 
-def baca_pasangan(path: Path) -> list[dict]:
-    with open(path, encoding="utf-8-sig", newline="") as f:
-        return [r for r in csv.DictReader(f) if (r.get("file") or "").strip()]
+def _token(nilai: str | None = None) -> str:
+    token = (nilai or os.getenv("GITHUB_TOKEN", "")).strip()
+    if not token:
+        raise SystemExit(
+            "GITHUB_TOKEN kosong. Tambahkan ke .env untuk mengunduh dataset privat.\n"
+            "Butuh token dengan akses baca ke " + REPO_DATASET
+        )
+    return token
 
 
-def unduh_gambar(tujuan: Path, token: str | None = None,
+def _ambil_github(jalur: str, token: str) -> bytes:
+    """Ambil satu berkas mentah dari repo dataset privat."""
+    import urllib.parse
+    import urllib.request
+
+    url = (f"https://api.github.com/repos/{REPO_DATASET}/contents/"
+           f"{urllib.parse.quote(jalur)}")
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Accept", "application/vnd.github.raw")
+    return urllib.request.urlopen(req, timeout=60).read()
+
+
+def unduh_pasangan(tujuan: Path | None = None,
+                   token: str | None = None) -> Path:
+    """Unduh daftar pasangan dari repo privat bila belum ada.
+
+    `--download` butuh daftar pasangan untuk tahu gambar mana yang harus diambil,
+    sedangkan daftar itu sendiri juga ada di repo privat. Fungsi ini memutus
+    ketergantungan tersebut sehingga satu perintah cukup.
+    """
+    tujuan = tujuan or pairs_file()
+    if tujuan.is_file() and tujuan.stat().st_size > 100:
+        return tujuan
+
+    token = _token(token)
+    tujuan.parent.mkdir(parents=True, exist_ok=True)
+    print(f"mengunduh daftar pasangan ke: {tujuan}")
+    tujuan.write_bytes(_ambil_github(f"{DIR_DATASET}/{SUB_DIR_PAIRS}", token))
+    return tujuan
+
+
+def unduh_gambar(tujuan: Path | None = None, token: str | None = None,
                  berkas: list[str] | None = None) -> tuple[int, int]:
     """Unduh gambar dataset dari repo privat. Kembalikan (baru, dilewati).
 
     Hanya dipakai sekali di awal. Setelah gambar ada di disk, evaluasi berjalan
     sepenuhnya offline terhadap folder itu.
     """
-    import urllib.parse
-    import urllib.request
+    token = _token(token)
+    tujuan = tujuan or images_dir()
 
-    token = (token or os.getenv("GITHUB_TOKEN", "")).strip()
-    if not token:
-        raise SystemExit(
-            "GITHUB_TOKEN kosong. Tambahkan ke .env untuk mengunduh dataset privat."
-        )
-
-    su = set_uji()
-    if su is None:
-        raise SystemExit("SC01_PAIRS belum diisi; tidak tahu gambar mana yang perlu diunduh")
-
-    perlu = berkas or [r["file"].strip() for r in baca_pasangan(su)]
+    perlu = berkas or [r["file"].strip() for r in baca_pasangan(pairs_file())]
     tujuan.mkdir(parents=True, exist_ok=True)
 
-    baru = lewat = 0
+    baru = lewat = gagal = 0
     for i, nama in enumerate(perlu, 1):
         dst = tujuan / nama
         if dst.is_file() and dst.stat().st_size > 1000:
             lewat += 1
             continue
-        jalur = f"{DIR_DATASET}/{SUB_DIR_IMAGES}/{nama}"
-        url = (f"https://api.github.com/repos/{REPO_DATASET}/contents/"
-               f"{urllib.parse.quote(jalur)}")
-        req = urllib.request.Request(url)
-        req.add_header("Authorization", f"Bearer {token}")
-        req.add_header("Accept", "application/vnd.github.raw")
         try:
-            data = urllib.request.urlopen(req, timeout=60).read()
+            dst.write_bytes(
+                _ambil_github(f"{DIR_DATASET}/{SUB_DIR_IMAGES}/{nama}", token))
         except Exception as e:
             print(f"  GAGAL {nama}: {str(e)[:70]}")
+            gagal += 1
             continue
-        dst.write_bytes(data)
         baru += 1
         if i % 20 == 0:
             print(f"  ... {i}/{len(perlu)}")
+
+    if gagal:
+        print(f"peringatan: {gagal} gambar gagal diunduh")
     return baru, lewat

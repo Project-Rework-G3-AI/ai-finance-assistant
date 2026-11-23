@@ -215,14 +215,14 @@ def main_cli() -> int:
         os.environ["SC01_IMAGES"] = a.images
 
     if a.download:
-        folder = cfg.img_dir()
-        if folder is None:
-            raise SystemExit("SC01_IMAGES belum diisi. Contoh:\n"
-                             "  --images ./dataset/Bukti\\ Transaksi\\ Januari\\ 2026")
+        # Daftar pasangan diunduh dulu: tanpa itu tidak diketahui gambar mana
+        # yang harus diambil. Keduanya ada di repo privat yang sama.
+        cfg.unduh_pasangan()
+        folder = cfg.images_dir()
         print(f"mengunduh gambar ke: {folder}")
         baru, lewat = cfg.unduh_gambar(folder)
         print(f"selesai: {baru} diunduh, {lewat} sudah ada")
-        siap, alasan = cfg.siap(abaikan_ai=True)
+        siap, alasan = cfg.ready(abaikan_ai=True)
         print(f"status: {'siap' if siap else 'BELUM siap'} — {alasan}")
         return 0 if siap else 1
 
@@ -239,11 +239,11 @@ def main_cli() -> int:
         print(r["teks"])
         return 0
 
-    siap, alasan = cfg.siap()
+    siap, alasan = cfg.ready()
     if not siap:
         raise SystemExit(f"belum siap: {alasan}")
 
-    pasangan = cfg.baca_pasangan(cfg.set_uji())
+    pasangan = cfg.baca_pasangan(cfg.pairs_file())
     print(f"pasangan: {len(pasangan)}")
 
     if a.repeat > 1:
@@ -254,7 +254,7 @@ def main_cli() -> int:
             print(f"\n===== run {n} dari {a.repeat} =====")
             sub = out / f"run-{n}"
             sub.mkdir(parents=True, exist_ok=True)
-            hasil_n = asyncio.run(jalankan(pasangan, cfg.img_dir(),
+            hasil_n = asyncio.run(jalankan(pasangan, cfg.images_dir(),
                                            sub / "hasil_per_baris.csv", True))
             r = tulis_laporan(hasil_n, sub)
             semua.append(r["hasil"])
@@ -273,7 +273,7 @@ def main_cli() -> int:
         print("\n" + teks)
         return 0
 
-    hasil = asyncio.run(jalankan(pasangan, cfg.img_dir(),
+    hasil = asyncio.run(jalankan(pasangan, cfg.images_dir(),
                                  out / "hasil_per_baris.csv", a.restart))
     r = tulis_laporan(hasil, out)
     print("\n" + r["teks"])

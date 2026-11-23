@@ -159,7 +159,7 @@ def test_runner_tidak_menulis_ke_sheets_atau_drive():
 
 # ------------------------------------------------------- eksekusi model asli
 
-_siap, _alasan = cfg.siap(abaikan_ai=True)
+_siap, _alasan = cfg.ready(abaikan_ai=True)
 butuh_dataset = pytest.mark.skipif(not _siap, reason=_alasan)
 butuh_ai = pytest.mark.skipif(
     not os.getenv("AI_API_KEY", "").strip(),
@@ -177,8 +177,8 @@ diminta = pytest.mark.skipif(
 @butuh_dataset
 def test_set_uji_lengkap_dan_berlabel():
     """Set uji harus 1:1 — tiap baris punya gambar dan kategori acuan."""
-    baris = cfg.baca_pasangan(cfg.set_uji())
-    folder = cfg.img_dir()
+    baris = cfg.baca_pasangan(cfg.pairs_file())
+    folder = cfg.images_dir()
 
     assert baris, "set uji kosong"
     for r in baris:
@@ -211,8 +211,8 @@ def test_sc01_akurasi_memenuhi_target(tmp_path):
 
     import main  # noqa: E402
 
-    pasangan = cfg.baca_pasangan(cfg.set_uji())
-    folder = cfg.img_dir()
+    pasangan = cfg.baca_pasangan(cfg.pairs_file())
+    folder = cfg.images_dir()
     hasil: list[dict] = []
 
     async def jalan():

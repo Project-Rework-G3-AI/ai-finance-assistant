@@ -8,36 +8,65 @@ komputer lokal, mulai dari clone sampai membaca hasil.
 ```bash
 git clone https://github.com/Project-Rework-G3-AI/ai-finance-assistant.git
 cd ai-finance-assistant
+git checkout test/sc01-kategori-accuracy
 
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-cp .env.example .env               # lalu isi 4 nilai (lihat bawah)
+cp .env.example .env               # isi 4 nilai, lihat bawah
 
-python3 tests/sc01_harness.py --download    # unduh 65 gambar
+python3 tests/sc01_harness.py --download    # unduh data (sekali saja)
 python3 tests/sc01_harness.py              # jalankan evaluasi
 ```
 
 Hasil ada di `sc01-out/laporan.txt`, `sc01-out/metrik.json`, dan
 `sc01-out/hasil_per_baris.csv`.
 
+## Empat nilai yang harus diisi di `.env`
+
+Buka `.env`, isi empat baris ini. Sisanya boleh dibiarkan apa adanya.
+
+```ini
+AI_API_KEY=sk-or-v1-...              # kunci OpenRouter
+AI_BASE_URL=https://openrouter.ai/api/v1
+AI_MODEL=deepseek/deepseek-v4.1-flash-1017
+
+GITHUB_TOKEN=ghp_...                 # hanya untuk --download
+```
+
+`AI_API_KEY` dibutuhkan karena SC-01 mengukur model asli, bukan mock.
+`GITHUB_TOKEN` butuh akses baca ke repo dataset privat. Bila tokennya tidak
+punya akses, `--download` akan berhenti dengan pesan yang menyebut repo mana
+yang gagal diakses.
+
+`SC01_PAIRS` dan `SC01_IMAGES` **tidak perlu diisi**. Keduanya punya nilai
+bawaan yang cocok dengan hasil `--download`:
+
+| Kunci | Nilai bawaan |
+|---|---|
+| `SC01_PAIRS` | `dataset/sc01/sc01_pairs.csv` |
+| `SC01_IMAGES` | `dataset/Bukti Transaksi Januari 2026` |
+
+Isi hanya bila ingin menaruh data di tempat lain.
+
 ## Di mana 65 data itu disimpan
 
 Data evaluasi **tidak ada di repo aplikasi**. Repo `ai-finance-assistant`
 bersifat publik, sedangkan bukti transaksi berisi data keuangan perusahaan.
+Datanya ada di repo terpisah yang privat.
 
 | Berkas | Lokasi | Repo |
 |---|---|---|
-| 118 gambar bukti transaksi | `final_project/Dataset PT Lokal Komoditi Indonesia/Bukti Transaksi Januari 2026/` | `NafisHandoko/ReworkAcademy` (**privat**) |
-| Daftar 65 pasangan | `final_project/Dataset PT Lokal Komoditi Indonesia/sc01/sc01_pairs.csv` | `NafisHandoko/ReworkAcademy` (**privat**) |
+| 118 gambar bukti transaksi | `final_project/Dataset PT Lokal Komoditi Indonesia/Bukti Transaksi Januari 2026/` | `NafisHandoko/ReworkAcademy` (privat) |
+| Daftar 65 pasangan | `final_project/Dataset PT Lokal Komoditi Indonesia/sc01/sc01_pairs.csv` | `NafisHandoko/ReworkAcademy` (privat) |
 | Harness dan test | `tests/sc01_*.py` | `ai-finance-assistant` (publik) |
 
-Karena itu langkah `--download` mengunduh gambar dari repo privat memakai
-`GITHUB_TOKEN`. Setelah gambar ada di disk, evaluasi berjalan sepenuhnya lokal
-dan tidak lagi menyentuh GitHub.
+Satu perintah `--download` mengambil keduanya: daftar pasangan dulu, lalu 65
+gambar yang disebutkan di dalamnya. Setelah itu evaluasi berjalan sepenuhnya
+lokal dan tidak lagi menyentuh GitHub.
 
-Daftar 65 pasangan itu isinya apa:
+Isi daftar pasangan:
 
 | Kolom | Arti |
 |---|---|
@@ -51,41 +80,15 @@ Daftar 65 pasangan itu isinya apa:
 | `kategori_acuan` | kategori yang ditetapkan Admin — inilah jawaban benar |
 | `baris_xlsx` | nomor baris di file Excel asli, untuk penelusuran |
 
-## Empat nilai yang harus diisi di `.env`
-
-```ini
-AI_API_KEY=sk-or-v1-...              # kunci OpenRouter
-AI_BASE_URL=https://openrouter.ai/api/v1
-AI_MODEL=deepseek/deepseek-v4.1-flash-1017
-
-SC01_PAIRS=dataset/sc01/sc01_pairs.csv
-SC01_IMAGES=dataset/Bukti Transaksi Januari 2026
-
-GITHUB_TOKEN=ghp_...                 # hanya untuk --download
-```
-
-`SC01_PAIRS` adalah daftar pasangan; unduh sekali dari repo privat:
-
-```bash
-mkdir -p dataset/sc01
-curl -L -H "Authorization: Bearer $GITHUB_TOKEN" \
-  "https://api.github.com/repos/NafisHandoko/ReworkAcademy/contents/final_project/Dataset%20PT%20Lokal%20Komoditi%20Indonesia/sc01/sc01_pairs.csv" \
-  -H "Accept: application/vnd.github.raw" \
-  -o dataset/sc01/sc01_pairs.csv
-```
-
-`SC01_IMAGES` boleh di mana saja. Bila dibiarkan kosong, `--download` akan
-meminta diisi lebih dulu.
-
 ## Tiga cara menjalankan
 
-### 1. Test cepat (gratis, di bawah 1 detik)
+### 1. Test cepat (gratis, sekitar 1 detik)
 
 ```bash
 pytest
 ```
 
-Menjalankan 9 test rumus metrik dan batas ruang lingkup. Tidak memanggil AI,
+Menjalankan 9 test rumus metrik dan batas ruang lingkup. Tidak memanggil AI dan
 tidak butuh dataset. Ini yang dijalankan di CI.
 
 ### 2. Runner (cara utama untuk mengukur)
@@ -94,9 +97,10 @@ tidak butuh dataset. Ini yang dijalankan di CI.
 python3 tests/sc01_harness.py
 ```
 
-Memanggil model asli pada 65 gambar, sekitar 15 menit dan biaya sekitar Rp1.100.
-Hasil ditulis bertahap, jadi bila terputus tinggal jalankan ulang perintah yang
-sama — yang sudah selesai tidak diulang.
+Memanggil model asli pada 65 gambar. Sekitar 10 sampai 20 menit, tergantung
+kecepatan respons model, dengan biaya sekitar Rp1.100. Hasil ditulis bertahap,
+jadi bila terputus tinggal jalankan perintah yang sama — yang sudah selesai
+tidak diulang.
 
 Untuk sekadar menghitung ulang dari hasil yang sudah ada, tanpa biaya:
 
@@ -120,8 +124,9 @@ Setiap run disimpan di `sc01-out/run-N/`, dan ringkasan rentangnya di
 SC01_RUN_MODEL=1 pytest -m sc01_model -v
 ```
 
-Sama seperti runner, tetapi hasilnya berupa lulus/gagal terhadap target 85%.
-Butuh opt-in karena berbayar dan lama; `pytest` biasa tidak akan menjalankannya.
+Sama seperti runner, tetapi hasilnya berupa lulus atau gagal terhadap target
+85%. Butuh opt-in karena berbayar dan lama; `pytest` biasa tidak akan
+menjalankannya.
 
 ## Keluaran
 
@@ -131,28 +136,31 @@ Butuh opt-in karena berbayar dan lama; `pytest` biasa tidak akan menjalankannya.
 | `sc01-out/metrik.json` | Angka yang sama dalam bentuk JSON |
 | `sc01-out/hasil_per_baris.csv` | Keluaran per gambar, termasuk nominal dan tanggal |
 
-Folder `sc01-out/` masuk `.gitignore` karena berisi data transaksi.
+Folder `sc01-out/` dan `dataset/` masuk `.gitignore` karena berisi data
+transaksi. Jangan hapus baris itu dari `.gitignore`.
 
 ## Kalau ada yang gagal
 
 | Gejala | Sebab dan solusi |
 |---|---|
-| `SC01_PAIRS belum diisi di .env` | Isi variabelnya, atau pakai `--pairs` |
-| `N dari 65 gambar tidak ada` | Jalankan `--download`, atau periksa `SC01_IMAGES` |
-| `GITHUB_TOKEN kosong` | Tambahkan token dengan akses baca ke `NafisHandoko/ReworkAcademy` |
+| `GITHUB_TOKEN kosong` | Isi token dengan akses baca ke `NafisHandoko/ReworkAcademy` |
+| `daftar pasangan belum ada` | Jalankan `--download` |
+| `N dari 65 gambar tidak ada` | Jalankan `--download`; yang sudah ada tidak diulang |
 | `AI_API_KEY kosong` | Isi kunci; SC-01 mengukur model asli, bukan mock |
-| `mode=mock` pada hasil | Panggilan AI gagal, lihat kolom `catatan` di CSV |
+| `mode=mock` pada hasil | Panggilan AI gagal; lihat kolom `catatan` di CSV |
 | Angka berbeda dari laporan | Model bersifat probabilistik; lihat catatan di bawah |
 
 ## Catatan tentang kestabilan angka
 
 Kode sudah mengirim `temperature: 0` pada payload `_vision_extract()`, tetapi
-hasilnya tidak dapat diulang. Empat eksekusi berturut-turut pada 65 gambar yang
-sama memberi akurasi 15,4%, 13,8%, 12,3%, dan 4,6% — rentang 10,8 poin persen.
+hasilnya tidak dapat diulang. Lima eksekusi berturut-turut pada 65 gambar yang
+sama memberi akurasi 15,4%, 13,8%, 12,3%, 4,6%, dan 7,7% — rentang 10,8 poin
+persen.
 
-Keempatnya memakai kode identik dan semuanya bermode `vision`, tanpa galat dan
-tanpa kategori kosong. Jadi ini bukan kegagalan teknis, melainkan model yang
-memang menjawab berbeda-beda antar-run.
+Kelima run memakai kode identik dan hampir semuanya bermode `vision`. Satu baris
+pada run terakhir jatuh ke `mock` karena model membalas `content: null`, yang
+memicu galat di `main.py` baris 135 lalu ditangkap sebagai kegagalan. Jadi
+sebagian variasi berasal dari model, sebagian kecil dari jalur galat itu.
 
 Penyebab yang paling mungkin adalah model penalaran (`deepseek-v4.1-flash-1017`)
 yang tidak menjamin determinisme penuh lewat API pihak ketiga, ditambah tidak
