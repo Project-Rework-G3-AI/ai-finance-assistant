@@ -10,7 +10,7 @@ Kunci yang dikenali:
     SC01_IMAGES       folder gambar bukti transaksi
     GITHUB_TOKEN      dipakai hanya oleh `--download` untuk mengunduh dataset
                       dari repo privat
-    GITHUB_DATASET_REPO   default: NafisHandoko/ReworkAcademy
+    GITHUB_DATASET_REPO   default: NafisHandoko/rework-ai-finance-assistant-dataset
     GITHUB_DATASET_DIR    folder dataset di dalam repo tersebut
 
 Kedua kunci SC01_* punya nilai bawaan yang masuk akal, jadi `.env` baru dari
@@ -26,12 +26,13 @@ from pathlib import Path
 AKAR = Path(__file__).resolve().parents[1]
 
 # Repo dataset bersifat privat: berisi bukti transaksi perusahaan. Jangan
-# dipindahkan ke repo aplikasi yang publik.
-REPO_DATASET = os.getenv("GITHUB_DATASET_REPO", "NafisHandoko/ReworkAcademy").strip()
-DIR_DATASET = os.getenv(
-    "GITHUB_DATASET_DIR",
-    "final_project/Dataset PT Lokal Komoditi Indonesia",
+# dipindahkan ke repo aplikasi yang publik, dan jangan pakai repo pribadi
+# seseorang — semua anggota kelompok harus bisa mengaksesnya.
+REPO_DATASET = os.getenv(
+    "GITHUB_DATASET_REPO", "NafisHandoko/rework-ai-finance-assistant-dataset"
 ).strip()
+# Folder dataset di dalam repo tersebut. Kosong berarti berkas ada di akar repo.
+DIR_DATASET = os.getenv("GITHUB_DATASET_DIR", "").strip()
 SUB_DIR_IMAGES = "Bukti Transaksi Januari 2026"
 SUB_DIR_PAIRS = "sc01/sc01_pairs.csv"
 
@@ -118,6 +119,13 @@ def _token(nilai: str | None = None) -> str:
     return token
 
 
+def _jalur_repo(*bagian: str) -> str:
+    """Rangkai jalur di dalam repo dataset, tanpa garis miring berlebih."""
+    potong = [DIR_DATASET] if DIR_DATASET else []
+    potong.extend(bagian)
+    return "/".join(p.strip("/") for p in potong if p.strip("/"))
+
+
 def _ambil_github(jalur: str, token: str) -> bytes:
     """Ambil satu berkas mentah dari repo dataset privat."""
     import urllib.parse
@@ -146,7 +154,7 @@ def unduh_pasangan(tujuan: Path | None = None,
     token = _token(token)
     tujuan.parent.mkdir(parents=True, exist_ok=True)
     print(f"mengunduh daftar pasangan ke: {tujuan}")
-    tujuan.write_bytes(_ambil_github(f"{DIR_DATASET}/{SUB_DIR_PAIRS}", token))
+    tujuan.write_bytes(_ambil_github(_jalur_repo(SUB_DIR_PAIRS), token))
     return tujuan
 
 
@@ -171,7 +179,7 @@ def unduh_gambar(tujuan: Path | None = None, token: str | None = None,
             continue
         try:
             dst.write_bytes(
-                _ambil_github(f"{DIR_DATASET}/{SUB_DIR_IMAGES}/{nama}", token))
+                _ambil_github(_jalur_repo(SUB_DIR_IMAGES, nama), token))
         except Exception as e:
             print(f"  GAGAL {nama}: {str(e)[:70]}")
             gagal += 1

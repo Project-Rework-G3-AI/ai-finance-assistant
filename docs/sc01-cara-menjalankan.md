@@ -50,23 +50,59 @@ bawaan yang cocok dengan hasil `--download`:
 
 Isi hanya bila ingin menaruh data di tempat lain.
 
-## Di mana 65 data itu disimpan
+## Di mana data itu disimpan
 
-Data evaluasi **tidak ada di repo aplikasi**. Repo `ai-finance-assistant`
-bersifat publik, sedangkan bukti transaksi berisi data keuangan perusahaan.
-Datanya ada di repo terpisah yang privat.
+Data evaluasi **tidak ada di repo aplikasi**. Repo `ai-finance-assistant` bersifat
+publik, sedangkan bukti transaksi berisi data keuangan riil perusahaan. Data ada
+di repo terpisah yang privat.
 
-| Berkas | Lokasi | Repo |
+| Repo | Isi | Akses |
 |---|---|---|
-| 118 gambar bukti transaksi | `final_project/Dataset PT Lokal Komoditi Indonesia/Bukti Transaksi Januari 2026/` | `NafisHandoko/ReworkAcademy` (privat) |
-| Daftar 65 pasangan | `final_project/Dataset PT Lokal Komoditi Indonesia/sc01/sc01_pairs.csv` | `NafisHandoko/ReworkAcademy` (privat) |
-| Harness dan test | `tests/sc01_*.py` | `ai-finance-assistant` (publik) |
+| `NafisHandoko/rework-ai-finance-assistant-dataset` | Seluruh dataset: 118 foto, 3 Cash Report, 2 mutasi, SOP, dan `sc01/sc01_pairs.csv` | Privat, seluruh anggota kelompok diundang sebagai collaborator |
+| `Project-Rework-G3-AI/ai-finance-assistant` | Kode, test, dan dokumentasi | Publik |
 
-Satu perintah `--download` mengambil keduanya: daftar pasangan dulu, lalu 65
-gambar yang disebutkan di dalamnya. Setelah itu evaluasi berjalan sepenuhnya
-lokal dan tidak lagi menyentuh GitHub.
+Repo dataset sengaja dipisah supaya satu orang tidak menjadi jalan satu-satunya.
+Setiap anggota kelompok memakai **token GitHub pribadinya** dan cukup diundang
+sekali sebagai collaborator.
 
-Isi daftar pasangan:
+### Mengundang anggota kelompok
+
+Repo dataset ada di akun pribadi, jadi anggota lain harus diundang dulu. Sekali
+saja, atas izin pemilik repo:
+
+1. Buka `https://github.com/NafisHandoko/rework-ai-finance-assistant-dataset`
+2. Masuk **Settings**, lalu **Collaborators**
+3. Klik **Add people**, masukkan username GitHub anggota, pilih akses **Read**
+4. Ulangi untuk setiap anggota
+
+Setelah diundang, anggota menerima email dan harus menyetujui undangan itu.
+Tanpa persetujuan, repo tetap tidak terlihat oleh mereka.
+
+Bila nanti repo dipindahkan ke organisasi `Project-Rework-G3-AI`, tidak perlu
+undang satu-satu lagi: setelan org saat ini memberi akses baca bawaan ke semua
+anggota, sehingga repo privat baru otomatis terbaca oleh seluruh anggota.
+
+### Token yang dipakai anggota
+
+Setiap anggota membuat token sendiri di
+`https://github.com/settings/tokens`, cukup dengan cakupan **`repo`** (klasik)
+atau **Contents: Read** pada repo dataset (fine-grained). Token milik pemilik
+repo tidak boleh dibagikan, dan memang tidak perlu.
+
+### Isi repo dataset
+
+| Folder | Jumlah | Isi |
+|---|---|---|
+| `Bukti Transaksi Januari 2026/` | 118 foto | Bukti transaksi |
+| `Cash Report dan Mutasi Rekening/` | 5 berkas | 3 Cash Report (BNI, BRI, Operasional), 2 mutasi PDF |
+| `SOP Keuangan/` | 3 berkas | Draf SOP |
+| `sc01/sc01_pairs.csv` | 1 berkas | Daftar 65 pasangan gambar ke baris Cash Report |
+
+Satu perintah `--download` mengambil daftar pasangan dulu, lalu 65 gambar yang
+disebut di dalamnya. Setelah itu evaluasi berjalan sepenuhnya lokal dan tidak
+lagi menyentuh GitHub.
+
+Isi `sc01_pairs.csv`:
 
 | Kolom | Arti |
 |---|---|
@@ -75,10 +111,33 @@ Isi daftar pasangan:
 | `nominal_gambar` | nominal yang terbaca pada gambar |
 | `nominal_acuan` | nominal pada baris Cash Report |
 | `fee` | biaya transfer bila ada |
-| `bank` | kantong (BNI, BRI, Jago, TUNAI) |
+| `bank` | kantor bank yang menangani |
 | `keterangan_gambar` | keterangan pada bukti |
-| `kategori_acuan` | kategori yang ditetapkan Admin — inilah jawaban benar |
-| `baris_xlsx` | nomor baris di file Excel asli, untuk penelusuran |
+| `kategori_acuan` | kategori yang ditetapkan Admin, dipakai sebagai jawaban benar |
+| `baris_xlsx` | nomor baris di berkas Excel Cash Report |
+
+Dari 118 foto, hanya 65 yang bisa dipasangkan 1:1 ke baris Cash Report lewat
+tanggal dan nominal. Sisanya tidak dipakai.
+
+## Kalau sudah punya dataset sendiri
+
+Bila kamu sudah meng-clone repo dataset, tidak perlu `--download`. Cukup arahkan
+`SC01_PAIRS` dan `SC01_IMAGES` ke folder hasil clone:
+
+```ini
+SC01_PAIRS=../rework-ai-finance-assistant-dataset/sc01/sc01_pairs.csv
+SC01_IMAGES=../rework-ai-finance-assistant-dataset/Bukti Transaksi Januari 2026
+```
+
+Atau tanpa menyunting `.env`, sebut langsung di perintah:
+
+```bash
+python3 tests/sc01_harness.py \
+  --pairs ../rework-ai-finance-assistant-dataset/sc01/sc01_pairs.csv \
+  --images "../rework-ai-finance-assistant-dataset/Bukti Transaksi Januari 2026"
+```
+
+Cara ini tidak butuh `GITHUB_TOKEN` sama sekali, karena tidak ada yang diunduh.
 
 ## Tiga cara menjalankan
 
@@ -143,7 +202,7 @@ transaksi. Jangan hapus baris itu dari `.gitignore`.
 
 | Gejala | Sebab dan solusi |
 |---|---|
-| `GITHUB_TOKEN kosong` | Isi token dengan akses baca ke `NafisHandoko/ReworkAcademy` |
+| `GITHUB_TOKEN kosong` | Isi token pribadimu; minta akses ke repo dataset bila belum diundang |
 | `daftar pasangan belum ada` | Jalankan `--download` |
 | `N dari 65 gambar tidak ada` | Jalankan `--download`; yang sudah ada tidak diulang |
 | `AI_API_KEY kosong` | Isi kunci; SC-01 mengukur model asli, bukan mock |

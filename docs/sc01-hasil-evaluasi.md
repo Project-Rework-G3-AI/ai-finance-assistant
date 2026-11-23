@@ -66,12 +66,14 @@ publik dan datanya berisi transaksi perusahaan.
 
 | Berkas | Lokasi |
 |---|---|
-| Daftar 65 pasangan | `sc01/sc01_pairs.csv` di repo privat `NafisHandoko/ReworkAcademy` |
+| Daftar 65 pasangan | `sc01/sc01_pairs.csv` di repo privat `NafisHandoko/rework-ai-finance-assistant-dataset` |
 | 118 gambar bukti | `Bukti Transaksi Januari 2026/` di repo yang sama |
 | Harness dan test | `tests/sc01_*.py` di repo ini |
 
-`--download` mengunduh gambar dari repo privat memakai `GITHUB_TOKEN`. Setelah
-ada di disk, evaluasi berjalan lokal sepenuhnya.
+Repo dataset dipisah dan privat supaya seluruh anggota kelompok bisa mengakses
+data yang sama, tidak bergantung pada satu orang. `--download` mengambil daftar
+pasangan lalu gambarnya memakai `GITHUB_TOKEN` pribadi masing-masing. Setelah ada
+di disk, evaluasi berjalan lokal sepenuhnya.
 
 ## Mengapa 65, bukan 132
 
