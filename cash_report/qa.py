@@ -267,7 +267,7 @@ def format_rekap(awal: date, items: list[tuple[str, dict]], tot: dict) -> str:
             bagian.append(f"(verified) {_rp(e['vm'] - e['vk'])}")
         if e["dn"]:
             bagian.append(f"(draft) {_rp(e['dm'] - e['dk'])}")
-        baris = f"• {html.escape(k)} — {' · '.join(bagian)}"
+        baris = f"• {html.escape(k)}: {' · '.join(bagian)}"
         if e["vn"] and e["dn"]:
             # kategori campuran: total gabungan verified + draft di sampingnya
             total = (e["vm"] - e["vk"]) + (e["dm"] - e["dk"])
