@@ -14,6 +14,7 @@ ROWS = [
     ["2026-10-31", "BRI", "999", "", "Listrik PLN", "bulan lalu", "verified", "", "tg:d", "", ""],
     ["", "", "", "", "", "", "", "", "", "", ""],
     ["2026-11-05", "BRI", "70000", "", "Listrik PLN", "tagihan", "VERIFIED", "", "tg:e", "", ""],
+    ["2026-11-07", "BRI", "30000", "", "Transfer Antar Bank", "pindah draft", "draft", "", "tg:f", "", ""],
 ]
 
 AWAL, AKHIR = date(2026, 11, 1), date(2026, 12, 1)
@@ -56,17 +57,19 @@ def test_aggregate_verified_draft_terpisah():
     assert tot["verified"]["n"] == 2
     assert tot["draft"]["keluar"] == 50000
     assert tot["draft"]["n"] == 1
-    assert tot["transfer"] == 60000
-    assert tot["transfer_n"] == 2
+    assert tot["transfer"]["verified"] == 60000
+    assert tot["transfer"]["draft"] == 30000
+    assert tot["transfer"]["n_verified"] == 2
+    assert tot["transfer"]["n_draft"] == 1
 
 
 def test_aggregate_arah_tidak_memutus_transfer():
     tot = qa.aggregate(ROWS, AWAL, AKHIR, arah="keluar")
     assert tot["draft"]["keluar"] == 50000
-    assert tot["transfer"] == 60000
+    assert tot["transfer"]["verified"] == 60000
     tot = qa.aggregate(ROWS, AWAL, AKHIR, arah="masuk")
     assert tot["verified"]["masuk"] == 170000
-    assert tot["transfer"] == 60000
+    assert tot["transfer"]["verified"] == 60000
 
 
 def test_aggregate_kategori():
@@ -103,7 +106,11 @@ def test_command_reply():
     out = qa.command_reply("/total Nov", _load)
     assert "Total November 2026" in out
     assert "Rp170,000" in out and "Draft" in out and "Verified" in out
-    assert qa.command_reply("/total", _load).startswith("Format:")
+    # transfer terpisah verified/draft (baris draft ditambahkan di ROWS)
+    assert "verified Rp60,000" in out and "draft Rp30,000" in out
+    # /total polos = bulan berjalan (Telegram mengirim command dari menu
+    # sebelum user sempat mengetik bulan)
+    assert "Total" in qa.command_reply("/total", _load)
     assert qa.command_reply("/total kapan", _load).startswith("Format:")
     assert "Rekap" in qa.command_reply("/rekap Nov", _load)
     assert qa.command_reply("/help", _load) == qa.HELP
@@ -118,4 +125,4 @@ def test_balasan_html_aman_dari_tag_mentah():
     for teks in (qa.HELP, qa.FALLBACK, qa._FORMAT_ERROR):
         sisa = tag_izin.sub("", teks)
         assert "<" not in sisa and ">" not in sisa, teks
-    assert "&lt;bulan&gt;" in qa.HELP
+    assert "&lt;bulan&gt;" in qa._FORMAT_ERROR
