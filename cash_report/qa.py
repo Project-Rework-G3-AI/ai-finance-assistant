@@ -35,7 +35,7 @@ BULAN = {
 # Telegram sebagai tag tak dikenal (error 400 saat /help).
 HELP = (
     "Tanya-jawab Cash Report:\n"
-    "/total &lt;bulan&gt; — total masuk/keluar (contoh: /total Nov, /total 2026-11)\n"
+    "/total [bulan] — total masuk/keluar, default bulan ini (contoh: /total Nov)\n"
     "/rekap [bulan] — rincian per kategori (default bulan ini)\n"
     "/help — bantuan ini\n"
     'Atau tulis bebas, mis. "berapa pengeluaran November kategori Listrik?"'
@@ -164,13 +164,14 @@ def aggregate(rows: list, awal: date, akhir: date,
     tot = {
         "verified": {"masuk": 0.0, "keluar": 0.0, "n": 0},
         "draft": {"masuk": 0.0, "keluar": 0.0, "n": 0},
-        "transfer": 0.0,
-        "transfer_n": 0,
+        "transfer": {"verified": 0.0, "draft": 0.0, "n_verified": 0, "n_draft": 0},
     }
     for x in _pilih(rows, awal, akhir, None, kategori):
         if _is_transfer(x["kategori"]):
-            tot["transfer"] += x["masuk"]  # sisi masuk pasangan; sisi keluar ikut sama
-            tot["transfer_n"] += 1
+            st = "verified" if x["status"] == "verified" else "draft"
+            # sisi masuk pasangan; sisi keluar ikut sama
+            tot["transfer"][st] += x["masuk"]
+            tot["transfer"]["n_" + st] += 1
             continue
         if arah == "masuk" and x["masuk"] <= 0:
             continue
@@ -246,8 +247,12 @@ def format_total(awal: date, tot: dict) -> str:
         f"Verified: masuk {_rp(v['masuk'])} · keluar {_rp(v['keluar'])} · saldo {_rp(saldo)}",
         f"Draft: masuk {_rp(d['masuk'])} · keluar {_rp(d['keluar'])} ({d['n']} baris — belum verified)",
     ]
-    if tot["transfer_n"]:
-        lines.append(f"Transfer antar kantong: {_rp(tot['transfer'])} ({tot['transfer_n']} baris, di luar total)")
+    tr = tot["transfer"]
+    if tr["n_verified"] or tr["n_draft"]:
+        lines.append(
+            f"Transfer antar kantong: verified {_rp(tr['verified'])} ({tr['n_verified']} baris) · "
+            f"draft {_rp(tr['draft'])} ({tr['n_draft']} baris) — di luar total"
+        )
     lines.append("<i>Sumber: TRANSAKSI (Cash Report)</i>")
     return "\n".join(lines)
 
@@ -265,8 +270,11 @@ def format_rekap(awal: date, items: list[tuple[str, dict]], tot: dict) -> str:
     v, d = tot["verified"], tot["draft"]
     lines.append(f"Total verified: masuk {_rp(v['masuk'])} · keluar {_rp(v['keluar'])}")
     lines.append(f"Total draft: masuk {_rp(d['masuk'])} · keluar {_rp(d['keluar'])} ({d['n']} baris)")
-    if tot["transfer_n"]:
-        lines.append(f"Transfer: {_rp(tot['transfer'])} (di luar total)")
+    tr = tot["transfer"]
+    if tr["n_verified"] or tr["n_draft"]:
+        lines.append(
+            f"Transfer: verified {_rp(tr['verified'])} · draft {_rp(tr['draft'])} (di luar total)"
+        )
     lines.append("<i>Sumber: TRANSAKSI (Cash Report)</i>")
     return "\n".join(lines)
 
@@ -299,12 +307,13 @@ def command_reply(text: str, load_rows) -> str | None:
         return HELP
     if cmd not in ("/total", "/rekap"):
         return HELP
-    arg = parts[1] if len(parts) > 1 else ("" if cmd == "/rekap" else None)
-    if cmd == "/total" and arg is None:
-        return _FORMAT_ERROR
-    periode = parse_period(arg or "")
+    # Tanpa argumen = bulan berjalan. Telegram mengirim command dari menu
+    # otomatis sebelum user sempat mengetik bulannya, jadi /total polos
+    # harus tetap memberi jawaban berguna.
+    arg = parts[1] if len(parts) > 1 else ""
+    periode = parse_period(arg)
     if periode is None:
-        return _FORMAT_ERROR if cmd == "/total" else f"Format: /rekap [bulan] — contoh: /rekap Nov"
+        return _FORMAT_ERROR if cmd == "/total" else "Format: /rekap [bulan] — contoh: /rekap Nov"
     awal, akhir = periode
     rows = load_rows(str(awal.year))
     tot = aggregate(rows, awal, akhir)
