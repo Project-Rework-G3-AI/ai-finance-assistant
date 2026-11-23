@@ -33,6 +33,7 @@ REPO_DATASET = os.getenv(
 ).strip()
 # Folder dataset di dalam repo tersebut. Kosong berarti berkas ada di akar repo.
 DIR_DATASET = os.getenv("GITHUB_DATASET_DIR", "").strip()
+BRANCH_DATASET = os.getenv("GITHUB_DATASET_BRANCH", "main").strip()
 SUB_DIR_IMAGES = "Bukti Transaksi Januari 2026"
 SUB_DIR_PAIRS = "sc01/sc01_pairs.csv"
 
@@ -109,14 +110,14 @@ def ready(abaikan_ai: bool = False) -> tuple[bool, str]:
     return True, f"{len(baris)} pasangan siap diuji"
 
 
-def _token(nilai: str | None = None) -> str:
-    token = (nilai or os.getenv("GITHUB_TOKEN", "")).strip()
-    if not token:
-        raise SystemExit(
-            "GITHUB_TOKEN kosong. Tambahkan ke .env untuk mengunduh dataset privat.\n"
-            "Butuh token dengan akses baca ke " + REPO_DATASET
-        )
-    return token
+def _token(nilai: str | None = None) -> str | None:
+    """Token GitHub, bila ada. Repo dataset publik, jadi token tidak wajib.
+
+    Dibiarkan opsional supaya anggota tidak perlu membuat token hanya untuk
+    mengunduh data. Bila nanti repo dijadikan privat lagi, token tetap dipakai
+    secara otomatis tanpa perubahan kode.
+    """
+    return (nilai or os.getenv("GITHUB_TOKEN", "")).strip() or None
 
 
 def _jalur_repo(*bagian: str) -> str:
@@ -126,10 +127,23 @@ def _jalur_repo(*bagian: str) -> str:
     return "/".join(p.strip("/") for p in potong if p.strip("/"))
 
 
-def _ambil_github(jalur: str, token: str) -> bytes:
-    """Ambil satu berkas mentah dari repo dataset privat."""
+def _ambil_github(jalur: str, token: str | None = None) -> bytes:
+    """Ambil satu berkas mentah dari repo dataset.
+
+    Repo publik dilayani lewat `raw.githubusercontent.com`, yang tidak memakai
+    kuota API. Cara ini perlu karena kuota anonim API GitHub hanya 60 permintaan
+    per jam, sedangkan satu kali unduh butuh 66 permintaan.
+
+    Bila token tersedia, API biasa dipakai supaya repo privat tetap bekerja.
+    """
     import urllib.parse
     import urllib.request
+
+    if not token:
+        url = (f"https://raw.githubusercontent.com/{REPO_DATASET}/"
+               f"{BRANCH_DATASET}/{urllib.parse.quote(jalur)}")
+        return urllib.request.urlopen(
+            urllib.request.Request(url), timeout=60).read()
 
     url = (f"https://api.github.com/repos/{REPO_DATASET}/contents/"
            f"{urllib.parse.quote(jalur)}")

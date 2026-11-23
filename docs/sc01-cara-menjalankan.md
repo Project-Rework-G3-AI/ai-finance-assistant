@@ -58,27 +58,28 @@ di repo terpisah yang privat.
 
 | Repo | Isi | Akses |
 |---|---|---|
-| `Project-Rework-G3-AI/rework-ai-finance-assistant-dataset` | Seluruh dataset: 118 foto, 3 Cash Report, 2 mutasi, SOP, dan `sc01/sc01_pairs.csv` | Privat, terbaca seluruh anggota organisasi |
+| `Project-Rework-G3-AI/rework-ai-finance-assistant-dataset` | Seluruh dataset: 118 foto, 3 Cash Report, 2 mutasi, SOP, dan `sc01/sc01_pairs.csv` | Publik |
 | `Project-Rework-G3-AI/ai-finance-assistant` | Kode, test, dan dokumentasi | Publik |
 
-Repo dataset sengaja dipisah supaya data perusahaan tidak masuk repo publik.
-Keduanya sudah berada di organisasi yang sama, jadi **tidak perlu mengundang
-anggota satu per satu**: setelan organisasi memberi akses baca bawaan kepada
-semua anggota, sehingga repo dataset otomatis terbaca.
+Repo dataset sengaja dipisah dari repo aplikasi. Keduanya ada di organisasi
+yang sama, dan repo dataset kini publik, jadi siapa pun bisa mengunduh datanya
+tanpa perlu diundang atau memakai token.
 
-Anggota yang baru bergabung cukup memastikan dirinya sudah masuk organisasi
-`Project-Rework-G3-AI`. Bila repo dataset tidak terlihat, minta pemilik
-organisasi memeriksa **People** di halaman organisasi.
+### Token GitHub tidak lagi diperlukan
 
-### Token yang dipakai anggota
+`--download` bekerja tanpa `GITHUB_TOKEN`. Berkas diambil lewat
+`raw.githubusercontent.com`, yang tidak memakai kuota API. Ini perlu karena
+kuota anonim API GitHub hanya 60 permintaan per jam, sedangkan satu kali unduh
+butuh 66 permintaan.
 
-Setiap anggota memakai token GitHub pribadinya, dibuat di
-`https://github.com/settings/tokens`, dengan cakupan **`repo`** (klasik) atau
-**Contents: Read** pada repo dataset (fine-grained). Token milik orang lain tidak
-perlu dipinjam dan tidak boleh dibagikan.
+`GITHUB_TOKEN` tetap dihormati bila diisi, dan berguna bila repo dataset suatu
+saat dijadikan privat lagi. Untuk penggunaan normal, biarkan kosong.
 
-`GITHUB_TOKEN` hanya dibutuhkan bila memakai `--download`. Kalau dataset sudah
-di-clone manual, langkah itu tidak perlu dan token tidak dipakai.
+### Catatan privasi
+
+Repo dataset berisi data keuangan riil: nama pihak, nomor rekening, nominal, dan
+bukti transfer. Jangan mengunggah ulang isinya ke layanan lain, dan jangan
+menyebarkan tangkapan layarnya tanpa menyensor nomor rekening serta nama pihak.
 
 ### Isi repo dataset
 
