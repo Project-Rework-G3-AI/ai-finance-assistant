@@ -91,13 +91,36 @@ def _gabung_keterangan(llm_ket: str, caption: str, filename: str) -> str:
         return f"{llm} — {cap}"
     return llm or cap or filename
 
+def _parse_tanggal_ke_datetime(raw_tanggal: object) -> tuple[datetime, bool]:
+    """Mengubah nilai tanggal dari AI menjadi datetime.
+
+    Mengembalikan (dt, valid_dari_ai).
+    """
+    if isinstance(raw_tanggal, datetime):
+        return raw_tanggal, True
+
+    teks = str(raw_tanggal or "").strip()
+    if not teks:
+        return datetime.now(), False
+
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(teks[:19], fmt), True
+        except ValueError:
+            continue
+
+    with suppress(ValueError):
+        return datetime.fromisoformat(teks), True
+
+    return datetime.now(), False
+
 
 async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes: bytes, caption: str) -> dict:
     b64 = base64.b64encode(image_bytes).decode()
     mime = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
     prompt = (
         "Ekstrak data transaksi dari bukti ini. Balas HANYA JSON tanpa teks lain: "
-        '{"tanggal":"YYYY-MM-DD","keterangan":"...","nominal":number,'
+        '{"tanggal":"YYYY-MM-DD HH:MM:SS","keterangan":"...","nominal":number,'
         '"arah":"masuk|keluar|transfer",'
         f'"kategori":"satu dari: {KAT.PROMPT_KATEGORI}",'
         '"bank":"kantong asal dana — salah satu dari: BRI, BNI, Jago, TUNAI; '
@@ -139,9 +162,10 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
     data = json.loads(m.group(0))
     arah = str(data.get("arah", "")).lower()
     keterangan = _gabung_keterangan(str(data.get("keterangan") or ""), caption, filename)
+    tanggal_dt, tanggal_valid = _parse_tanggal_ke_datetime(data.get("tanggal"))
 
     notes = []
-    if not data.get("tanggal"):
+    if not tanggal_valid:
         notes.append("tanggal tidak terbaca — pakai hari ini")
     if not data.get("nominal"):
         notes.append("nominal tidak terbaca — isi manual")
@@ -159,7 +183,7 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
         catatan += " (" + ", ".join(notes) + ")"
 
     return {
-        "tanggal": str(data.get("tanggal") or datetime.now().strftime("%Y-%m-%d")),
+        "tanggal": tanggal_dt,
         "keterangan": keterangan,
         "nominal": int(data["nominal"]) if data.get("nominal") else None,
         "arah": arah if arah in ("masuk", "keluar", "transfer") else "keluar",
@@ -356,8 +380,19 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
     """
     if not CR_FOLDER_ID or not CR_TEMPLATE_ID:
         raise RuntimeError("CASH_REPORT_FOLDER_ID / CASH_REPORT_TEMPLATE_ID belum diisi")
-    tanggal = str(rec.get("tanggal") or datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d"))
-    year = tanggal[:4]
+    raw_tgl = rec.get("tanggal")
+    if isinstance(raw_tgl, datetime):
+        dt = raw_tgl
+    elif isinstance(raw_tgl, str) and raw_tgl.strip():
+        try:
+            dt = datetime.fromisoformat(raw_tgl.strip())
+        except ValueError:
+            dt = datetime.now(ZoneInfo("Asia/Jakarta"))
+    else:
+        dt = datetime.now(ZoneInfo("Asia/Jakarta"))
+
+    tanggal = dt.strftime("%Y-%m-%d %H:%M:%S")
+    year = dt.strftime("%Y")
     kantong = str(rec.get("bank") or "").strip().upper() or CR_DEFAULT_BANK
 
     year_folder = _find_or_create_folder(year, CR_FOLDER_ID)
