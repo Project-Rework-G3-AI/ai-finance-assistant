@@ -231,7 +231,8 @@ def find_receipt(rows: list, ref_id: str) -> str | None:
 # ---------- format balasan ----------
 
 def _rp(n: float) -> str:
-    return f"Rp{n:,.0f}"
+    # tanda minus di depan simbol (-Rp53.407), bukan Rp-53.407
+    return f"-Rp{abs(n):,.0f}" if n < 0 else f"Rp{n:,.0f}"
 
 
 def _periode_label(awal: date) -> str:

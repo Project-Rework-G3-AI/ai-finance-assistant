@@ -92,7 +92,7 @@ def test_format_rekap_inisial_dan_total_gabungan():
     garis_listrik = next(l for l in out.splitlines() if "Listrik" in l)
     garis_pendapatan = next(l for l in out.splitlines() if "Penjualan" in l)
     assert "(verified) Rp70,000" in garis_listrik      # Listrik: verified net +70k
-    assert "(draft) Rp-50,000" in garis_listrik        # Listrik: draft net -50k
+    assert "(draft) -Rp50,000" in garis_listrik    # Listrik: draft net -50k
     assert "total Rp20,000" in garis_listrik           # campuran: 70k - 50k
     assert "total" not in garis_pendapatan             # kategori tunggal tanpa total
     assert "(verified) Rp100,000" in garis_pendapatan
