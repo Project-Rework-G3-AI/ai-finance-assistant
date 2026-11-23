@@ -84,7 +84,10 @@ def _tgl(v) -> date | None:
     s = str(v or "").strip()
     if not s:
         return None
-    for f in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%d-%m-%Y"):
+    # %d-%b-%y = tampilan default Sheets en_US ("6-Jan-26") — format yang
+    # paling sering muncul di TRANSAKSI; tanpa ini filter periode nihil.
+    for f in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%d-%m-%Y",
+              "%d-%b-%y", "%d-%b-%Y", "%b %d, %Y"):
         try:
             return datetime.strptime(s, f).date()
         except ValueError:
@@ -93,9 +96,20 @@ def _tgl(v) -> date | None:
 
 
 def _num(v) -> float:
+    """Terima angka mentah maupun tampilan 'Rp40,400' / '40.400' (get_values
+    mengembalikan hasil render sel, bukan nilai mentah)."""
+    s = re.sub(r"[^\d.,-]", "", str(v or ""))
+    if not s:
+        return 0.0
+    if "," in s and "." in s:
+        s = s.replace(".", "").replace(",", ".") if s.rfind(",") > s.rfind(".") else s.replace(",", "")
+    elif "," in s:
+        s = s.replace(",", "") if re.fullmatch(r"-?\d{1,3}(,\d{3})+", s) else s.replace(",", ".")
+    elif "." in s and re.fullmatch(r"-?\d{1,3}(\.\d{3})+", s):
+        s = s.replace(".", "")
     try:
-        return float(str(v).replace(",", ""))
-    except (TypeError, ValueError):
+        return float(s)
+    except ValueError:
         return 0.0
 
 

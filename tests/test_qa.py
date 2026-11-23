@@ -28,6 +28,27 @@ def test_parse_period():
     assert qa.parse_period("abc") is None
 
 
+def test_tgl_format_sheets_en_us():
+    # Tampilan default Sheets en_US: "6-Jan-26" — tanpa ini /total nihil.
+    assert qa._tgl("6-Jan-26") == date(2026, 1, 6)
+    assert qa._tgl("24-Jan-26") == date(2026, 1, 24)
+    assert qa._tgl("2026-11-05") == date(2026, 11, 5)
+    assert qa._tgl("11/20/2026") == date(2026, 11, 20)
+    assert qa._tgl("20/11/2026") == date(2026, 11, 20)
+    assert qa._tgl("bukan tanggal") is None
+    assert qa._tgl("") is None
+
+
+def test_num_tampilan_dan_mentah():
+    # Sel nominal tampil "Rp40,400"; get_values mengembalikan tampilan itu.
+    assert qa._num("Rp40,400") == 40400
+    assert qa._num("Rp40.400") == 40400
+    assert qa._num("40400") == 40400
+    assert qa._num("1,234.56") == 1234.56
+    assert qa._num("") == 0
+    assert qa._num("kosong") == 0
+
+
 def test_aggregate_verified_draft_terpisah():
     tot = qa.aggregate(ROWS, AWAL, AKHIR)
     assert tot["verified"]["masuk"] == 170000  # 100k + 70k, transfer & Oktober excluded
