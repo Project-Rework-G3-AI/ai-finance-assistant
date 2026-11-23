@@ -88,3 +88,13 @@ def test_command_reply():
     assert qa.command_reply("/help", _load) == qa.HELP
     assert qa.command_reply("/mulu", _load) == qa.HELP
     assert qa.command_reply("halo bot", _load) is None
+
+
+def test_balasan_html_aman_dari_tag_mentah():
+    """Telegram parse_mode=HTML menolak '<bulan>' (bug 400 di /help)."""
+    import re
+    tag_izin = re.compile(r"</?(?:b|i)>")
+    for teks in (qa.HELP, qa.FALLBACK, qa._FORMAT_ERROR):
+        sisa = tag_izin.sub("", teks)
+        assert "<" not in sisa and ">" not in sisa, teks
+    assert "&lt;bulan&gt;" in qa.HELP

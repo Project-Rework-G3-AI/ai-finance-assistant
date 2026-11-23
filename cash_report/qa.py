@@ -31,17 +31,19 @@ BULAN = {
     "nov": 11, "november": 11, "des": 12, "dec": 12, "desember": 12, "december": 12,
 }
 
+# &lt;/&gt; wajib: balasan dikirim dengan parse_mode=HTML, "<bulan>" ditolak
+# Telegram sebagai tag tak dikenal (error 400 saat /help).
 HELP = (
     "Tanya-jawab Cash Report:\n"
-    "/total <bulan> — total masuk/keluar (contoh: /total Nov, /total 2026-11)\n"
+    "/total &lt;bulan&gt; — total masuk/keluar (contoh: /total Nov, /total 2026-11)\n"
     "/rekap [bulan] — rincian per kategori (default bulan ini)\n"
     "/help — bantuan ini\n"
     'Atau tulis bebas, mis. "berapa pengeluaran November kategori Listrik?"'
 )
 
-FALLBACK = "AI sedang tidak tersedia. Coba /total <bulan> atau /rekap."
+FALLBACK = "AI sedang tidak tersedia. Coba /total &lt;bulan&gt; atau /rekap."
 
-_FORMAT_ERROR = "Format: /total <bulan> — contoh: /total Nov, /total 2026-11"
+_FORMAT_ERROR = "Format: /total &lt;bulan&gt; — contoh: /total Nov, /total 2026-11"
 
 
 def _ai() -> tuple[str, str, str]:
@@ -335,7 +337,8 @@ SYSTEM = (
     "2. Angka verified dan draft disebut terpisah; draft bukan angka resmi.\n"
     "3. Transfer antar kantong bukan pemasukan/pengeluaran.\n"
     "4. Sebut sumbernya: periode dan TRANSAKSI.\n"
-    "5. Tidak ada data → bilang tidak ada. Singkat, bahasa Indonesia, format Rp40,400."
+    "5. Tidak ada data → bilang tidak ada. Singkat, bahasa Indonesia, format Rp40,400.\n"
+    "6. Jangan pakai tag HTML atau karakter < > di dalam jawaban."
 )
 
 
