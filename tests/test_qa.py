@@ -139,3 +139,12 @@ def test_balasan_html_aman_dari_tag_mentah():
         sisa = tag_izin.sub("", teks)
         assert "<" not in sisa and ">" not in sisa, teks
     assert "&lt;bulan&gt;" in qa._FORMAT_ERROR
+
+
+def test_amankan_html_escape_kecuali_tag_izin():
+    # kutipan sheet dengan '<' harus aman untuk Telegram
+    assert qa.amankan_html("penjualan <b>hebat</b> & lain") == "penjualan <b>hebat</b> &amp; lain"
+    assert qa.amankan_html("qty <5 dan a>b") == "qty &lt;5 dan a&gt;b"
+    assert qa.amankan_html("kategori <bulan>") == "kategori &lt;bulan&gt;"
+    # balasan command tidak lewat sini (HELP sudah memakai entitas sendiri)
+    assert "&lt;bulan&gt;" in qa._FORMAT_ERROR
