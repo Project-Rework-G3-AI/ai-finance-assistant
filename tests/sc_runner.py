@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import csv
+from datetime import datetime
 import json
 import os
 import sys
@@ -65,6 +66,93 @@ def read_results(path: Path) -> dict[str, dict]:
         return {(r.get("file") or "").strip(): r for r in csv.DictReader(f)}
 
 
+def read_source(out: Path) -> dict:
+    """Keterangan asal angka pada `out` (kapan dihitung, berapa panggilan model)."""
+    path = out / "source.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def write_source(out: Path, **fields) -> dict:
+    """Simpan keterangan asal angka, digabung dengan yang sudah ada.
+
+    Dipisah dari CSV karena CSV hanya berisi hasil per gambar. Tanpa berkas
+    ini, laporan lama tidak bisa membedakan "dihitung baru" dari "dibaca ulang
+    dari run kemarin", sehingga angka lama bisa dikutip sebagai hasil baru.
+    """
+    data = read_source(out)
+    data.update(fields)
+    (out / "source.json").write_text(
+        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    return data
+
+
+def source_line(out: Path) -> str:
+    """Satu baris ringkas tentang asal angka, untuk kepala laporan."""
+    s = read_source(out)
+    if not s:
+        return "Sumber data: tidak tercatat (laporan dibuat tanpa source.json)"
+    computed = s.get("computed_at") or "tidak diketahui"
+    calls = s.get("model_calls")
+    if calls == 0:
+        return (f"Sumber data: hasil run sebelumnya, dihitung {computed}. "
+                f"Tidak ada panggilan model saat laporan ini dibuat.")
+    if calls:
+        return (f"Sumber data: dihitung {computed} dengan {calls} panggilan model "
+                f"({s.get('model', 'model tidak tercatat')}).")
+    return f"Sumber data: dihitung {computed}."
+
+
+MODEL_COLUMNS = [
+    "proposed_category", "proposed_amount", "proposed_date",
+    "proposed_bank", "proposed_direction", "proposed_note",
+]
+
+
+def describe_reuse(done: dict, remaining: list) -> str:
+    """Penjelasan saat hasil lama dipakai lagi.
+
+    Sebelumnya pesannya hanya satu baris "melanjutkan: N sudah ada, N tersisa"
+    di antara keluaran lain. Akibatnya run yang tidak memanggil model sama
+    sekali terlihat seperti run yang selesai seketika, dan pembaca wajar
+    mengira modelnya menjadi jauh lebih cepat. Padahal tidak ada satu pun
+    panggilan model: hasil dari run sebelumnya dibaca ulang dari CSV.
+    """
+    total = len(done) + len(remaining)
+    if remaining:
+        headline = "SEBAGIAN HASIL LAMA DIPAKAI LAGI"
+    else:
+        headline = "HASIL LAMA DIPAKAI LAGI — TIDAK ADA PEMANGGILAN MODEL BARU"
+    lines = [
+        "",
+        "=" * 60,
+        headline,
+        "=" * 60,
+        f"  sudah ada di CSV : {len(done)} dari {total} gambar",
+        f"  akan diproses    : {len(remaining)} gambar",
+    ]
+    if not remaining:
+        lines.append("  panggilan model  : 0 — angka di bawah adalah hasil run sebelumnya")
+        lines.append("")
+        lines.append("  Untuk benar-benar menghitung ulang, pakai --restart.")
+        lines.append("  Untuk sekadar melihat angka tanpa AI, pakai --metrics-only.")
+    lines.append("=" * 60)
+    return "\n".join(lines)
+
+
+def stale_files(done: dict, pairs: list[dict]) -> list[str]:
+    """Berkas di CSV lama yang tidak ada di daftar pasangan sekarang.
+
+    Hasil yang tersimpan diikat ke satu set pasangan. Kalau CSV dibuat dengan
+    pasangan lain, angkanya tidak sah untuk set sekarang, jadi lebih baik
+    berhenti dengan jelas daripada diam-diam melaporkan angka yang salah.
+    """
+    wanted = {(p.get("file") or "").strip() for p in pairs}
+    return sorted(name for name in done if name not in wanted)
+
+
 async def run_pairs(pairs: list[dict], images_dir: Path, out: Path,
                     restart: bool = False) -> list[dict]:
     import main  # diimpor di dalam agar `--download` tidak butuh AI_API_KEY
@@ -72,10 +160,23 @@ async def run_pairs(pairs: list[dict], images_dir: Path, out: Path,
     done = {} if restart else read_results(out)
     results = list(done.values())
 
+    if done:
+        extra = stale_files(done, pairs)
+        if extra:
+            raise SystemExit(
+                f"hasil di {out} dibuat dengan pasangan berbeda: "
+                f"{len(extra)} berkas tidak ada di daftar sekarang "
+                f"(contoh: {extra[0]}).\n"
+                f"Hapus berkas itu, atau jalankan dengan --restart."
+            )
+
     remaining = [p for p in pairs if (p.get("file") or "").strip() not in done]
     if done:
-        print(f"melanjutkan: {len(done)} sudah ada, {len(remaining)} tersisa")
+        print(describe_reuse(done, remaining))
     if not remaining:
+        # Tidak ada panggilan model sama sekali: catat sebagai 0, bukan
+        # dibiarkan dari run sebelumnya yang mungkin berisi angka lain.
+        write_source(out.parent, model_calls=0)
         return results
 
     if not main.AI_KEY:
@@ -144,6 +245,14 @@ async def run_pairs(pairs: list[dict], images_dir: Path, out: Path,
                   f"{proposed[:34]:36} ({elapsed:.1f}s)")
 
     f.close()
+
+    # Dicatat supaya laporan bisa menyebut asal angkanya. Tanpa ini, laporan
+    # dari run lama tidak bisa dibedakan dari laporan yang baru dihitung.
+    write_source(out.parent,
+                 computed_at=datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z"),
+                 model_calls=len(remaining),
+                 model=main.AI_MODEL,
+                 reused=len(done))
     return results
 
 
@@ -164,6 +273,8 @@ def write_report(results: list[dict], out: Path) -> dict:
     lines = [
         "SC-01 — Akurasi usulan kategori",
         "=" * 60,
+        source_line(out),
+        "",
         m.summary(),
         "",
         "Target BRD: minimal 85%",
@@ -252,6 +363,8 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
     lines = [
         "SC-02 — Kelengkapan field wajib",
         "=" * 60,
+        source_line(out),
+        "",
         c.summary(),
         "",
         "Target BRD: minimal 90% field wajib terbaca benar",

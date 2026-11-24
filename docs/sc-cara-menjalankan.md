@@ -154,6 +154,69 @@ SC_RUN_MODEL=1 pytest -m sc_model -v
 Menjalankan evaluasi sebagai lulus atau gagal terhadap target BRD. Butuh opt-in
 karena berbayar dan lama; `pytest` biasa tidak akan menjalankannya.
 
+## Hasil lama dipakai lagi, bukan dihitung ulang
+
+Runner menyimpan hasil per gambar ke `sc-out/results_per_row.csv` dan
+melanjutkan dari situ. Ini disengaja: kalau run terputus di gambar ke-40,
+menjalankan ulang tidak perlu mengulang 39 gambar yang sudah selesai.
+
+Konsekuensinya, **menjalankan perintah yang sama dua kali tidak memanggil model
+lagi pada run kedua**. Run kedua selesai dalam hitungan detik dan langsung
+mencetak angka dari run pertama. Itu bukan tanda modelnya cepat.
+
+Supaya tidak salah tafsir, runner sekarang mengumumkannya:
+
+```
+============================================================
+HASIL LAMA DIPAKAI LAGI — TIDAK ADA PEMANGGILAN MODEL BARU
+============================================================
+  sudah ada di CSV : 65 dari 65 gambar
+  akan diproses    : 0 gambar
+  panggilan model  : 0 — angka di bawah adalah hasil run sebelumnya
+
+  Untuk benar-benar menghitung ulang, pakai --restart.
+  Untuk sekadar melihat angka tanpa AI, pakai --metrics-only.
+============================================================
+```
+
+Asal angka juga dicatat di `sc-out/source.json` dan muncul di kepala setiap
+laporan:
+
+```
+Sumber data: dihitung 2026-11-24 12:44:57 UTC dengan 65 panggilan model (google/gemini-3.8-flash).
+```
+
+atau, kalau tidak ada model yang dipanggil:
+
+```
+Sumber data: hasil run sebelumnya, dihitung 2026-11-24 11:46:00 UTC. Tidak ada panggilan model saat laporan ini dibuat.
+```
+
+Jadi angka dari run kemarin tidak bisa dikutip sebagai hasil hitung baru tanpa
+ketahuan.
+
+### Kapan pakai yang mana
+
+| Perintah | Panggilan model | Kegunaan |
+|---|---|---|
+| `sc_runner.py` | hanya untuk gambar yang belum ada | melanjutkan run yang terputus |
+| `sc_runner.py --restart` | semua gambar | mengukur ulang dari nol |
+| `sc_runner.py --metrics-only` | tidak ada | mengubah cara menilai tanpa bayar lagi |
+
+`--restart` menghapus dan menulis ulang `results_per_row.csv`, jadi jangan
+dipakai kalau hasil lama masih dibutuhkan.
+
+### Hasil dari set data lain ditolak
+
+CSV hasil terikat ke satu daftar pasangan. Kalau CSV dibuat dengan pasangan
+berbeda, angkanya tidak sah untuk set sekarang, jadi runner berhenti:
+
+```
+hasil di sc-out/results_per_row.csv dibuat dengan pasangan berbeda: 63 berkas
+tidak ada di daftar sekarang (contoh: photo_2026-01-01_17-06-05.jpg).
+Hapus berkas itu, atau jalankan dengan --restart.
+```
+
 ## Keluaran
 
 | Berkas | Isi |

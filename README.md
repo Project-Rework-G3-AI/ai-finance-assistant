@@ -257,6 +257,11 @@ python3 tests/sc_runner.py --repeat 3      # lihat sebaran antar-run
 Tanpa flag berarti semua kriteria yang tersedia. Ketiga flag kriteria saling
 eksklusif, dan menggabungkannya akan ditolak.
 
+Menjalankan perintah yang sama dua kali **tidak** memanggil model lagi pada run
+kedua: hasil per gambar disimpan di `sc-out/` dan dilanjutkan dari situ. Runner
+mengumumkannya dengan jelas, dan mencatat asal angkanya di `sc-out/source.json`.
+Pakai `--restart` untuk benar-benar mengukur ulang dari nol.
+
 Menambah kriteria tidak menambah biaya, karena semuanya membaca keluaran
 ekstraksi yang sama.
 
