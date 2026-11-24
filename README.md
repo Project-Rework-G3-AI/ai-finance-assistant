@@ -41,7 +41,6 @@ flowchart LR
 ## Setup
 
 ```bash
-cd bot
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env        # lalu isi
@@ -52,6 +51,9 @@ Isi `.env` minimal:
 
 1. `TELEGRAM_BOT_TOKEN` — dari @BotFather.
 2. `TELEGRAM_ALLOWED_CHAT_IDS` — chat_id pengguna yang boleh (cek via @userinfobot), pisahkan koma.
+
+Untuk menjalankan test dan evaluasi akurasi (SC-01), lihat bagian
+[Pengujian](#pengujian).
 
 ## Setup Google Sheets (service account)
 
@@ -202,6 +204,68 @@ Mekanisme agar ekstraksi tidak hilang ketika Drive/Sheets tidak bisa dijangkau:
 5. **Batas** — file di filesystem proses; **hilang saat redeploy Render** (tidak persisten). Antrean ini penahan kegagalan sementara, bukan penyimpanan. `GET /health` menampilkan `pending: true/false`.
 
 `pending.jsonl` sudah masuk `.gitignore` — tidak pernah ikut ter-commit.
+
+## Pengujian
+
+Repo ini punya dua lapis pengujian. Yang pertama gratis dan cepat, jadi bisa
+dijalankan sesering apa pun. Yang kedua memanggil model berbayar, jadi harus
+diminta secara eksplisit.
+
+### Test cepat (gratis, sekitar 1 detik)
+
+```bash
+pytest
+```
+
+Menjalankan test rumus metrik, validasi dataset, dan batas ruang lingkup SC-01.
+Tidak memanggil AI, tidak butuh jaringan, tidak butuh dataset. Ini yang aman
+dijalankan di CI.
+
+### Evaluasi SC-01 (akurasi kategori)
+
+SC-01 mengukur seberapa tepat usulan kategori sistem dibanding kategori yang
+ditetapkan Admin. Target BRD minimal **85%**. Pengukurannya memakai model asli
+pada 65 pasangan gambar-transaksi, jadi berbayar dan berjalan 10 sampai 20 menit.
+
+Persiapan sekali saja:
+
+```bash
+cp .env.example .env
+# isi AI_API_KEY, dan sesuaikan AI_BASE_URL serta AI_MODEL
+python3 tests/sc01_harness.py --download     # unduh 65 gambar, sekali saja
+```
+
+Menjalankan:
+
+```bash
+python3 tests/sc01_harness.py                # ukur akurasi
+python3 tests/sc01_harness.py --metrics-only # hitung ulang tanpa biaya
+python3 tests/sc01_harness.py --repeat 3     # lihat sebaran antar-run
+```
+
+Hasil ada di `sc01-out/`:
+
+| Berkas | Isi |
+|---|---|
+| `report.txt` | Ringkasan, rincian per kategori, confusion matrix, daftar baris salah |
+| `metrics.json` | Angka yang sama dalam bentuk JSON |
+| `results_per_row.csv` | Keluaran per gambar, termasuk nominal dan tanggal |
+
+Dataset tidak disimpan di repo ini karena berisi data keuangan riil perusahaan.
+`--download` mengambilnya dari repo dataset terpisah, dan tidak memerlukan token
+GitHub. Folder `dataset/` dan `sc01-out/` sudah masuk `.gitignore`.
+
+Untuk memaksa evaluasi berjalan sebagai assertion lulus/gagal terhadap target
+85%, pakai opt-in ganda karena sifatnya berbayar dan lama:
+
+```bash
+SC01_RUN_MODEL=1 pytest -m sc01_model -v
+```
+
+Panduan rinci, termasuk pemecahan masalah dan alasan angka antar-run berbeda,
+ada di [`docs/sc01-cara-menjalankan.md`](docs/sc01-cara-menjalankan.md). Hasil
+pengukuran yang sudah dilakukan ada di
+[`docs/sc01-hasil-evaluasi.md`](docs/sc01-hasil-evaluasi.md).
 
 ## Batasan (milestone 1)
 
