@@ -323,7 +323,8 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "period": {"type": "string", "description": "'2026-11' atau nama bulan, mis. 'Nov'"},
             "arah": {"type": "string", "enum": ["masuk", "keluar"]},
-            "kategori": {"type": "string", "description": "satu kategori, mis. 'Listrik'"},
+            "kategori": {"type": "string",
+                         "description": "opsional, salah satu kategori resmi: " + KAT.PROMPT_KATEGORI},
         }, "required": ["period"]},
     }},
     {"type": "function", "function": {
@@ -332,7 +333,8 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "period": {"type": "string"},
             "arah": {"type": "string", "enum": ["masuk", "keluar"]},
-            "kategori": {"type": "string"},
+            "kategori": {"type": "string",
+                         "description": "opsional, salah satu kategori resmi: " + KAT.PROMPT_KATEGORI},
             "limit": {"type": "integer", "minimum": 1, "maximum": 50},
         }, "required": ["period"]},
     }},
@@ -390,7 +392,7 @@ async def answer_question(client: httpx.AsyncClient, text: str, load_rows) -> st
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": text},
     ]
-    for _ in range(3):
+    for putaran in range(3):
         r = await client.post(
             f"{base}/chat/completions",
             headers={"Authorization": f"Bearer {key}"},
@@ -407,7 +409,23 @@ async def answer_question(client: httpx.AsyncClient, text: str, load_rows) -> st
                 except json.JSONDecodeError:
                     args = {}
                 hasil = await _jalankan(tc["function"]["name"], args, load_rows)
+                log.info("QA putaran %d: %s(%s) -> %s",
+                         putaran + 1, tc["function"]["name"], args, hasil[:300])
                 messages.append({"role": "tool", "tool_call_id": tc["id"], "content": hasil})
             continue
         return (msg.get("content") or "").strip() or FALLBACK
-    return "Pertanyaan terlalu rumit — coba lebih spesifik (periode/kategori), atau /rekap."
+    # Putaran tool habis: paksa rangkasan TANPA tool supaya user tetap
+    # mendapat jawaban, bukan pesan "terlalu rumit".
+    messages.append({
+        "role": "user",
+        "content": "Jawab sekarang berdasarkan hasil tool di atas, tanpa memanggil tool lagi.",
+    })
+    log.warning("QA: putaran tool habis, paksa rangkasan")
+    r = await client.post(
+        f"{base}/chat/completions",
+        headers={"Authorization": f"Bearer {key}"},
+        json={"model": model, "messages": messages, "temperature": 0},
+        timeout=60,
+    )
+    r.raise_for_status()
+    return (r.json()["choices"][0]["message"].get("content") or "").strip() or FALLBACK
