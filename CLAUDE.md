@@ -64,6 +64,14 @@ Photo/caption → Telegram → poll_loop() → handle_update()
 
 `pending.jsonl` — JSONL file, one record per line. Retried before each polling cycle. **Not persistent across Render redeploys.**
 
+### Tanya-jawab (milestone 3, `cash_report/qa.py`)
+
+Routing di `handle_update`: foto/document → ekstraksi, PDF → rekonsiliasi, teks → `handle_text`. Command `/total [bulan]`, `/rekap [bulan]`, `/help` deterministik (tanpa LLM); bahasa bebas lewat **satu panggilan tool-calling** (tools baca-saja `aggregate`/`list_rows`/`get_receipt`, maks3 putaran + ronde paksa). Angka dihitung kode; verified & draft disebut terpisah; transfer dikecualikan dari total. Jawaban LLM di-escape (`qa.amankan_html`) sebelum kirim (parse_mode=HTML).
+
+### Rekonsiliasi mutasi bank (milestone 2, `reconciliation/`)
+
+PDF mutasi (Telegram atau `/api/reconcile`) → render halaman (`pymupdf`) → vision AI per halaman → validasi keras (`statement_validator`: total, saldo jalan, saldo akhir) → normalisasi → cocok TRANSAKSI periode itu dengan kunci **(tanggal, kantong, debit, credit)** → tulis tab **RECONCILIATION** (bank+rekening+periode sama → **replace**, idempotent; TRANSAKSI tak disentuh). Butuh env `BNI/BRI/JAGO_ACCOUNT_NUMBER`. Contoh file uji di `samples/`.
+
 ## Key Config
 
 | Var | Required | Purpose |
@@ -81,10 +89,14 @@ Photo/caption → Telegram → poll_loop() → handle_update()
 | `AI_BASE_URL` | No | Default: OpenAI |
 | `AI_MODEL` | No | Default: gpt-4o-mini |
 | `HOST` | Render | Set to `0.0.0.0` |
+| `PORT` | Render | Dari `$PORT` Render (Render; jangan diubah) |
+| `BNI_ACCOUNT_NUMBER`, `BRI_ACCOUNT_NUMBER`, `JAGO_ACCOUNT_NUMBER` | No* | Nomor rekening utk rekonsiliasi PDF mutasi (*kosong = PDF mutasi ditolak) |
+| `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE`, `SENTRY_RELEASE` | No | Observability — no-op tanpa DSN |
+| `LOG_LEVEL` | No | Default `INFO` |
 
 ## Deployment
 
 Hosted on Render (free tier). UptimeRobot pings `/health` every 5 min to prevent sleep.
 
 Render build: `pip install -r requirements.txt`
-Render start: `python main.py`
+Render start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
