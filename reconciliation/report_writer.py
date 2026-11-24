@@ -213,4 +213,5 @@ def write_reconciliation_report(
         len(new_rows),
     )
 
-    return len(new_rows)
+    # (jumlah baris, gid) — gid dipakai menyusun link #gid= langsung ke tab ini
+    return len(new_rows), worksheet.id

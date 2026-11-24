@@ -577,7 +577,7 @@ async def reconcile_bank_statement(pdf_bytes: bytes) -> dict:
     )
     summary = summarize_reconciliation(results)
 
-    report_rows_written = write_reconciliation_report(
+    report_rows_written, rekon_gid = write_reconciliation_report(
         sheets_service=sheets_service,
         spreadsheet_id=spreadsheet_id,
         statement=statement,
@@ -591,7 +591,11 @@ async def reconcile_bank_statement(pdf_bytes: bytes) -> dict:
         "normalization_errors": normalization_errors,
         "report_rows_written": report_rows_written,
         "spreadsheet_id": spreadsheet_id,
-        "report_url": f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit",
+        # #gid = langsung membuka tab RECONCILIATION, bukan sheet pertama
+        "report_url": (
+            f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit"
+            f"#gid={rekon_gid}"
+        ),
     }
 
 
@@ -620,21 +624,21 @@ async def handle_bank_statement_pdf(
 
     summary = result["summary"]
     report_text = (
-        f'\\nBaris laporan ditulis: {result["report_rows_written"]}'
-        f'\\n<a href="{result["report_url"]}">Buka Cash Report</a>'
+        f'\nBaris laporan ditulis: {result["report_rows_written"]}'
+        f'\n<a href="{result["report_url"]}">Buka Cash Report (tab RECONCILIATION)</a>'
     )
     await tg_send(
         client,
         chat_id,
-        "✅ Rekonsiliasi selesai\\n"
-        f"Bank: {result['statement'].get('bank')}\\n"
-        f"Rekening: {result['statement'].get('account_number')}\\n"
+        "✅ Rekonsiliasi selesai\n"
+        f"Bank: {result['statement'].get('bank')}\n"
+        f"Rekening: {result['statement'].get('account_number')}\n"
         f"Periode: {result['statement'].get('period_start')} s.d. "
-        f"{result['statement'].get('period_end')}\\n"
-        f"Total transaksi: {summary.get('total', 0)}\\n"
-        f"Matched: {summary.get('matched', 0)}\\n"
-        f"Bank only: {summary.get('bank_only', 0)}\\n"
-        f"Sheet only: {summary.get('sheet_only', 0)}\\n"
+        f"{result['statement'].get('period_end')}\n"
+        f"Total transaksi: {summary.get('total', 0)}\n"
+        f"Matched: {summary.get('matched', 0)}\n"
+        f"Bank only: {summary.get('bank_only', 0)}\n"
+        f"Sheet only: {summary.get('sheet_only', 0)}\n"
         f"Perlu ditinjau: {summary.get('needs_review', 0)}"
         f"{report_text}",
     )
