@@ -120,6 +120,23 @@ def _token(nilai: str | None = None) -> str | None:
     return (nilai or os.getenv("GITHUB_TOKEN", "")).strip() or None
 
 
+def _ambil_berkas(jalur: str) -> bytes:
+    """Ambil berkas, mencoba akses anonim lalu memakai token bila perlu.
+
+    Repo dataset semestinya publik, jadi akses anonim biasanya cukup dan tidak
+    memerlukan token. Bila repo ternyata privat, percobaan anonim menghasilkan
+    404; token yang tersedia di .env dipakai supaya pengguna tidak perlu tahu
+    detail itu.
+    """
+    token = _token()
+    if token:
+        try:
+            return _ambil_github(jalur, None)
+        except SystemExit:
+            return _ambil_github(jalur, token)
+    return _ambil_github(jalur, None)
+
+
 def _jalur_repo(*bagian: str) -> str:
     """Rangkai jalur di dalam repo dataset, tanpa garis miring berlebih."""
     potong = [DIR_DATASET] if DIR_DATASET else []
@@ -135,67 +152,104 @@ def _ambil_github(jalur: str, token: str | None = None) -> bytes:
     per jam, sedangkan satu kali unduh butuh 66 permintaan.
 
     Bila token tersedia, API biasa dipakai supaya repo privat tetap bekerja.
+    Galat HTTP diterjemahkan menjadi pesan yang bisa ditindaklanjuti, karena
+    traceback `urllib` tidak memberi tahu apa yang harus dilakukan.
     """
+    import urllib.error
     import urllib.parse
     import urllib.request
 
     if not token:
         url = (f"https://raw.githubusercontent.com/{REPO_DATASET}/"
                f"{BRANCH_DATASET}/{urllib.parse.quote(jalur)}")
-        return urllib.request.urlopen(
-            urllib.request.Request(url), timeout=60).read()
+        sumber = "raw.githubusercontent.com (tanpa token)"
+    else:
+        url = (f"https://api.github.com/repos/{REPO_DATASET}/contents/"
+               f"{urllib.parse.quote(jalur)}")
+        sumber = "API GitHub (dengan token)"
 
-    url = (f"https://api.github.com/repos/{REPO_DATASET}/contents/"
-           f"{urllib.parse.quote(jalur)}")
     req = urllib.request.Request(url)
-    req.add_header("Authorization", f"Bearer {token}")
-    req.add_header("Accept", "application/vnd.github.raw")
-    return urllib.request.urlopen(req, timeout=60).read()
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+        req.add_header("Accept", "application/vnd.github.raw")
+
+    try:
+        return urllib.request.urlopen(req, timeout=60).read()
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise SystemExit(
+                f"berkas tidak ditemukan: {jalur}\n"
+                f"  sumber : {sumber}\n"
+                f"  repo   : {REPO_DATASET} (branch {BRANCH_DATASET})\n"
+                "Kemungkinan penyebab:\n"
+                "  1. Repo dataset sedang privat, sehingga akses tanpa token ditolak.\n"
+                "     Isi GITHUB_TOKEN di .env, atau minta pemilik repo menjadikannya publik.\n"
+                "  2. Nama repo atau branch berubah. Periksa GITHUB_DATASET_REPO\n"
+                "     dan GITHUB_DATASET_BRANCH di .env."
+            ) from None
+        if e.code in (403, 429):
+            raise SystemExit(
+                f"akses ditolak atau kena batas kuota: HTTP {e.code}\n"
+                f"  sumber : {sumber}\n"
+                "Isi GITHUB_TOKEN di .env untuk memakai kuota akunmu sendiri."
+            ) from None
+        raise SystemExit(f"gagal mengunduh {jalur}: HTTP {e.code}") from None
+    except urllib.error.URLError as e:
+        raise SystemExit(
+            f"tidak bisa menghubungi GitHub: {e.reason}\n"
+            "Periksa koneksi internet, lalu jalankan ulang perintah yang sama."
+        ) from None
 
 
 def unduh_pasangan(tujuan: Path | None = None,
                    token: str | None = None) -> Path:
-    """Unduh daftar pasangan dari repo privat bila belum ada.
+    """Unduh daftar pasangan dari repo dataset bila belum ada.
 
     `--download` butuh daftar pasangan untuk tahu gambar mana yang harus diambil,
-    sedangkan daftar itu sendiri juga ada di repo privat. Fungsi ini memutus
+    sedangkan daftar itu sendiri juga ada di repo yang sama. Fungsi ini memutus
     ketergantungan tersebut sehingga satu perintah cukup.
     """
     tujuan = tujuan or pairs_file()
     if tujuan.is_file() and tujuan.stat().st_size > 100:
         return tujuan
 
-    token = _token(token)
     tujuan.parent.mkdir(parents=True, exist_ok=True)
     print(f"mengunduh daftar pasangan ke: {tujuan}")
-    tujuan.write_bytes(_ambil_github(_jalur_repo(SUB_DIR_PAIRS), token))
+    tujuan.write_bytes(_ambil_berkas(_jalur_repo(SUB_DIR_PAIRS)))
     return tujuan
 
 
 def unduh_gambar(tujuan: Path | None = None, token: str | None = None,
                  berkas: list[str] | None = None) -> tuple[int, int]:
-    """Unduh gambar dataset dari repo privat. Kembalikan (baru, dilewati).
+    """Unduh gambar dataset dari repo. Kembalikan (baru, dilewati).
 
     Hanya dipakai sekali di awal. Setelah gambar ada di disk, evaluasi berjalan
     sepenuhnya offline terhadap folder itu.
+
+    Galat dicatat lalu dilanjutkan, supaya satu berkas bermasalah tidak
+    membatalkan seluruh unduhan. Ringkasannya dilaporkan di akhir.
     """
-    token = _token(token)
     tujuan = tujuan or images_dir()
 
     perlu = berkas or [r["file"].strip() for r in baca_pasangan(pairs_file())]
     tujuan.mkdir(parents=True, exist_ok=True)
 
     baru = lewat = gagal = 0
+    pesan_galat = ""
     for i, nama in enumerate(perlu, 1):
         dst = tujuan / nama
         if dst.is_file() and dst.stat().st_size > 1000:
             lewat += 1
             continue
         try:
-            dst.write_bytes(
-                _ambil_github(_jalur_repo(SUB_DIR_IMAGES, nama), token))
+            dst.write_bytes(_ambil_berkas(_jalur_repo(SUB_DIR_IMAGES, nama)))
+        except SystemExit as e:
+            # Pesan sudah informatif; simpan sekali, jangan cetak 65 kali.
+            pesan_galat = pesan_galat or str(e)
+            gagal += 1
+            continue
         except Exception as e:
-            print(f"  GAGAL {nama}: {str(e)[:70]}")
+            pesan_galat = pesan_galat or f"{type(e).__name__}: {e}"
             gagal += 1
             continue
         baru += 1
@@ -203,5 +257,7 @@ def unduh_gambar(tujuan: Path | None = None, token: str | None = None,
             print(f"  ... {i}/{len(perlu)}")
 
     if gagal:
-        print(f"peringatan: {gagal} gambar gagal diunduh")
+        print(f"peringatan: {gagal} dari {len(perlu)} gambar gagal diunduh")
+        if pesan_galat:
+            print("  " + pesan_galat.replace("\n", "\n  "))
     return baru, lewat
