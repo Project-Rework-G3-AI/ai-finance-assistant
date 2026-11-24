@@ -286,6 +286,22 @@ def format_rekap(awal: date, items: list[tuple[str, dict]], tot: dict) -> str:
     return "\n".join(lines)
 
 
+def amankan_html(teks: str) -> str:
+    """Escape keluaran LLM untuk parse_mode=HTML.
+
+    Prompt melarang tag, tapi jawaban bisa memuat karakter '<' dari kutipan
+    isi sheet (mis. keterangan) yang membuat Telegram menolak pesan (400
+    'Unsupported start tag'). Tag <b>/<i> dipertahankan, sisanya di-escape.
+    """
+    izin = re.compile(r"</?(?:b|i)>")
+    potong = izin.split(teks)
+    tag = izin.findall(teks)
+    return "".join(
+        html.escape(potong[i], quote=False) + (tag[i] if i < len(tag) else "")
+        for i in range(len(potong))
+    )
+
+
 # ---------- command / ----------
 
 def command_reply(text: str, load_rows) -> str | None:

@@ -507,7 +507,9 @@ async def handle_text(client: httpx.AsyncClient, chat_id: int, text: str) -> Non
         if text.startswith("/"):
             reply = await asyncio.to_thread(qa.command_reply, text, _qa_load_rows)
         else:
-            reply = await qa.answer_question(client, text, _qa_load_rows)
+            # jawaban LLM di-escape: kutipan isi sheet boleh memuat '<',
+            # tapi parse_mode=HTML menolak tag tak dikenal (bug /help dulu)
+            reply = qa.amankan_html(await qa.answer_question(client, text, _qa_load_rows))
     except Exception:
         log.exception("Tanya-jawab gagal")
         reply = qa.FALLBACK
