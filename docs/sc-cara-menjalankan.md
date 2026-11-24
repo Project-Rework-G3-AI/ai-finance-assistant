@@ -30,7 +30,7 @@ pip install -r requirements.txt
 cp .env.example .env               # isi AI_API_KEY, sesuaikan AI_BASE_URL/AI_MODEL
 
 python3 tests/sc_runner.py --download      # unduh data (sekali saja)
-python3 tests/sc_runner.py --all           # ukur SC-01 dan SC-02 sekaligus
+python3 tests/sc_runner.py                 # ukur semua kriteria
 ```
 
 Hasil ada di `sc-out/`.
@@ -111,23 +111,28 @@ dataset. Ini yang aman dijalankan di CI.
 ### Runner (cara utama untuk mengukur)
 
 ```bash
-python3 tests/sc_runner.py --all           # SC-01 dan SC-02 sekaligus
-python3 tests/sc_runner.py                 # SC-01 saja
+python3 tests/sc_runner.py                 # semua kriteria (sama dengan --all)
+python3 tests/sc_runner.py --sc01          # SC-01 saja
 python3 tests/sc_runner.py --sc02          # SC-02 saja
+python3 tests/sc_runner.py --all           # semua kriteria, eksplisit
 ```
+
+Tanpa flag berarti semua kriteria yang tersedia. Ini disengaja: kriteria
+saling setara, jadi tidak ada alasan menjadikan salah satunya bawaan. Ketiga
+flag itu saling eksklusif, dan menggabungkannya akan ditolak argparse.
 
 Satu lintasan memanggil model untuk 65 gambar. Sekitar 10 sampai 20 menit,
 tergantung kecepatan respons model. Hasil ditulis bertahap, jadi bila terputus
 tinggal jalankan perintah yang sama — yang sudah selesai tidak diulang.
 
-`--all` tidak menambah biaya, karena SC-01 dan SC-02 membaca keluaran ekstraksi
-yang sama. Memisahkan lintasan hanya akan menggandakan biaya tanpa menambah
-informasi.
+Menambah kriteria tidak menambah biaya, karena semuanya membaca keluaran
+ekstraksi yang sama. Memisahkan lintasan hanya akan menggandakan biaya tanpa
+menambah informasi.
 
 Menghitung ulang dari hasil yang sudah ada, tanpa biaya:
 
 ```bash
-python3 tests/sc_runner.py --metrics-only --all
+python3 tests/sc_runner.py --metrics-only
 ```
 
 Karena hasil antar-run bisa berbeda, untuk angka yang lebih dapat dipercaya

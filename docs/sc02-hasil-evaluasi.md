@@ -102,7 +102,7 @@ adanya, 53 gambar sisanya perlu dilengkapi acuan lebih dulu.
 ```bash
 python3 tests/sc_runner.py --download      # sekali saja
 python3 tests/sc_runner.py --sc02          # ukur SC-02
-python3 tests/sc_runner.py --all           # SC-01 dan SC-02 sekaligus
+python3 tests/sc_runner.py                 # semua kriteria sekaligus
 python3 tests/sc_runner.py --metrics-only --sc02   # hitung ulang, tanpa biaya
 ```
 

@@ -280,9 +280,30 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
     return {"result": c, "text": text}
 
 
+AVAILABLE_CRITERIA = ("sc01", "sc02")
+
+
+def selected_criteria(args) -> list[str]:
+    """Kriteria yang diminta.
+
+    Tanpa flag berarti semua kriteria yang tersedia. Ini dipusatkan di satu
+    tempat supaya `--metrics-only`, `--repeat`, dan lintasan penuh tidak bisa
+    berbeda pendapat soal apa yang harus diukur. Sebelumnya SC-01 jadi bawaan
+    sementara SC-02 harus diminta, sehingga `--sc02` dan tanpa-flag terlihat
+    seperti dua perintah yang tidak sederajat.
+    """
+    if getattr(args, "all", False):
+        return list(AVAILABLE_CRITERIA)
+    picked = [name for name in AVAILABLE_CRITERIA if getattr(args, name, False)]
+    return picked or list(AVAILABLE_CRITERIA)
+
+
 def main_cli() -> int:
     ap = argparse.ArgumentParser(
-        description="Runner evaluasi kriteria keberhasilan (SC-01, SC-02)")
+        description="Runner evaluasi kriteria keberhasilan (SC-01, SC-02)",
+        epilog="Tanpa flag kriteria, semua kriteria yang tersedia diukur. "
+               "Satu lintasan model dipakai bersama, jadi menambah kriteria "
+               "tidak menambah biaya.")
     ap.add_argument("--download", action="store_true",
                     help="unduh gambar dataset dari repo, lalu berhenti")
     ap.add_argument("--pairs", default="", help="timpa SC_PAIRS")
@@ -290,13 +311,19 @@ def main_cli() -> int:
     ap.add_argument("--out", default="sc-out", help="folder keluaran (default: sc-out)")
     ap.add_argument("--restart", action="store_true", help="abaikan hasil lama, proses dari awal")
     ap.add_argument("--repeat", type=int, default=1, metavar="N",
-                    help="jalankan N kali lalu laporkan rentang akurasi (untuk mengukur kestabilan)")
+                    help="jalankan N kali lalu laporkan rentang angka (untuk mengukur kestabilan)")
     ap.add_argument("--metrics-only", action="store_true", help="hitung metrik tanpa memanggil AI")
-    ap.add_argument("--sc02", action="store_true",
-                    help="ukur kelengkapan field wajib (SC-02), bukan akurasi kategori")
-    ap.add_argument("--all", action="store_true",
-                    help="ukur SC-01 dan SC-02 sekaligus dalam satu lintasan")
+
+    pick = ap.add_mutually_exclusive_group()
+    pick.add_argument("--sc01", action="store_true",
+                      help="ukur akurasi kategori (SC-01) saja")
+    pick.add_argument("--sc02", action="store_true",
+                      help="ukur kelengkapan field wajib (SC-02) saja")
+    pick.add_argument("--all", action="store_true",
+                      help="ukur semua kriteria yang tersedia (sama dengan tanpa flag)")
     a = ap.parse_args()
+
+    criteria = selected_criteria(a)
 
     # Argumen CLI menang atas .env, supaya bisa dipakai tanpa menyunting file.
     if a.pairs:
@@ -325,10 +352,10 @@ def main_cli() -> int:
         results = list(read_results(out / "results_per_row.csv").values())
         if not results:
             raise SystemExit(f"tidak ada hasil di {out / 'results_per_row.csv'}")
-        if a.sc02 or a.all:
+        if "sc02" in criteria:
             r2 = write_sc02_report(results, out)
             print(r2["text"])
-        if not a.sc02 or a.all:
+        if "sc01" in criteria:
             r = write_report(results, out)
             print("\n" + r["text"])
         return 0
@@ -344,27 +371,46 @@ def main_cli() -> int:
         # Dijalankan berulang untuk melihat sebaran angka. Model tidak menjamin
         # hasil identik antar-run, jadi satu angka saja bisa menyesatkan.
         all_metrics = []
+        all_completeness = []
         for n in range(1, a.repeat + 1):
             print(f"\n===== run {n} dari {a.repeat} =====")
             run_dir = out / f"run-{n}"
             run_dir.mkdir(parents=True, exist_ok=True)
             run_results = asyncio.run(run_pairs(pairs, cfg.images_dir(),
                                                 run_dir / "results_per_row.csv", True))
-            r = write_report(run_results, run_dir)
-            all_metrics.append(r["metrics"])
-            print(r["text"])
-        accuracies = [m.accuracy for m in all_metrics]
-        lines = [
-            f"SC-01 — sebaran {a.repeat} run", "=" * 60,
-            f"akurasi terendah : {min(accuracies):.1%}",
-            f"akurasi tertinggi: {max(accuracies):.1%}",
-            f"rata-rata        : {sum(accuracies)/len(accuracies):.1%}",
-            f"rentang          : {(max(accuracies)-min(accuracies))*100:.1f} poin persen",
-            f"baseline         : {all_metrics[0].baseline:.1%} ({all_metrics[0].majority_label})",
-        ]
-        text = "\n".join(lines)
+            if "sc02" in criteria:
+                r2 = write_sc02_report(run_results, run_dir)
+                all_completeness.append(r2["result"].overall_accuracy)
+                print("\n" + r2["text"])
+            if "sc01" in criteria:
+                r = write_report(run_results, run_dir)
+                all_metrics.append(r["metrics"])
+                print("\n" + r["text"])
+
+        blocks = []
+        if all_metrics:
+            accuracies = [m.accuracy for m in all_metrics]
+            blocks.append("\n".join([
+                f"SC-01 — sebaran {a.repeat} run",
+                f"akurasi terendah : {min(accuracies):.1%}",
+                f"akurasi tertinggi: {max(accuracies):.1%}",
+                f"rata-rata        : {sum(accuracies)/len(accuracies):.1%}",
+                f"rentang          : {(max(accuracies)-min(accuracies))*100:.1f} poin persen",
+                f"baseline         : {all_metrics[0].baseline:.1%} "
+                f"({all_metrics[0].majority_label})",
+            ]))
+        if all_completeness:
+            blocks.append("\n".join([
+                f"SC-02 — sebaran {a.repeat} run",
+                f"kecocokan terendah : {min(all_completeness):.1%}",
+                f"kecocokan tertinggi: {max(all_completeness):.1%}",
+                f"rata-rata          : {sum(all_completeness)/len(all_completeness):.1%}",
+                f"rentang            : "
+                f"{(max(all_completeness)-min(all_completeness))*100:.1f} poin persen",
+            ]))
+        text = f"\n{'=' * 60}\n".join(blocks)
         (out / "spread.txt").write_text(text, encoding="utf-8")
-        print("\n" + text)
+        print("\n" + "=" * 60 + "\n" + text)
         return 0
 
     results = asyncio.run(run_pairs(pairs, cfg.images_dir(),
@@ -373,10 +419,10 @@ def main_cli() -> int:
     # Satu lintasan panggilan model cukup untuk SC-01 dan SC-02: keduanya
     # membaca keluaran ekstraksi yang sama. Memisahkan lintasan hanya akan
     # menggandakan biaya tanpa menambah informasi.
-    if a.sc02 or a.all:
+    if "sc02" in criteria:
         r2 = write_sc02_report(results, out)
         print("\n" + r2["text"])
-    if not a.sc02 or a.all:
+    if "sc01" in criteria:
         r = write_report(results, out)
         print("\n" + r["text"])
     return 0

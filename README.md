@@ -247,15 +247,18 @@ python3 tests/sc_runner.py --download     # unduh 65 gambar, sekali saja
 Menjalankan:
 
 ```bash
-python3 tests/sc_runner.py --all           # SC-01 dan SC-02 sekaligus
-python3 tests/sc_runner.py                 # SC-01 saja
+python3 tests/sc_runner.py                 # semua kriteria (sama dengan --all)
+python3 tests/sc_runner.py --sc01          # SC-01 saja
 python3 tests/sc_runner.py --sc02          # SC-02 saja
 python3 tests/sc_runner.py --metrics-only  # hitung ulang tanpa biaya
 python3 tests/sc_runner.py --repeat 3      # lihat sebaran antar-run
 ```
 
-`--all` tidak menambah biaya, karena SC-01 dan SC-02 membaca keluaran ekstraksi
-yang sama.
+Tanpa flag berarti semua kriteria yang tersedia. Ketiga flag kriteria saling
+eksklusif, dan menggabungkannya akan ditolak.
+
+Menambah kriteria tidak menambah biaya, karena semuanya membaca keluaran
+ekstraksi yang sama.
 
 Hasil ada di `sc-out/`:
 
