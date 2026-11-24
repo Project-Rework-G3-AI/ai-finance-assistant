@@ -153,7 +153,7 @@ tercatat" padahal kategorinya tidak pernah terisi.
 | `tests/sc01_metrics.py` | Perhitungan akurasi, baseline, lift, macro-average, confusion matrix |
 | `tests/sc01_harness.py` | Runner: panggil model, simpan hasil per baris, tulis laporan |
 | `tests/test_sc01_accuracy.py` | Test rumus metrik dan batas ruang lingkup |
-| `hasil_per_baris.csv` | Keluaran per gambar (tidak di-commit; berisi data transaksi) |
+| `results_per_row.csv` | Keluaran per gambar (tidak di-commit; berisi data transaksi) |
 
 Hasil ditulis bertahap ke CSV setelah setiap gambar selesai diproses. Pada run
 pertama di sesi sebelumnya proses sempat mati setelah puluhan panggilan API

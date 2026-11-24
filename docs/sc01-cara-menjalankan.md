@@ -20,8 +20,8 @@ python3 tests/sc01_harness.py --download    # unduh data (sekali saja)
 python3 tests/sc01_harness.py              # jalankan evaluasi
 ```
 
-Hasil ada di `sc01-out/laporan.txt`, `sc01-out/metrik.json`, dan
-`sc01-out/hasil_per_baris.csv`.
+Hasil ada di `sc01-out/report.txt`, `sc01-out/metrics.json`, dan
+`sc01-out/results_per_row.csv`.
 
 ## Empat nilai yang harus diisi di `.env`
 
@@ -167,7 +167,7 @@ python3 tests/sc01_harness.py --repeat 3
 ```
 
 Setiap run disimpan di `sc01-out/run-N/`, dan ringkasan rentangnya di
-`sc01-out/sebaran.txt`. Biaya dan waktu berlipat sesuai jumlah run.
+`sc01-out/spread.txt`. Biaya dan waktu berlipat sesuai jumlah run.
 
 ### 3. Test model sebagai assertion (opsional)
 
@@ -183,9 +183,9 @@ menjalankannya.
 
 | Berkas | Isi |
 |---|---|
-| `sc01-out/laporan.txt` | Ringkasan, rincian per kategori, confusion matrix, daftar baris salah |
-| `sc01-out/metrik.json` | Angka yang sama dalam bentuk JSON |
-| `sc01-out/hasil_per_baris.csv` | Keluaran per gambar, termasuk nominal dan tanggal |
+| `sc01-out/report.txt` | Ringkasan, rincian per kategori, confusion matrix, daftar baris salah |
+| `sc01-out/metrics.json` | Angka yang sama dalam bentuk JSON |
+| `sc01-out/results_per_row.csv` | Keluaran per gambar, termasuk nominal dan tanggal |
 
 Folder `sc01-out/` dan `dataset/` masuk `.gitignore` karena berisi data
 transaksi. Jangan hapus baris itu dari `.gitignore`.

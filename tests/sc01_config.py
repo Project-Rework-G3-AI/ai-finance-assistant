@@ -6,12 +6,12 @@ tetap menang, berguna untuk CI atau saat ingin menimpa sementara.
 
 Kunci yang dikenali:
 
-    SC01_PAIRS        daftar pasangan gambar -> baris (CSV)
-    SC01_IMAGES       folder gambar bukti transaksi
-    GITHUB_TOKEN      dipakai hanya oleh `--download` untuk mengunduh dataset
-                      dari repo privat
+    SC01_PAIRS            daftar pasangan gambar -> baris (CSV)
+    SC01_IMAGES           folder gambar bukti transaksi
+    GITHUB_TOKEN          opsional; hanya dipakai bila repo dataset privat
     GITHUB_DATASET_REPO   default: Project-Rework-G3-AI/rework-ai-finance-assistant-dataset
     GITHUB_DATASET_DIR    folder dataset di dalam repo tersebut
+    GITHUB_DATASET_BRANCH branch repo dataset, default: main
 
 Kedua kunci SC01_* punya nilai bawaan yang masuk akal, jadi `.env` baru dari
 `.env.example` sudah bisa dipakai tanpa disunting lebih dulu.
@@ -23,71 +23,117 @@ import csv
 import os
 from pathlib import Path
 
-AKAR = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1]
 
-# Repo dataset bersifat privat: berisi bukti transaksi perusahaan. Jangan
-# dipindahkan ke repo aplikasi yang publik, dan jangan pakai repo pribadi
+# Repo dataset berisi bukti transaksi perusahaan. Jangan pakai repo pribadi
 # seseorang — semua anggota kelompok harus bisa mengaksesnya.
-REPO_DATASET = os.getenv(
+DATASET_REPO = os.getenv(
     "GITHUB_DATASET_REPO", "Project-Rework-G3-AI/rework-ai-finance-assistant-dataset"
 ).strip()
 # Folder dataset di dalam repo tersebut. Kosong berarti berkas ada di akar repo.
-DIR_DATASET = os.getenv("GITHUB_DATASET_DIR", "").strip()
-BRANCH_DATASET = os.getenv("GITHUB_DATASET_BRANCH", "main").strip()
-SUB_DIR_IMAGES = "Bukti Transaksi Januari 2026"
-SUB_DIR_PAIRS = "sc01/sc01_pairs.csv"
+DATASET_DIR = os.getenv("GITHUB_DATASET_DIR", "").strip()
+DATASET_BRANCH = os.getenv("GITHUB_DATASET_BRANCH", "main").strip()
+IMAGES_SUBDIR = "Bukti Transaksi Januari 2026"
+PAIRS_SUBDIR = "sc01/sc01_pairs.csv"
+
+# Kunci balikan `main.extract` memakai bahasa Indonesia karena fungsi itu dipakai
+# jalur produksi (Telegram, Sheets) yang sudah berjalan. Dipetakan di sini supaya
+# harness memakai nama Inggris tanpa mengubah kontrak produksi.
+EXTRACT_KEYS = {
+    "kategori": "category",
+    "nominal": "amount",
+    "tanggal": "date",
+    "mode": "mode",
+    "keterangan": "note",
+    "catatan": "remark",
+}
+
+
+def normalize_extract(rec: dict) -> dict:
+    """Petakan balikan `main.extract` ke kunci Inggris."""
+    out = {}
+    for k, v in (rec or {}).items():
+        out[EXTRACT_KEYS.get(k, k)] = v
+    return out
+
 
 # Nilai bawaan: mengikuti susunan folder yang dibuat `--download`.
 DEFAULT_PAIRS = "dataset/sc01/sc01_pairs.csv"
 DEFAULT_IMAGES = "dataset/Bukti Transaksi Januari 2026"
 
 
-def muat_env() -> None:
+def load_env() -> None:
     """Muat `.env` di akar repo tanpa menimpa variabel yang sudah ada."""
     try:
         from dotenv import load_dotenv
     except ImportError:  # pragma: no cover - dotenv sudah jadi dependensi
         return
-    load_dotenv(AKAR / ".env", override=False)
+    load_dotenv(ROOT / ".env", override=False)
 
 
-def _path(nilai: str) -> Path:
-    p = Path(nilai).expanduser()
-    return p if p.is_absolute() else (AKAR / p).resolve()
+def _resolve(value: str) -> Path:
+    p = Path(value).expanduser()
+    return p if p.is_absolute() else (ROOT / p).resolve()
 
 
 def pairs_file() -> Path:
     """Lokasi CSV daftar pasangan. Kembalikan nilai bawaan bila belum diatur."""
-    nilai = os.getenv("SC01_PAIRS", "").strip() or DEFAULT_PAIRS
-    return _path(nilai)
+    value = os.getenv("SC01_PAIRS", "").strip() or DEFAULT_PAIRS
+    return _resolve(value)
 
 
 def images_dir() -> Path:
     """Folder gambar bukti transaksi. Kembalikan nilai bawaan bila belum diatur."""
-    nilai = os.getenv("SC01_IMAGES", "").strip() or DEFAULT_IMAGES
-    return _path(nilai)
+    value = os.getenv("SC01_IMAGES", "").strip() or DEFAULT_IMAGES
+    return _resolve(value)
 
 
-def baca_pasangan(path: Path) -> list[dict]:
-    """Baca daftar pasangan. Beri pesan jelas bila berkasnya belum ada."""
+# Nama kolom pada CSV dataset memakai bahasa Indonesia karena berkas itu sudah
+# ada lebih dulu dan dipakai bersama. Dipetakan sekali di sini agar sisa kode
+# memakai nama Inggris, tanpa perlu mengubah berkas datanya.
+PAIR_COLUMNS = {
+    "file": "file",
+    "kategori_acuan": "reference_category",
+    "nominal_acuan": "reference_amount",
+    "tanggal": "reference_date",
+    "nominal_gambar": "image_amount",
+    "keterangan_gambar": "image_note",
+    "kategori_acuan_asli": "reference_category_raw",
+    "sumber_acuan": "reference_source",
+    "baris_xlsx": "source_row",
+}
+
+
+def read_pairs(path: Path) -> list[dict]:
+    """Baca daftar pasangan. Beri pesan jelas bila berkasnya belum ada.
+
+    Kunci hasil dipetakan ke nama Inggris; kolom yang tidak dikenal dibiarkan
+    apa adanya supaya penambahan kolom baru di dataset tidak memecahkan kode.
+    """
     if not Path(path).is_file():
         raise SystemExit(
             f"daftar pasangan belum ada: {path}\n"
             "Jalankan lebih dulu: python3 tests/sc01_harness.py --download"
         )
     with open(path, encoding="utf-8-sig", newline="") as f:
-        return [r for r in csv.DictReader(f) if (r.get("file") or "").strip()]
+        rows = []
+        for raw in csv.DictReader(f):
+            if not (raw.get("file") or "").strip():
+                continue
+            row = {PAIR_COLUMNS.get(k, k): v for k, v in raw.items()}
+            rows.append(row)
+        return rows
 
 
-def ready(abaikan_ai: bool = False) -> tuple[bool, str]:
+def ready(skip_ai_check: bool = False) -> tuple[bool, str]:
     """Periksa kelengkapan sebelum menjalankan evaluasi.
 
     Mengembalikan (siap, alasan). Alasan selalu diisi agar pengguna tahu persis
     apa yang kurang, bukan sekadar "skip".
     """
-    su = pairs_file()
-    if not su.is_file():
-        return False, (f"daftar pasangan belum ada: {su}. "
+    pairs_path = pairs_file()
+    if not pairs_path.is_file():
+        return False, (f"daftar pasangan belum ada: {pairs_path}. "
                        f"Jalankan: python3 tests/sc01_harness.py --download")
 
     folder = images_dir()
@@ -95,32 +141,32 @@ def ready(abaikan_ai: bool = False) -> tuple[bool, str]:
         return False, (f"folder gambar belum ada: {folder}. "
                        f"Jalankan: python3 tests/sc01_harness.py --download")
 
-    if not abaikan_ai and not os.getenv("AI_API_KEY", "").strip():
+    if not skip_ai_check and not os.getenv("AI_API_KEY", "").strip():
         return False, "AI_API_KEY kosong; SC-01 mengukur model asli, bukan mock"
 
-    baris = baca_pasangan(su)
-    if not baris:
-        return False, f"daftar pasangan kosong: {su}"
+    rows = read_pairs(pairs_path)
+    if not rows:
+        return False, f"daftar pasangan kosong: {pairs_path}"
 
-    hilang = [r["file"].strip() for r in baris
-              if not (folder / r["file"].strip()).is_file()]
-    if hilang:
-        return False, (f"{len(hilang)} dari {len(baris)} gambar tidak ada di {folder}. "
+    missing = [r["file"].strip() for r in rows
+               if not (folder / r["file"].strip()).is_file()]
+    if missing:
+        return False, (f"{len(missing)} dari {len(rows)} gambar tidak ada di {folder}. "
                        f"Jalankan: python3 tests/sc01_harness.py --download")
-    return True, f"{len(baris)} pasangan siap diuji"
+    return True, f"{len(rows)} pasangan siap diuji"
 
 
-def _token(nilai: str | None = None) -> str | None:
+def _token(value: str | None = None) -> str | None:
     """Token GitHub, bila ada. Repo dataset publik, jadi token tidak wajib.
 
     Dibiarkan opsional supaya anggota tidak perlu membuat token hanya untuk
     mengunduh data. Bila nanti repo dijadikan privat lagi, token tetap dipakai
     secara otomatis tanpa perubahan kode.
     """
-    return (nilai or os.getenv("GITHUB_TOKEN", "")).strip() or None
+    return (value or os.getenv("GITHUB_TOKEN", "")).strip() or None
 
 
-def _ambil_berkas(jalur: str) -> bytes:
+def _fetch_file(repo_path: str) -> bytes:
     """Ambil berkas, mencoba akses anonim lalu memakai token bila perlu.
 
     Repo dataset semestinya publik, jadi akses anonim biasanya cukup dan tidak
@@ -131,20 +177,20 @@ def _ambil_berkas(jalur: str) -> bytes:
     token = _token()
     if token:
         try:
-            return _ambil_github(jalur, None)
+            return _fetch_from_github(repo_path, None)
         except SystemExit:
-            return _ambil_github(jalur, token)
-    return _ambil_github(jalur, None)
+            return _fetch_from_github(repo_path, token)
+    return _fetch_from_github(repo_path, None)
 
 
-def _jalur_repo(*bagian: str) -> str:
+def _repo_path(*parts: str) -> str:
     """Rangkai jalur di dalam repo dataset, tanpa garis miring berlebih."""
-    potong = [DIR_DATASET] if DIR_DATASET else []
-    potong.extend(bagian)
-    return "/".join(p.strip("/") for p in potong if p.strip("/"))
+    segments = [DATASET_DIR] if DATASET_DIR else []
+    segments.extend(parts)
+    return "/".join(p.strip("/") for p in segments if p.strip("/"))
 
 
-def _ambil_github(jalur: str, token: str | None = None) -> bytes:
+def _fetch_from_github(repo_path: str, token: str | None = None) -> bytes:
     """Ambil satu berkas mentah dari repo dataset.
 
     Repo publik dilayani lewat `raw.githubusercontent.com`, yang tidak memakai
@@ -160,13 +206,13 @@ def _ambil_github(jalur: str, token: str | None = None) -> bytes:
     import urllib.request
 
     if not token:
-        url = (f"https://raw.githubusercontent.com/{REPO_DATASET}/"
-               f"{BRANCH_DATASET}/{urllib.parse.quote(jalur)}")
-        sumber = "raw.githubusercontent.com (tanpa token)"
+        url = (f"https://raw.githubusercontent.com/{DATASET_REPO}/"
+               f"{DATASET_BRANCH}/{urllib.parse.quote(repo_path)}")
+        source = "raw.githubusercontent.com (tanpa token)"
     else:
-        url = (f"https://api.github.com/repos/{REPO_DATASET}/contents/"
-               f"{urllib.parse.quote(jalur)}")
-        sumber = "API GitHub (dengan token)"
+        url = (f"https://api.github.com/repos/{DATASET_REPO}/contents/"
+               f"{urllib.parse.quote(repo_path)}")
+        source = "API GitHub (dengan token)"
 
     req = urllib.request.Request(url)
     if token:
@@ -178,9 +224,9 @@ def _ambil_github(jalur: str, token: str | None = None) -> bytes:
     except urllib.error.HTTPError as e:
         if e.code == 404:
             raise SystemExit(
-                f"berkas tidak ditemukan: {jalur}\n"
-                f"  sumber : {sumber}\n"
-                f"  repo   : {REPO_DATASET} (branch {BRANCH_DATASET})\n"
+                f"berkas tidak ditemukan: {repo_path}\n"
+                f"  sumber : {source}\n"
+                f"  repo   : {DATASET_REPO} (branch {DATASET_BRANCH})\n"
                 "Kemungkinan penyebab:\n"
                 "  1. Repo dataset sedang privat, sehingga akses tanpa token ditolak.\n"
                 "     Isi GITHUB_TOKEN di .env, atau minta pemilik repo menjadikannya publik.\n"
@@ -190,10 +236,10 @@ def _ambil_github(jalur: str, token: str | None = None) -> bytes:
         if e.code in (403, 429):
             raise SystemExit(
                 f"akses ditolak atau kena batas kuota: HTTP {e.code}\n"
-                f"  sumber : {sumber}\n"
+                f"  sumber : {source}\n"
                 "Isi GITHUB_TOKEN di .env untuk memakai kuota akunmu sendiri."
             ) from None
-        raise SystemExit(f"gagal mengunduh {jalur}: HTTP {e.code}") from None
+        raise SystemExit(f"gagal mengunduh {repo_path}: HTTP {e.code}") from None
     except urllib.error.URLError as e:
         raise SystemExit(
             f"tidak bisa menghubungi GitHub: {e.reason}\n"
@@ -201,7 +247,7 @@ def _ambil_github(jalur: str, token: str | None = None) -> bytes:
         ) from None
 
 
-def unduh_pasangan(tujuan: Path | None = None,
+def download_pairs(target: Path | None = None,
                    token: str | None = None) -> Path:
     """Unduh daftar pasangan dari repo dataset bila belum ada.
 
@@ -209,18 +255,18 @@ def unduh_pasangan(tujuan: Path | None = None,
     sedangkan daftar itu sendiri juga ada di repo yang sama. Fungsi ini memutus
     ketergantungan tersebut sehingga satu perintah cukup.
     """
-    tujuan = tujuan or pairs_file()
-    if tujuan.is_file() and tujuan.stat().st_size > 100:
-        return tujuan
+    target = target or pairs_file()
+    if target.is_file() and target.stat().st_size > 100:
+        return target
 
-    tujuan.parent.mkdir(parents=True, exist_ok=True)
-    print(f"mengunduh daftar pasangan ke: {tujuan}")
-    tujuan.write_bytes(_ambil_berkas(_jalur_repo(SUB_DIR_PAIRS)))
-    return tujuan
+    target.parent.mkdir(parents=True, exist_ok=True)
+    print(f"mengunduh daftar pasangan ke: {target}")
+    target.write_bytes(_fetch_file(_repo_path(PAIRS_SUBDIR)))
+    return target
 
 
-def unduh_gambar(tujuan: Path | None = None, token: str | None = None,
-                 berkas: list[str] | None = None) -> tuple[int, int]:
+def download_images(target: Path | None = None, token: str | None = None,
+                    filenames: list[str] | None = None) -> tuple[int, int]:
     """Unduh gambar dataset dari repo. Kembalikan (baru, dilewati).
 
     Hanya dipakai sekali di awal. Setelah gambar ada di disk, evaluasi berjalan
@@ -229,35 +275,35 @@ def unduh_gambar(tujuan: Path | None = None, token: str | None = None,
     Galat dicatat lalu dilanjutkan, supaya satu berkas bermasalah tidak
     membatalkan seluruh unduhan. Ringkasannya dilaporkan di akhir.
     """
-    tujuan = tujuan or images_dir()
+    target = target or images_dir()
 
-    perlu = berkas or [r["file"].strip() for r in baca_pasangan(pairs_file())]
-    tujuan.mkdir(parents=True, exist_ok=True)
+    needed = filenames or [r["file"].strip() for r in read_pairs(pairs_file())]
+    target.mkdir(parents=True, exist_ok=True)
 
-    baru = lewat = gagal = 0
-    pesan_galat = ""
-    for i, nama in enumerate(perlu, 1):
-        dst = tujuan / nama
+    downloaded = skipped = failed = 0
+    error_message = ""
+    for i, name in enumerate(needed, 1):
+        dst = target / name
         if dst.is_file() and dst.stat().st_size > 1000:
-            lewat += 1
+            skipped += 1
             continue
         try:
-            dst.write_bytes(_ambil_berkas(_jalur_repo(SUB_DIR_IMAGES, nama)))
+            dst.write_bytes(_fetch_file(_repo_path(IMAGES_SUBDIR, name)))
         except SystemExit as e:
             # Pesan sudah informatif; simpan sekali, jangan cetak 65 kali.
-            pesan_galat = pesan_galat or str(e)
-            gagal += 1
+            error_message = error_message or str(e)
+            failed += 1
             continue
         except Exception as e:
-            pesan_galat = pesan_galat or f"{type(e).__name__}: {e}"
-            gagal += 1
+            error_message = error_message or f"{type(e).__name__}: {e}"
+            failed += 1
             continue
-        baru += 1
+        downloaded += 1
         if i % 20 == 0:
-            print(f"  ... {i}/{len(perlu)}")
+            print(f"  ... {i}/{len(needed)}")
 
-    if gagal:
-        print(f"peringatan: {gagal} dari {len(perlu)} gambar gagal diunduh")
-        if pesan_galat:
-            print("  " + pesan_galat.replace("\n", "\n  "))
-    return baru, lewat
+    if failed:
+        print(f"peringatan: {failed} dari {len(needed)} gambar gagal diunduh")
+        if error_message:
+            print("  " + error_message.replace("\n", "\n  "))
+    return downloaded, skipped
