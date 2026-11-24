@@ -13,15 +13,15 @@ terlanjur ditulis.
 Pemakaian:
 
     # 1. unduh gambar dataset (sekali saja)
-    python3 tests/sc01_harness.py --download
+    python3 tests/sc_runner.py --download
 
     # 2. jalankan evaluasi (butuh AI_API_KEY)
-    python3 tests/sc01_harness.py
+    python3 tests/sc_runner.py
 
     # 3. hitung ulang metrik dari CSV yang sudah ada (tanpa memanggil AI)
-    python3 tests/sc01_harness.py --metrics-only
+    python3 tests/sc_runner.py --metrics-only
 
-Lokasi dataset diatur di `.env` lewat SC01_PAIRS dan SC01_IMAGES.
+Lokasi dataset diatur di `.env` lewat SC_PAIRS dan SC_IMAGES.
 """
 
 from __future__ import annotations
@@ -39,13 +39,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import sc01_config as cfg  # noqa: E402
+import sc_common as cfg  # noqa: E402
 
 cfg.load_env()
 
 import httpx  # noqa: E402
 
-from sc01_metrics import compute  # noqa: E402
+from sc_metrics import compute  # noqa: E402
 
 OUTPUT_COLUMNS = [
     "file", "reference_category", "proposed_category", "match",
@@ -200,8 +200,8 @@ def main_cli() -> int:
         description="Runner evaluasi SC-01 (akurasi kategori)")
     ap.add_argument("--download", action="store_true",
                     help="unduh gambar dataset dari repo, lalu berhenti")
-    ap.add_argument("--pairs", default="", help="timpa SC01_PAIRS")
-    ap.add_argument("--images", default="", help="timpa SC01_IMAGES")
+    ap.add_argument("--pairs", default="", help="timpa SC_PAIRS")
+    ap.add_argument("--images", default="", help="timpa SC_IMAGES")
     ap.add_argument("--out", default="sc01-out", help="folder keluaran (default: sc01-out)")
     ap.add_argument("--restart", action="store_true", help="abaikan hasil lama, proses dari awal")
     ap.add_argument("--repeat", type=int, default=1, metavar="N",
@@ -211,9 +211,9 @@ def main_cli() -> int:
 
     # Argumen CLI menang atas .env, supaya bisa dipakai tanpa menyunting file.
     if a.pairs:
-        os.environ["SC01_PAIRS"] = a.pairs
+        os.environ["SC_PAIRS"] = a.pairs
     if a.images:
-        os.environ["SC01_IMAGES"] = a.images
+        os.environ["SC_IMAGES"] = a.images
 
     if a.download:
         # Daftar pasangan diunduh dulu: tanpa itu tidak diketahui gambar mana

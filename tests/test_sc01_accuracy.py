@@ -15,12 +15,12 @@ Persiapan sekali saja (lihat docs/sc01-cara-menjalankan.md):
 
     cp .env.example .env
     # isi AI_API_KEY
-    python3 tests/sc01_harness.py --download     # unduh 65 gambar
+    python3 tests/sc_runner.py --download     # unduh 65 gambar
 
 Menjalankan:
 
     pytest tests/test_sc01_accuracy.py -v                    # rumus metrik saja
-    pytest tests/test_sc01_accuracy.py -v -m sc01_model      # + panggil model
+    pytest tests/test_sc01_accuracy.py -v -m sc_model      # + panggil model
 """
 
 from __future__ import annotations
@@ -36,8 +36,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import sc01_config as cfg  # noqa: E402
-from sc01_metrics import compute  # noqa: E402
+import sc_common as cfg  # noqa: E402
+from sc_metrics import compute  # noqa: E402
 
 cfg.load_env()
 
@@ -151,10 +151,10 @@ def test_runner_does_not_write_to_sheets_or_drive():
                 raise AssertionError(f"{_n} dipanggil saat evaluasi SC-01")
             setattr(main, name, _trap)
 
-    import sc01_harness  # noqa: E402
+    import sc_runner  # noqa: E402
 
     assert not called, f"fungsi tulis terpanggil: {called}"
-    assert hasattr(sc01_harness, "run_pairs")
+    assert hasattr(sc_runner, "run_pairs")
 
 
 # ------------------------------------------------------- eksekusi model asli
@@ -169,8 +169,8 @@ needs_ai = pytest.mark.skipif(
 # `pytest` biasa akan menghabiskan puluhan panggilan dan belasan menit hanya
 # karena .env kebetulan terisi.
 opt_in = pytest.mark.skipif(
-    not os.getenv("SC01_RUN_MODEL", "").strip(),
-    reason="test model berbayar; set SC01_RUN_MODEL=1 untuk menjalankannya",
+    not os.getenv("SC_RUN_MODEL", "").strip(),
+    reason="test model berbayar; set SC_RUN_MODEL=1 untuk menjalankannya",
 )
 
 
@@ -194,17 +194,17 @@ def test_evaluation_set_is_complete_and_labelled():
 @needs_dataset
 @needs_ai
 @opt_in
-@pytest.mark.sc01_model
+@pytest.mark.sc_model
 def test_sc01_accuracy_meets_the_target(tmp_path):
     """Jalankan model asli pada seluruh set uji dan bandingkan dengan target BRD.
 
     Hasil ditulis ke tmp_path agar tidak mengotori repo. Test ini butuh opt-in
     ganda karena memanggil API berbayar dan berjalan belasan menit:
 
-        SC01_RUN_MODEL=1 pytest -m sc01_model -v
+        SC_RUN_MODEL=1 pytest -m sc_model -v
 
     Untuk sekadar mengukur tanpa assertion, pakai runner:
-        python3 tests/sc01_harness.py
+        python3 tests/sc_runner.py
     """
     import asyncio
 

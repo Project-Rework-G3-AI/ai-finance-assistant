@@ -232,15 +232,15 @@ Persiapan sekali saja:
 ```bash
 cp .env.example .env
 # isi AI_API_KEY, dan sesuaikan AI_BASE_URL serta AI_MODEL
-python3 tests/sc01_harness.py --download     # unduh 65 gambar, sekali saja
+python3 tests/sc_runner.py --download     # unduh 65 gambar, sekali saja
 ```
 
 Menjalankan:
 
 ```bash
-python3 tests/sc01_harness.py                # ukur akurasi
-python3 tests/sc01_harness.py --metrics-only # hitung ulang tanpa biaya
-python3 tests/sc01_harness.py --repeat 3     # lihat sebaran antar-run
+python3 tests/sc_runner.py                # ukur akurasi
+python3 tests/sc_runner.py --metrics-only # hitung ulang tanpa biaya
+python3 tests/sc_runner.py --repeat 3     # lihat sebaran antar-run
 ```
 
 Hasil ada di `sc01-out/`:
@@ -259,7 +259,7 @@ Untuk memaksa evaluasi berjalan sebagai assertion lulus/gagal terhadap target
 85%, pakai opt-in ganda karena sifatnya berbayar dan lama:
 
 ```bash
-SC01_RUN_MODEL=1 pytest -m sc01_model -v
+SC_RUN_MODEL=1 pytest -m sc_model -v
 ```
 
 Panduan rinci, termasuk pemecahan masalah dan alasan angka antar-run berbeda,

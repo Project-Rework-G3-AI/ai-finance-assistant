@@ -6,14 +6,14 @@ tetap menang, berguna untuk CI atau saat ingin menimpa sementara.
 
 Kunci yang dikenali:
 
-    SC01_PAIRS            daftar pasangan gambar -> baris (CSV)
-    SC01_IMAGES           folder gambar bukti transaksi
+    SC_PAIRS            daftar pasangan gambar -> baris (CSV)
+    SC_IMAGES           folder gambar bukti transaksi
     GITHUB_TOKEN          opsional; hanya dipakai bila repo dataset privat
     GITHUB_DATASET_REPO   default: Project-Rework-G3-AI/rework-ai-finance-assistant-dataset
     GITHUB_DATASET_DIR    folder dataset di dalam repo tersebut
     GITHUB_DATASET_BRANCH branch repo dataset, default: main
 
-Kedua kunci SC01_* punya nilai bawaan yang masuk akal, jadi `.env` baru dari
+Kedua kunci SC_* punya nilai bawaan yang masuk akal, jadi `.env` baru dari
 `.env.example` sudah bisa dipakai tanpa disunting lebih dulu.
 """
 
@@ -78,13 +78,13 @@ def _resolve(value: str) -> Path:
 
 def pairs_file() -> Path:
     """Lokasi CSV daftar pasangan. Kembalikan nilai bawaan bila belum diatur."""
-    value = os.getenv("SC01_PAIRS", "").strip() or DEFAULT_PAIRS
+    value = os.getenv("SC_PAIRS", "").strip() or DEFAULT_PAIRS
     return _resolve(value)
 
 
 def images_dir() -> Path:
     """Folder gambar bukti transaksi. Kembalikan nilai bawaan bila belum diatur."""
-    value = os.getenv("SC01_IMAGES", "").strip() or DEFAULT_IMAGES
+    value = os.getenv("SC_IMAGES", "").strip() or DEFAULT_IMAGES
     return _resolve(value)
 
 
@@ -113,7 +113,7 @@ def read_pairs(path: Path) -> list[dict]:
     if not Path(path).is_file():
         raise SystemExit(
             f"daftar pasangan belum ada: {path}\n"
-            "Jalankan lebih dulu: python3 tests/sc01_harness.py --download"
+            "Jalankan lebih dulu: python3 tests/sc_runner.py --download"
         )
     with open(path, encoding="utf-8-sig", newline="") as f:
         rows = []
@@ -134,12 +134,12 @@ def ready(skip_ai_check: bool = False) -> tuple[bool, str]:
     pairs_path = pairs_file()
     if not pairs_path.is_file():
         return False, (f"daftar pasangan belum ada: {pairs_path}. "
-                       f"Jalankan: python3 tests/sc01_harness.py --download")
+                       f"Jalankan: python3 tests/sc_runner.py --download")
 
     folder = images_dir()
     if not folder.is_dir():
         return False, (f"folder gambar belum ada: {folder}. "
-                       f"Jalankan: python3 tests/sc01_harness.py --download")
+                       f"Jalankan: python3 tests/sc_runner.py --download")
 
     if not skip_ai_check and not os.getenv("AI_API_KEY", "").strip():
         return False, "AI_API_KEY kosong; SC-01 mengukur model asli, bukan mock"
@@ -152,7 +152,7 @@ def ready(skip_ai_check: bool = False) -> tuple[bool, str]:
                if not (folder / r["file"].strip()).is_file()]
     if missing:
         return False, (f"{len(missing)} dari {len(rows)} gambar tidak ada di {folder}. "
-                       f"Jalankan: python3 tests/sc01_harness.py --download")
+                       f"Jalankan: python3 tests/sc_runner.py --download")
     return True, f"{len(rows)} pasangan siap diuji"
 
 

@@ -45,8 +45,8 @@ Langkah menjalankan evaluasi ini di komputer lokal ada di
 [`sc01-cara-menjalankan.md`](sc01-cara-menjalankan.md). Ringkasnya:
 
 ```bash
-python3 tests/sc01_harness.py --download   # unduh 65 gambar (sekali)
-python3 tests/sc01_harness.py             # jalankan evaluasi
+python3 tests/sc_runner.py --download   # unduh 65 gambar (sekali)
+python3 tests/sc_runner.py             # jalankan evaluasi
 ```
 
 | Komponen | Perlakuan |
@@ -150,8 +150,8 @@ tercatat" padahal kategorinya tidak pernah terisi.
 
 | Berkas | Isi |
 |---|---|
-| `tests/sc01_metrics.py` | Perhitungan akurasi, baseline, lift, macro-average, confusion matrix |
-| `tests/sc01_harness.py` | Runner: panggil model, simpan hasil per baris, tulis laporan |
+| `tests/sc_metrics.py` | Perhitungan akurasi, baseline, lift, macro-average, confusion matrix |
+| `tests/sc_runner.py` | Runner: panggil model, simpan hasil per baris, tulis laporan |
 | `tests/test_sc01_accuracy.py` | Test rumus metrik dan batas ruang lingkup |
 | `results_per_row.csv` | Keluaran per gambar (tidak di-commit; berisi data transaksi) |
 

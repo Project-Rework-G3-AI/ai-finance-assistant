@@ -16,8 +16,8 @@ pip install -r requirements.txt
 
 cp .env.example .env               # isi 4 nilai, lihat bawah
 
-python3 tests/sc01_harness.py --download    # unduh data (sekali saja)
-python3 tests/sc01_harness.py              # jalankan evaluasi
+python3 tests/sc_runner.py --download    # unduh data (sekali saja)
+python3 tests/sc_runner.py              # jalankan evaluasi
 ```
 
 Hasil ada di `sc01-out/report.txt`, `sc01-out/metrics.json`, dan
@@ -40,13 +40,13 @@ GITHUB_TOKEN=ghp_...                 # hanya untuk --download
 punya akses, `--download` akan berhenti dengan pesan yang menyebut repo mana
 yang gagal diakses.
 
-`SC01_PAIRS` dan `SC01_IMAGES` **tidak perlu diisi**. Keduanya punya nilai
+`SC_PAIRS` dan `SC_IMAGES` **tidak perlu diisi**. Keduanya punya nilai
 bawaan yang cocok dengan hasil `--download`:
 
 | Kunci | Nilai bawaan |
 |---|---|
-| `SC01_PAIRS` | `dataset/sc01/sc01_pairs.csv` |
-| `SC01_IMAGES` | `dataset/Bukti Transaksi Januari 2026` |
+| `SC_PAIRS` | `dataset/sc01/sc01_pairs.csv` |
+| `SC_IMAGES` | `dataset/Bukti Transaksi Januari 2026` |
 
 Isi hanya bila ingin menaruh data di tempat lain.
 
@@ -114,17 +114,17 @@ tanggal dan nominal. Sisanya tidak dipakai.
 ## Kalau sudah punya dataset sendiri
 
 Bila kamu sudah meng-clone repo dataset, tidak perlu `--download`. Cukup arahkan
-`SC01_PAIRS` dan `SC01_IMAGES` ke folder hasil clone:
+`SC_PAIRS` dan `SC_IMAGES` ke folder hasil clone:
 
 ```ini
-SC01_PAIRS=../rework-ai-finance-assistant-dataset/sc01/sc01_pairs.csv
-SC01_IMAGES=../rework-ai-finance-assistant-dataset/Bukti Transaksi Januari 2026
+SC_PAIRS=../rework-ai-finance-assistant-dataset/sc01/sc01_pairs.csv
+SC_IMAGES=../rework-ai-finance-assistant-dataset/Bukti Transaksi Januari 2026
 ```
 
 Atau tanpa menyunting `.env`, sebut langsung di perintah:
 
 ```bash
-python3 tests/sc01_harness.py \
+python3 tests/sc_runner.py \
   --pairs ../rework-ai-finance-assistant-dataset/sc01/sc01_pairs.csv \
   --images "../rework-ai-finance-assistant-dataset/Bukti Transaksi Januari 2026"
 ```
@@ -145,7 +145,7 @@ tidak butuh dataset. Ini yang dijalankan di CI.
 ### 2. Runner (cara utama untuk mengukur)
 
 ```bash
-python3 tests/sc01_harness.py
+python3 tests/sc_runner.py
 ```
 
 Memanggil model asli pada 65 gambar. Sekitar 10 sampai 20 menit, tergantung
@@ -156,14 +156,14 @@ tidak diulang.
 Untuk sekadar menghitung ulang dari hasil yang sudah ada, tanpa biaya:
 
 ```bash
-python3 tests/sc01_harness.py --metrics-only
+python3 tests/sc_runner.py --metrics-only
 ```
 
 Karena hasil antar-run bisa berbeda, untuk angka yang lebih dapat dipercaya
 jalankan beberapa kali lalu lihat sebarannya:
 
 ```bash
-python3 tests/sc01_harness.py --repeat 3
+python3 tests/sc_runner.py --repeat 3
 ```
 
 Setiap run disimpan di `sc01-out/run-N/`, dan ringkasan rentangnya di
@@ -172,7 +172,7 @@ Setiap run disimpan di `sc01-out/run-N/`, dan ringkasan rentangnya di
 ### 3. Test model sebagai assertion (opsional)
 
 ```bash
-SC01_RUN_MODEL=1 pytest -m sc01_model -v
+SC_RUN_MODEL=1 pytest -m sc_model -v
 ```
 
 Sama seperti runner, tetapi hasilnya berupa lulus atau gagal terhadap target
@@ -229,5 +229,5 @@ dari beberapa run, jangan satu hasil. Selisih sepuluh poin persen antar-run suda
 cukup untuk mengubah kesimpulan bila hanya satu run yang dilaporkan.
 
 ```bash
-python3 tests/sc01_harness.py --repeat 3
+python3 tests/sc_runner.py --repeat 3
 ```
