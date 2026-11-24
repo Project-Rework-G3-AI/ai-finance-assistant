@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,18 @@ def _safe(value):
     if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
         return "'" + value
     return value
+
+
+def _periode_teks(value) -> str:
+    """Bandingkan periode sebagai ISO date.
+
+    Ditulis USER_ENTERED -> Sheets menyimpan "2026-01-01" sebagai serial
+    tanggal; tanpa konversi ini pencocokan laporan lama tidak pernah cocok
+    dan run berikutnya menambah baris (ganda) alih-alih mengganti.
+    """
+    if isinstance(value, (int, float)) and value:
+        return (datetime(1899, 12, 30) + timedelta(days=float(value))).date().isoformat()
+    return str(value or "").strip()
 
 
 def get_or_create_worksheet(
@@ -122,13 +135,14 @@ def write_reconciliation_report(
         worksheet_title=worksheet_title,
     )
 
-    # Read existing report
+    # Read existing report. Sheet baru bisa mengembalikan [] ATAU baris
+    # kosong ([[]]) — keduanya berarti belum ada header, jadi pakai HEADERS.
     existing_rows = worksheet.get(
         "A1:S",
         value_render_option="UNFORMATTED_VALUE",
     )
 
-    if not existing_rows:
+    if not existing_rows or not any(str(v).strip() for v in existing_rows[0]):
         existing_rows = [HEADERS]
 
     existing_headers = [
@@ -158,8 +172,8 @@ def write_reconciliation_report(
 
         bank = str(row[0] or "").strip().upper()
         account = str(row[1] or "").strip()
-        period_start = str(row[2] or "").strip()
-        period_end = str(row[3] or "").strip()
+        period_start = _periode_teks(row[2])
+        period_end = _periode_teks(row[3])
 
         same_report = (
             bank == target_bank
