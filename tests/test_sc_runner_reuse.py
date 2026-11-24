@@ -121,3 +121,104 @@ def test_write_source_merges_instead_of_dropping_previous_fields(tmp_path):
 def test_source_json_is_written_inside_the_output_directory(tmp_path):
     write_source(tmp_path, model_calls=1)
     assert (tmp_path / "source.json").exists()
+
+
+# ------------------------------------------- angka yang dipakai menilai target
+
+def test_report_names_the_number_used_to_judge_the_target(tmp_path):
+    """Laporan wajib menyebut angka mana yang dibandingkan dengan target.
+
+    Tanpa ini, pembaca melihat kelengkapan 98,2% dan kecocokan 72,5% lalu
+    menebak sendiri mana yang dipakai. Status "BELUM TERCAPAI" saja tidak
+    cukup, karena tidak menjelaskan dari kolom mana angka itu diambil.
+    """
+    import sc_runner
+
+    rows = [
+        {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
+                                 "bank": "BNI", "direction": "keluar",
+                                 "category": "Bahan Baku", "remark": "", "mode": "vision"},
+         "reference": {"date": "2026-01-01", "amount": "1000",
+                       "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
+    ]
+    rep = sc_runner.write_sc02_report(rows, tmp_path)
+    teks = rep["text"]
+
+    assert "Angka yang dinilai" in teks
+    assert "kecocokan rata-rata" in teks
+    assert "<- dipakai menilai target" in teks
+    assert "Status" in teks
+
+
+def test_report_states_the_denominator_of_the_average(tmp_path):
+    """Penyebut harus disebut: 4 field beracuan, bukan 5."""
+    import sc_runner
+
+    rows = [
+        {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
+                                 "bank": "BNI", "direction": "keluar",
+                                 "category": "Bahan Baku", "remark": "", "mode": "vision"},
+         "reference": {"date": "2026-01-01", "amount": "1000",
+                       "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
+    ]
+    teks = sc_runner.write_sc02_report(rows, tmp_path)["text"]
+    assert "4 field beracuan" in teks
+
+
+def test_report_shows_accuracy_without_category(tmp_path):
+    """Sebab kegagalan harus terbaca, bukan tersembunyi di rata-rata."""
+    import sc_runner
+
+    rows = [
+        {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
+                                 "bank": "BNI", "direction": "keluar",
+                                 "category": "SALAH", "remark": "", "mode": "vision"},
+         "reference": {"date": "2026-01-01", "amount": "1000",
+                       "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
+    ]
+    teks = sc_runner.write_sc02_report(rows, tmp_path)["text"]
+    assert "kecocokan tanpa kategori" in teks
+
+
+def test_scored_count_counts_only_fields_with_a_reference():
+    from sc02_completeness import compute
+
+    rows = [
+        {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
+                                 "bank": "BNI", "direction": "keluar",
+                                 "category": "Bahan Baku", "remark": "", "mode": "vision"},
+         "reference": {"date": "2026-01-01", "amount": "1000",
+                       "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
+    ]
+    c = compute(rows)
+    assert c.scored_count == 4  # direction tanpa acuan tidak ikut
+
+
+def test_accuracy_excluding_removes_only_the_named_field():
+    from sc02_completeness import compute
+
+    rows = [
+        {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
+                                 "bank": "BNI", "direction": "keluar",
+                                 "category": "SALAH", "remark": "", "mode": "vision"},
+         "reference": {"date": "2026-01-01", "amount": "1000",
+                       "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
+    ]
+    c = compute(rows)
+    tanpa = c.accuracy_excluding("category")
+    assert tanpa > c.overall_accuracy
+    assert tanpa == pytest.approx(1.0)
+
+
+def test_accuracy_excluding_returns_zero_when_nothing_left():
+    from sc02_completeness import compute
+
+    rows = [
+        {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
+                                 "bank": "BNI", "direction": "keluar",
+                                 "category": "Bahan Baku", "remark": "", "mode": "vision"},
+         "reference": {"date": "2026-01-01", "amount": "1000",
+                       "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
+    ]
+    c = compute(rows)
+    assert c.accuracy_excluding("date", "amount", "bank", "category") == 0.0

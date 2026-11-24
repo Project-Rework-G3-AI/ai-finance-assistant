@@ -120,6 +120,29 @@ class CompletenessResult:
         return sum(f.accuracy for f in scored) / len(scored)
 
     @property
+    def scored_count(self) -> int:
+        """Berapa field yang benar-benar ikut dirata-rata.
+
+        Angka ini perlu disebut di laporan supaya pembaca tahu penyebut dari
+        persentase yang dipakai menilai target. Tanpa itu, 72,5% bisa disangka
+        rata-rata kelima field padahal hanya empat yang punya acuan.
+        """
+        return sum(1 for f in self.fields.values() if f.has_reference)
+
+    def accuracy_excluding(self, *names: str) -> float:
+        """Kecocokan rata-rata tanpa field tertentu.
+
+        Dipakai untuk menunjukkan bahwa target gagal karena satu field saja.
+        Kategori diukur di SC-01, jadi menyebut angkanya tanpa kategori
+        membuat sebab kegagalan terbaca, bukan sekadar tersembunyi di rata-rata.
+        """
+        keep = [f for n, f in self.fields.items()
+                if f.has_reference and n not in names]
+        if not keep:
+            return 0.0
+        return sum(f.accuracy for f in keep) / len(keep)
+
+    @property
     def all_fields_complete(self) -> int:
         """Jumlah baris yang kelima field wajibnya terbaca semua."""
         return sum(1 for r in self.per_row if r.get("complete") == "ya")

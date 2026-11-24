@@ -6,18 +6,36 @@ persentase field wajib yang **terbaca benar** dari gambar bukti transaksi.
 **Target BRD:** minimal 90% field wajib terbaca benar pada 118 gambar uji
 Januari 2026.
 
+## Angka mana yang dibandingkan dengan target
+
+Ini pertanyaan pertama yang wajar muncul, karena laporan memuat beberapa angka
+sekaligus. Jawabannya:
+
+| Angka | Nilai | Dipakai menilai target? |
+|---|---|---|
+| Kelengkapan rata-rata | 98,2% | **tidak** |
+| Kecocokan rata-rata | **72,5%** | **ya** |
+| Kecocokan tanpa kategori | 95,2% | tidak, hanya penjelas |
+
+**Yang dibandingkan dengan target 90% adalah kecocokan rata-rata 72,5%.**
+
+Alasannya: BRD menyebut "terbaca **benar**", bukan "terisi". Kelengkapan 98,2%
+hanya berarti model membaca sesuatu di hampir semua field, termasuk saat
+nilainya salah. Jadi angka itu tidak boleh dipakai menilai target.
+
+Penyebut 72,5% adalah **4 field**, bukan 5. Field `arah` tidak punya acuan di
+dataset, jadi tidak ikut dirata-rata. Rata-rata dihitung per field, bukan per
+baris, supaya satu field yang selalu gagal tidak tertutup oleh field lain yang
+selalu berhasil.
+
 ## Ringkasan
 
 | Ukuran | Hasil | Target | Status |
 |---|---|---|---|
-| Kelengkapan (field terbaca) | **98,2%** | 90% | tercapai |
-| Kecocokan (terbaca **benar**) | **72,5%** | 90% | **belum tercapai** |
+| Kelengkapan (field terbaca) | **98,2%** | — | bukan penentu |
+| **Kecocokan (terbaca benar)** | **72,5%** | 90% | **belum tercapai** |
+| Kecocokan tanpa kategori | 95,2% | — | penjelas sebab |
 | Baris dengan 5/5 field lengkap | **59 dari 65** | — | — |
-
-Angka yang dipakai menilai target adalah **kecocokan 72,5%**, karena BRD
-menyebut "terbaca **benar**", bukan sekadar "terisi". Kelengkapan 98,2%
-dilaporkan berdampingan karena keduanya menjelaskan hal berbeda: model hampir
-selalu membaca sesuatu, tetapi tidak selalu nilainya tepat.
 
 ## Rincian per field
 
@@ -37,7 +55,7 @@ dataset tidak menyediakan acuan arah.
 
 ### Kategori menyeret seluruh angka
 
-Kalau kelima field dirata-ratakan apa adanya, hasilnya 72,5% dan target tidak
+Kalau keempat field beracuan dirata-ratakan, hasilnya 72,5% dan target tidak
 tercapai. Tetapi penyebabnya **satu field saja**:
 
 | Perhitungan | Hasil |
@@ -54,9 +72,14 @@ kategori ikut dihitung di SC-02, satu akar masalah yang sama membuat dua
 kriteria gagal sekaligus, dan laporan seolah menunjukkan dua kegagalan terpisah
 padahal hanya satu.
 
-**Rekomendasi pelaporan:** laporkan SC-02 tanpa kategori sebagai angka utama,
-lalu sebutkan kategori sebagai temuan SC-01. Jangan hapus kategori dari SC-02
-tanpa menyebutkannya — pembaca perlu tahu bahwa field itu diukur di tempat lain.
+**Cara melaporkan.** Status resmi memakai 72,5% (semua field beracuan), karena
+BRD menyebut "field wajib" tanpa pengecualian. Angka 95,2% dilaporkan
+berdampingan sebagai penjelas sebab, bukan sebagai pengganti status.
+
+Kategori tetap dihitung di SC-02 karena ia field wajib. Tetapi kategori juga
+diukur di SC-01, jadi menyebut 4,6% dua kali berisiko membuat satu akar masalah
+tampak seperti dua kegagalan. Kalimat yang jujur: target SC-02 gagal, dan
+penyebab utamanya adalah field kategori yang sudah punya kriteria sendiri.
 
 ### Enam baris gagal membaca kantong
 

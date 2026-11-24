@@ -349,8 +349,12 @@ def build_sc02_rows(results: list[dict]) -> list[dict]:
             "remark": r.get("note") or "",
             "mode": r.get("mode") or "",
         }
+        # Acuan yang sudah menempel di baris hasil dipakai lebih dulu. Tanpa
+        # ini, fungsi ini hanya bisa bekerja bila file pasangan ada di disk,
+        # sehingga tidak bisa diuji dan diam-diam menilai tanpa acuan.
+        reference = r.get("reference") or reference_by_file.get(name)
         rows.append({"file": name, "record": record,
-                     "reference": reference_by_file.get(name)})
+                     "reference": reference})
     return rows
 
 
@@ -360,6 +364,13 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
     c = sc02_completeness.compute(rows)
 
     target = 0.90
+    # Angka yang dipakai menilai target harus disebut namanya, bukan hanya
+    # muncul sebagai "Status: BELUM TERCAPAI". Tanpa ini pembaca harus menebak
+    # dari tabel mana angka itu diambil, dan laporan bisa tampak menilai dua
+    # hal sekaligus: kelengkapan 98,2% dan kecocokan 72,5%.
+    dinilai = c.overall_accuracy
+    verdict = "TERCAPAI" if dinilai >= target else "BELUM TERCAPAI"
+    tanpa_kat = c.accuracy_excluding("category")
     lines = [
         "SC-02 — Kelengkapan field wajib",
         "=" * 60,
@@ -368,13 +379,24 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
         c.summary(),
         "",
         "Target BRD: minimal 90% field wajib terbaca benar",
-        f"Status    : {'TERCAPAI' if c.overall_accuracy >= target else 'BELUM TERCAPAI'}",
+        f"Angka yang dinilai : kecocokan rata-rata {dinilai:.1%} "
+        f"({c.scored_count} field beracuan, dirata-rata per field)",
+        f"Status             : {verdict}",
+        "",
+        "Rincian angka",
+        "-" * 60,
+        f"  kelengkapan rata-rata          : {c.overall_completeness:.1%} "
+        f"(field terbaca, belum tentu benar)",
+        f"  kecocokan rata-rata            : {dinilai:.1%}  <- dipakai menilai target",
+        f"  kecocokan tanpa kategori       : {tanpa_kat:.1%} "
+        f"(kategori sudah diukur di SC-01)",
         "",
         "Catatan penilaian",
         "-" * 60,
         "kelengkapan = field terbaca, tanpa penanda gagal baca dan bukan mode mock",
         "akurasi     = terbaca dan nilainya cocok dengan acuan (bila acuan ada)",
         "tebakan     = field yang diisi nilai bawaan kode karena model gagal membaca",
+        "field tanpa acuan di dataset tidak ikut dirata-rata",
     ]
     text = "\n".join(lines)
     (out / "sc02_report.txt").write_text(text, encoding="utf-8")
