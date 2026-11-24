@@ -10,7 +10,7 @@ Kriteria yang sudah bisa diukur:
 |---|---|---|
 | SC-01 | Akurasi usulan kategori | sudah |
 | SC-02 | Kelengkapan field wajib | sudah |
-| SC-03 | Waktu proses sampai tersimpan | belum |
+| SC-03 | Waktu proses sampai tersimpan | sudah, perlu kredensial Google |
 | SC-04 | Biaya per gambar | belum |
 | SC-05 | Duplikat ditolak | belum |
 | SC-06 | Semua kolom wajib terpetakan | belum |
@@ -116,8 +116,24 @@ dataset. Ini yang aman dijalankan di CI.
 python3 tests/sc_runner.py                 # semua kriteria (sama dengan --all)
 python3 tests/sc_runner.py --sc01          # SC-01 saja
 python3 tests/sc_runner.py --sc02          # SC-02 saja
+python3 tests/sc_runner.py --sc03          # SC-03 saja (melaporkan hasil ukur)
 python3 tests/sc_runner.py --all           # semua kriteria, eksplisit
 ```
+
+**SC-03 berbeda dari SC-01 dan SC-02.** Waktu tidak tersimpan di hasil
+ekstraksi, jadi tidak bisa dihitung ulang dari CSV. `--sc03` hanya
+**merangkum** sampel yang sudah ada di `sc-out/sc03_samples.csv`. Untuk
+mengukurnya, jalankan harness pengukur lebih dulu:
+
+```bash
+python3 tests/_sc03_run.py             # melanjutkan yang belum terukur
+python3 tests/_sc03_run.py --restart   # ukur ulang dari nol
+python3 tests/_sc03_run.py --limit 5   # coba cepat pada 5 gambar
+```
+
+Pengukuran SC-03 menulis baris sungguhan ke Google Sheets, karena itu
+dijalankan di folder **sandbox**, bukan folder Cash Report perusahaan. Lihat
+`docs/sc03-hasil-evaluasi.md`.
 
 Tanpa flag berarti semua kriteria yang tersedia. Ini disengaja: kriteria
 saling setara, jadi tidak ada alasan menjadikan salah satunya bawaan. Ketiga
@@ -227,6 +243,9 @@ Hapus berkas itu, atau jalankan dengan --restart.
 | `sc-out/sc01_metrics.json` | SC-01 dalam bentuk JSON |
 | `sc-out/sc02_report.txt` | SC-02: kelengkapan dan kecocokan per field wajib |
 | `sc-out/sc02_metrics.json` | SC-02 dalam bentuk JSON |
+| `sc-out/sc03_report.txt` | SC-03: sebaran waktu dan pecahan per tahap |
+| `sc-out/sc03_metrics.json` | SC-03 dalam bentuk JSON |
+| `sc-out/sc03_samples.csv` | SC-03: satu baris per gambar, termasuk pecahan tahap |
 | `sc-out/results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
 
 Folder `sc-out/` dan `dataset/` masuk `.gitignore` karena berisi data transaksi.

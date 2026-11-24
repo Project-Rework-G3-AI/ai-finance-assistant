@@ -393,6 +393,51 @@ def build_sc02_rows(results: list[dict]) -> list[dict]:
     return rows
 
 
+def write_sc03_report(results: list[dict], out: Path) -> dict:
+    """Laporkan SC-03 dari sampel waktu yang sudah diukur.
+
+    Berbeda dari SC-01 dan SC-02, SC-03 **tidak bisa dihitung** dari hasil
+    ekstraksi: waktu tidak tersimpan di CSV hasil. Fungsi ini hanya membaca
+    `sc03_samples.csv` yang ditulis oleh harness pengukur, lalu merangkumnya.
+    Kalau berkas itu belum ada, laporkan apa adanya alih-alih mengarang angka.
+    """
+    import sc03_latency as sc03
+
+    berkas = out / "sc03_samples.csv"
+    if not berkas.exists():
+        teks = (
+            "SC-03 — Waktu proses sampai tersimpan\n"
+            + "=" * 60 + "\n"
+            "Status             : BELUM DIUKUR\n\n"
+            "Waktu tidak bisa dihitung ulang dari hasil ekstraksi, berbeda dari\n"
+            "SC-01 dan SC-02. Jalankan pengukuran lebih dulu:\n\n"
+            "  python3 tests/_sc03_run.py\n"
+        )
+        (out / "sc03_report.txt").write_text(teks, encoding="utf-8")
+        return {"result": None, "text": teks}
+
+    samples = []
+    with berkas.open(encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            s = sc03.Sample(file=r["file"], ok=(r.get("ok") == "True"),
+                            error=r.get("error", ""))
+            for nama in sc03.STAGES:
+                try:
+                    s.stages[nama] = float(r.get(nama) or 0)
+                except ValueError:
+                    s.stages[nama] = 0.0
+            samples.append(s)
+
+    # Harness pengukur me-mock Telegram, jadi tahap reply tidak diukur sungguhan.
+    c = sc03.compute(samples, reply_measured=False)
+    teks = sc03.report(
+        c, "Sumber data: diukur langsung pada rantai produksi, folder penyimpanan sandbox.")
+    (out / "sc03_report.txt").write_text(teks, encoding="utf-8")
+    (out / "sc03_metrics.json").write_text(
+        json.dumps(c, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"result": c, "text": teks}
+
+
 def write_sc02_report(results: list[dict], out: Path) -> dict:
     """Hitung SC-02 lalu tulis `sc02_report.txt` dan `sc02_metrics.json`."""
     rows = build_sc02_rows(results)
@@ -447,7 +492,7 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
     return {"result": c, "text": text}
 
 
-AVAILABLE_CRITERIA = ("sc01", "sc02")
+AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03")
 
 
 def selected_criteria(args) -> list[str]:
@@ -478,6 +523,7 @@ def run_reports(results: list[dict], out: Path, criteria: list[str]) -> dict[str
     builders = {
         "sc01": write_sc01_report,
         "sc02": write_sc02_report,
+        "sc03": write_sc03_report,
     }
     return {name: builders[name](results, out) for name in criteria}
 
@@ -533,6 +579,8 @@ def main_cli() -> int:
                       help="ukur akurasi kategori (SC-01) saja")
     pick.add_argument("--sc02", action="store_true",
                       help="ukur kelengkapan field wajib (SC-02) saja")
+    pick.add_argument("--sc03", action="store_true",
+                      help="ukur waktu proses sampai tersimpan (SC-03) saja")
     pick.add_argument("--all", action="store_true",
                       help="ukur semua kriteria yang tersedia (sama dengan tanpa flag)")
     a = ap.parse_args()
@@ -563,10 +611,25 @@ def main_cli() -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     if a.metrics_only:
+        # SC-03 tidak punya hasil ekstraksi untuk dibaca ulang: waktu tidak
+        # tersimpan di CSV hasil. Kalau hanya SC-03 yang diminta, cukup
+        # rangkum sampel waktunya tanpa menyentuh `results_per_row.csv`.
+        if criteria == ["sc03"]:
+            reports = run_reports([], out, criteria)
+            print(join_reports(reports))
+            return 0
         results = list(read_results(out / "results_per_row.csv").values())
         if not results:
             raise SystemExit(f"tidak ada hasil di {out / 'results_per_row.csv'}")
         reports = run_reports(results, out, criteria)
+        print(join_reports(reports))
+        return 0
+
+    # SC-03 mengukur waktu, bukan isi. Waktunya sudah direkam harness pengukur,
+    # jadi meminta SC-03 saja tidak boleh menuntut kunci model: laporan SC-03
+    # hanya merangkum sampel yang sudah ada.
+    if criteria == ["sc03"]:
+        reports = run_reports([], out, criteria)
         print(join_reports(reports))
         return 0
 

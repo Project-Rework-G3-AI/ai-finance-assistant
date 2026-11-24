@@ -1,4 +1,9 @@
-"""Konfigurasi bersama untuk evaluasi SC-01.
+"""Konfigurasi bersama untuk seluruh suite kriteria (SC-01 sampai SC-07).
+
+Modul ini sengaja tidak menyebut satu kriteria pun di namanya, karena daftar
+pasangan dan folder gambar dipakai bersama: `kategori_acuan` dipakai SC-01 dan
+SC-02, sedangkan `tanggal`, `nominal_acuan`, `bank`, dan `keterangan_gambar`
+dipakai SC-02.
 
 Semua nilai dibaca dari `.env` di akar repo, sehingga tidak perlu mengekspor
 variabel manual setiap kali menjalankan test. Variabel lingkungan yang sudah ada

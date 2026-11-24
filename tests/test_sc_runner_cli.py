@@ -155,10 +155,28 @@ def test_order_is_respected_for_a_single_criterion():
 
 
 def test_every_available_criterion_has_a_report_builder():
-    """Kriteria baru tanpa builder akan gagal jelas, bukan hilang diam-diam."""
+    """Kriteria baru tanpa builder akan gagal jelas, bukan hilang diam-diam.
+
+    Sebelumnya test ini membandingkan dengan tuple hardcoded ("sc01", "sc02"),
+    sehingga ia justru harus disunting setiap kali kriteria bertambah dan tidak
+    pernah benar-benar memeriksa `run_reports`. Sekarang yang diperiksa adalah
+    kemampuan runner melaporkan kriteria itu, bukan daftar yang ditulis tangan.
+    """
     import sc_runner
 
     for name in AVAILABLE_CRITERIA:
-        assert name in ("sc01", "sc02"), (
-            f"{name} belum punya builder di run_reports"
+        # Builder harus ada sebagai fungsi bernama, dan run_reports harus
+        # benar-benar memanggilnya untuk kriteria ini.
+        assert hasattr(sc_runner, f"write_{name}_report"), (
+            f"{name} belum punya fungsi write_{name}_report"
         )
+        dipanggil = []
+        asli = getattr(sc_runner, f"write_{name}_report")
+        try:
+            setattr(sc_runner, f"write_{name}_report",
+                    lambda r, o: dipanggil.append(1) or {"text": ""})
+            hasil = sc_runner.run_reports([], Path("."), [name])
+            assert name in hasil, f"{name} tidak dilaporkan oleh run_reports"
+            assert dipanggil, f"builder {name} tidak pernah dipanggil"
+        finally:
+            setattr(sc_runner, f"write_{name}_report", asli)
