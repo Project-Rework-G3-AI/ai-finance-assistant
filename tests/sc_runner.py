@@ -105,6 +105,30 @@ def source_line(out: Path) -> str:
     return f"Sumber data: dihitung {computed}."
 
 
+def verdict_block(judged_label: str, judged_value: float, target: float,
+                  alternatives: list[tuple[str, float, str]]) -> list[str]:
+    """Blok yang menyebut angka mana yang dibandingkan dengan target.
+
+    Kedua kriteria sama-sama menampilkan beberapa angka sekaligus. Tanpa blok
+    ini, baris "Status: BELUM TERCAPAI" tidak menjelaskan angka mana yang
+    dibandingkan, sehingga pembaca harus menebak dan bisa menyimpulkan laporan
+    yang salah. Dipakai SC-01 dan SC-02 dari satu tempat supaya tidak bisa
+    berbeda lagi.
+    """
+    verdict = "TERCAPAI" if judged_value >= target else "BELUM TERCAPAI"
+    lines = [
+        f"Target BRD         : minimal {target:.0%}",
+        f"Angka yang dinilai : {judged_label} {judged_value:.1%}  <- dibandingkan dengan target",
+        f"Status             : {verdict}",
+        "",
+        "Angka lain (tidak dipakai menilai target)",
+        "-" * 60,
+    ]
+    for label, value, reason in alternatives:
+        lines.append(f"  {label:31}: {value:.1%}  {reason}")
+    return lines
+
+
 MODEL_COLUMNS = [
     "proposed_category", "proposed_amount", "proposed_date",
     "proposed_bank", "proposed_direction", "proposed_note",
@@ -277,8 +301,19 @@ def write_report(results: list[dict], out: Path) -> dict:
         "",
         m.summary(),
         "",
-        "Target BRD: minimal 85%",
-        f"Status    : {'TERCAPAI' if m.accuracy >= 0.85 else 'BELUM TERCAPAI'}",
+    ]
+    # Status memakai akurasi (benar/total), bukan baseline atau macro-average.
+    # Keduanya ikut ditampilkan, jadi harus disebut mana yang dinilai.
+    lines += verdict_block(
+        "akurasi", m.accuracy, 0.85,
+        [
+            ("baseline kelas mayoritas", m.baseline,
+             f"batas bawah; model harus melampauinya ({m.majority_label})"),
+            ("macro-average recall", m.macro_avg,
+             "bobot sama per kategori, tidak dipakai menilai target"),
+        ],
+    )
+    lines += [
         "",
         "Per kategori (diurutkan dari yang paling sering muncul)",
         "-" * 60,
@@ -364,12 +399,7 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
     c = sc02_completeness.compute(rows)
 
     target = 0.90
-    # Angka yang dipakai menilai target harus disebut namanya, bukan hanya
-    # muncul sebagai "Status: BELUM TERCAPAI". Tanpa ini pembaca harus menebak
-    # dari tabel mana angka itu diambil, dan laporan bisa tampak menilai dua
-    # hal sekaligus: kelengkapan 98,2% dan kecocokan 72,5%.
     dinilai = c.overall_accuracy
-    verdict = "TERCAPAI" if dinilai >= target else "BELUM TERCAPAI"
     tanpa_kat = c.accuracy_excluding("category")
     lines = [
         "SC-02 — Kelengkapan field wajib",
@@ -378,18 +408,20 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
         "",
         c.summary(),
         "",
-        "Target BRD: minimal 90% field wajib terbaca benar",
-        f"Angka yang dinilai : kecocokan rata-rata {dinilai:.1%} "
-        f"({c.scored_count} field beracuan, dirata-rata per field)",
-        f"Status             : {verdict}",
-        "",
-        "Rincian angka",
-        "-" * 60,
-        f"  kelengkapan rata-rata          : {c.overall_completeness:.1%} "
-        f"(field terbaca, belum tentu benar)",
-        f"  kecocokan rata-rata            : {dinilai:.1%}  <- dipakai menilai target",
-        f"  kecocokan tanpa kategori       : {tanpa_kat:.1%} "
-        f"(kategori sudah diukur di SC-01)",
+    ]
+    # Sama seperti SC-01: beberapa angka ditampilkan, jadi angka yang dinilai
+    # harus disebut. Penyebutnya juga disebut, supaya 72,5% tidak disangka
+    # rata-rata kelima field padahal hanya yang beracuan.
+    lines += verdict_block(
+        f"kecocokan rata-rata ({c.scored_count} field beracuan)", dinilai, target,
+        [
+            ("kelengkapan rata-rata", c.overall_completeness,
+             "field terbaca, belum tentu benar"),
+            ("kecocokan tanpa kategori", tanpa_kat,
+             "kategori sudah diukur di SC-01"),
+        ],
+    )
+    lines += [
         "",
         "Catatan penilaian",
         "-" * 60,

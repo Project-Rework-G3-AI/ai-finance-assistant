@@ -7,6 +7,39 @@ target minimal 85%.
 Angka di bawah berasal dari satu eksekusi nyata, bukan perkiraan. Perintah dan
 berkas pendukungnya disertakan agar hasil bisa diperiksa ulang.
 
+## Angka mana yang dibandingkan dengan target
+
+Laporan SC-01 memuat beberapa angka sekaligus, jadi mana yang dinilai perlu
+disebut terang-terangan:
+
+| Angka | Nilai (run 4) | Dipakai menilai target? |
+|---|---|---|
+| **Akurasi** (benar / total) | **4,6%** | **ya** |
+| Baseline kelas mayoritas | 75,4% | tidak, batas bawah |
+| Macro-average recall | 40,4% | tidak, penjelas |
+| Lift atas baseline | −70,8% | tidak, penjelas |
+
+**Yang dibandingkan dengan target 85% adalah akurasi 4,6%**, yaitu 3 jawaban
+benar dari 65 pasangan.
+
+Alasannya: BRD menyebut "akurasi usulan kategori", dan akurasi berarti proporsi
+jawaban benar terhadap seluruh pasangan. Baseline dan macro-average ditampilkan
+justru untuk menunjukkan bahwa akurasi itu tidak bisa dibaca sendiri: 75,4%
+baseline berarti model kalah dari sekadar menebak `Transfer Antar Bank` terus,
+dan macro-average menunjukkan kategori jarang hampir tidak pernah benar.
+
+Perhatikan bahwa **tidak ada satu pun angka di tabel ini yang mencapai 85%**,
+jadi statusnya tidak bergantung pada pilihan angka. Tetapi menyebut angka mana
+yang dinilai tetap penting, karena laporan yang hanya menulis "BELUM TERCAPAI"
+memaksa pembaca menebak.
+
+Satu bukti tambahan bahwa akurasi memang pilihan yang tepat: dua run berbeda
+bisa punya akurasi sama tetapi macro-average berbeda. Run 4 di tabel bawah
+mencatat 3 benar dengan macro 40,4%, sedangkan run lain juga 3 benar tetapi
+macro 50,0%, karena yang benar berbeda kategorinya. Akurasi tidak berubah,
+macro berubah. Jadi menyebut keduanya perlu, tetapi hanya satu yang bisa
+dibandingkan dengan target secara konsisten.
+
 ## Ringkasan
 
 | Metrik | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 | Run 6 |

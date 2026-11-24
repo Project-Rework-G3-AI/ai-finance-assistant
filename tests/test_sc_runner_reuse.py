@@ -146,7 +146,7 @@ def test_report_names_the_number_used_to_judge_the_target(tmp_path):
 
     assert "Angka yang dinilai" in teks
     assert "kecocokan rata-rata" in teks
-    assert "<- dipakai menilai target" in teks
+    assert "dibandingkan dengan target" in teks
     assert "Status" in teks
 
 
