@@ -11,7 +11,9 @@ __pycache__/
 # Keluaran evaluasi SC-01: berisi data transaksi dan hasil model, tidak untuk repo
 sc-out/
 results_per_row.csv
-metrics.json
+sc01_report.txt
+sc01_metrics.json
+sc02_report.txt
 sc02_metrics.json
 
 # Dataset lokal untuk evaluasi SC-01 (gambar bukti + daftar pasangan).

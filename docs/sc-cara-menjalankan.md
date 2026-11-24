@@ -50,11 +50,13 @@ yang cocok dengan hasil `--download`:
 
 | Kunci | Nilai bawaan |
 |---|---|
-| `SC_PAIRS` | `dataset/sc01/sc01_pairs.csv` |
+| `SC_PAIRS` | `dataset/pairs.csv` |
 | `SC_IMAGES` | `dataset/Bukti Transaksi Januari 2026` |
 
-Nama folder `sc01/` di repo dataset dipertahankan karena berkasnya sudah dipakai
-bersama, tetapi isinya dipakai oleh semua kriteria, bukan hanya SC-01.
+Daftar pasangan dulu bernama `sc01/sc01_pairs.csv`, yang menyiratkan berkas itu
+hanya dipakai SC-01. Sekarang namanya `pairs.csv` di akar repo dataset, karena
+kolomnya memasok acuan beberapa kriteria sekaligus: kategori untuk SC-01 dan
+SC-02, serta tanggal, nominal, kantong, dan keterangan untuk SC-02.
 
 ## Di mana data itu disimpan
 
@@ -64,7 +66,7 @@ di repo terpisah.
 
 | Repo | Isi | Akses |
 |---|---|---|
-| `Project-Rework-G3-AI/rework-ai-finance-assistant-dataset` | Seluruh dataset: 118 foto, 3 Cash Report, 2 mutasi, SOP, dan `sc01/sc01_pairs.csv` | Publik |
+| `Project-Rework-G3-AI/rework-ai-finance-assistant-dataset` | Seluruh dataset: 118 foto, 3 Cash Report, 2 mutasi, SOP, dan `pairs.csv` | Publik |
 | `Project-Rework-G3-AI/ai-finance-assistant` | Kode, test, dan dokumentasi | Publik |
 
 ### Token GitHub tidak diperlukan
@@ -90,7 +92,7 @@ menyebarkan tangkapan layarnya tanpa menyensor nomor rekening serta nama pihak.
 | `Bukti Transaksi Januari 2026/` | 118 foto | Bukti transaksi |
 | `Cash Report dan Mutasi Rekening/` | 5 berkas | 3 Cash Report, 2 mutasi PDF |
 | `SOP Keuangan/` | 3 berkas | Draf SOP |
-| `sc01/sc01_pairs.csv` | 1 berkas | Daftar 65 pasangan gambar ke baris Cash Report |
+| `pairs.csv` | 1 berkas | Daftar 65 pasangan gambar ke baris Cash Report |
 
 Dari 118 foto, hanya 65 yang bisa dipasangkan 1:1 ke baris Cash Report lewat
 tanggal dan nominal. Sisanya tidak punya acuan, sehingga hanya bisa dipakai
@@ -221,8 +223,8 @@ Hapus berkas itu, atau jalankan dengan --restart.
 
 | Berkas | Isi |
 |---|---|
-| `sc-out/report.txt` | SC-01: ringkasan, rincian per kategori, confusion matrix, daftar baris salah |
-| `sc-out/metrics.json` | SC-01 dalam bentuk JSON |
+| `sc-out/sc01_report.txt` | SC-01: ringkasan, rincian per kategori, confusion matrix, daftar baris salah |
+| `sc-out/sc01_metrics.json` | SC-01 dalam bentuk JSON |
 | `sc-out/sc02_report.txt` | SC-02: kelengkapan dan kecocokan per field wajib |
 | `sc-out/sc02_metrics.json` | SC-02 dalam bentuk JSON |
 | `sc-out/results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
@@ -238,7 +240,7 @@ ditetapkan Admin?
 **Target BRD:** minimal 85%.
 
 **Cara menilai:** dibandingkan langsung per baris dengan `kategori_acuan` di
-`sc01_pairs.csv`.
+`pairs.csv`.
 
 Tiga angka dilaporkan bersamaan, karena satu angka saja menyesatkan:
 
@@ -290,7 +292,7 @@ Selisih keduanya menunjukkan field yang terbaca tetapi salah nilainya.
 
 ### Cakupan acuan
 
-| Field | Acuan tersedia di `sc01_pairs.csv` |
+| Field | Acuan tersedia di `pairs.csv` |
 |---|---|
 | tanggal | ya, `tanggal` |
 | nominal | ya, `nominal_acuan` |

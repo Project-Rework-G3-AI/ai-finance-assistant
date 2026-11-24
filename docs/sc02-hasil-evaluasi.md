@@ -48,7 +48,7 @@ selalu berhasil.
 | Kategori | 65/65 | 100,0% | 3 | **4,6%** | 0 |
 
 Kolom "cocok" untuk kantong berpenyebut 62, bukan 65, karena hanya 62 baris di
-`sc01_pairs.csv` yang punya acuan `bank`. Kolom "arah" tidak dinilai karena
+`pairs.csv` yang punya acuan `bank`. Kolom "arah" tidak dinilai karena
 dataset tidak menyediakan acuan arah.
 
 ## Temuan utama
@@ -156,7 +156,7 @@ apa pun.
 
 - Diukur pada 65 baris, bukan 118 gambar seperti bunyi target.
 - Field `arah` tidak punya acuan di dataset, jadi hanya keterbacaan yang dinilai.
-- Kolom `bank` di `sc01_pairs.csv` hanya terisi di 62 dari 65 baris.
+- Kolom `bank` di `pairs.csv` hanya terisi di 62 dari 65 baris.
 - Angka berasal dari satu run. Model bersifat probabilistik, jadi satu run tidak
   cukup untuk klaim yang kuat; jalankan `--repeat 3` untuk melihat sebaran.
 - Kategori diukur di SC-01 dan tidak boleh dipakai dua kali sebagai bukti

@@ -287,8 +287,8 @@ def _amount_diff(reference, proposed) -> str:
         return ""
 
 
-def write_report(results: list[dict], out: Path) -> dict:
-    """Hitung metrik lalu tulis laporan teks + metrics.json ke disk."""
+def write_sc01_report(results: list[dict], out: Path) -> dict:
+    """Hitung metrik SC-01 lalu tulis `sc01_report.txt` dan `sc01_metrics.json`."""
     pairs = [{"reference_category": r["reference_category"],
               "proposed_category": r["proposed_category"],
               "file": r["file"]} for r in results if r.get("reference_category")]
@@ -335,8 +335,8 @@ def write_report(results: list[dict], out: Path) -> dict:
             lines.append(f"{s['file'][:44]:46} {s['reference'][:26]:28} -> {s['proposed'][:28]}")
 
     text = "\n".join(lines)
-    (out / "report.txt").write_text(text, encoding="utf-8")
-    (out / "metrics.json").write_text(
+    (out / "sc01_report.txt").write_text(text, encoding="utf-8")
+    (out / "sc01_metrics.json").write_text(
         json.dumps({
             "total": m.total, "correct": m.correct, "accuracy": m.accuracy,
             "baseline": m.baseline, "majority_label": m.majority_label,
@@ -476,7 +476,7 @@ def run_reports(results: list[dict], out: Path, criteria: list[str]) -> dict[str
     kriteria baru tidak bisa lagi menghasilkan urutan yang menyesatkan.
     """
     builders = {
-        "sc01": write_report,
+        "sc01": write_sc01_report,
         "sc02": write_sc02_report,
     }
     return {name: builders[name](results, out) for name in criteria}

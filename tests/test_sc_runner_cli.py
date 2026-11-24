@@ -127,11 +127,11 @@ def test_reports_follow_criteria_order_not_hand_written_order():
     import sc_runner
     asli = dict(sc_runner.__dict__)
     try:
-        sc_runner.write_report = fake("sc01")
+        sc_runner.write_sc01_report = fake("sc01")
         sc_runner.write_sc02_report = fake("sc02")
         reports = run_reports([], Path("."), ["sc01", "sc02"])
     finally:
-        for key in ("write_report", "write_sc02_report"):
+        for key in ("write_sc01_report", "write_sc02_report"):
             sc_runner.__dict__[key] = asli[key]
 
     assert captured == ["sc01", "sc02"]
@@ -146,11 +146,11 @@ def test_order_is_respected_for_a_single_criterion():
     import sc_runner
     asli = dict(sc_runner.__dict__)
     try:
-        sc_runner.write_report = lambda r, o: {"text": "satu"}
+        sc_runner.write_sc01_report = lambda r, o: {"text": "satu"}
         sc_runner.write_sc02_report = lambda r, o: {"text": "dua"}
         assert list(run_reports([], Path("."), ["sc02"])) == ["sc02"]
     finally:
-        for key in ("write_report", "write_sc02_report"):
+        for key in ("write_sc01_report", "write_sc02_report"):
             sc_runner.__dict__[key] = asli[key]
 
 

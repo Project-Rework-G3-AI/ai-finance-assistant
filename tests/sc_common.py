@@ -34,7 +34,7 @@ DATASET_REPO = os.getenv(
 DATASET_DIR = os.getenv("GITHUB_DATASET_DIR", "").strip()
 DATASET_BRANCH = os.getenv("GITHUB_DATASET_BRANCH", "main").strip()
 IMAGES_SUBDIR = "Bukti Transaksi Januari 2026"
-PAIRS_SUBDIR = "sc01/sc01_pairs.csv"
+PAIRS_SUBDIR = "pairs.csv"
 
 # Kunci balikan `main.extract` memakai bahasa Indonesia karena fungsi itu dipakai
 # jalur produksi (Telegram, Sheets) yang sudah berjalan. Dipetakan di sini supaya
@@ -61,7 +61,7 @@ def normalize_extract(rec: dict) -> dict:
 
 
 # Nilai bawaan: mengikuti susunan folder yang dibuat `--download`.
-DEFAULT_PAIRS = "dataset/sc01/sc01_pairs.csv"
+DEFAULT_PAIRS = "dataset/pairs.csv"
 DEFAULT_IMAGES = "dataset/Bukti Transaksi Januari 2026"
 
 

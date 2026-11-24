@@ -68,7 +68,7 @@ def sc01_report(tmp_path, pairs):
     rows = [{"file": f"f{i}.jpg", "reference_category": ref,
              "proposed_category": prop}
             for i, (ref, prop) in enumerate(pairs)]
-    return sc_runner.write_report(rows, tmp_path)["text"]
+    return sc_runner.write_sc01_report(rows, tmp_path)["text"]
 
 
 def test_sc01_report_names_accuracy_as_the_judged_number(tmp_path):

@@ -11,7 +11,7 @@ Batas ruang lingkup: hanya `main.extract` (gambar -> kategori). Penulisan ke
 Google Sheets dan Drive tidak dipanggil sama sekali, sehingga spreadsheet
 perusahaan tidak tersentuh dan hasil bisa diulang.
 
-Persiapan sekali saja (lihat docs/sc01-cara-menjalankan.md):
+Persiapan sekali saja (lihat docs/sc-cara-menjalankan.md):
 
     cp .env.example .env
     # isi AI_API_KEY

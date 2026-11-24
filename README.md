@@ -269,8 +269,8 @@ Hasil ada di `sc-out/`:
 
 | Berkas | Isi |
 |---|---|
-| `report.txt` | SC-01: ringkasan, rincian per kategori, confusion matrix, baris salah |
-| `metrics.json` | SC-01 dalam bentuk JSON |
+| `sc01_report.txt` | SC-01: ringkasan, rincian per kategori, confusion matrix, baris salah |
+| `sc01_metrics.json` | SC-01 dalam bentuk JSON |
 | `sc02_report.txt` | SC-02: kelengkapan dan kecocokan per field wajib |
 | `sc02_metrics.json` | SC-02 dalam bentuk JSON |
 | `results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
