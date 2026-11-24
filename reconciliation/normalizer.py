@@ -110,6 +110,9 @@ def normalize_bank_transaction(
     """
 
     bank = normalize_text(statement.get("bank")).upper()
+    # Varian nama bank dari hasil vision: "Bank Jago" / "BANK JAGO" -> "JAGO"
+    if bank.startswith("BANK "):
+        bank = bank[5:]
     account_number = normalize_text(
         statement.get("account_number")
     )

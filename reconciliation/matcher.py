@@ -11,7 +11,9 @@ def make_match_key(transaction):
 
     return (
         transaction["date"],
-        transaction["pocket"],
+        # casefold: sheet menulis "JAGO", mapping menulis "Jago" — tanpa ini
+        # transaksi Jago tidak akan pernah matched.
+        str(transaction["pocket"] or "").strip().casefold(),
         transaction["debit"],
         transaction["credit"],
     )

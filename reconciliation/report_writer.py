@@ -27,6 +27,13 @@ HEADERS = [
 ]
 
 
+def _safe(value):
+    """Netralkan teks yang diawali =,+,-,@ agar tidak jadi formula (USER_ENTERED)."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
+        return "'" + value
+    return value
+
+
 def get_or_create_worksheet(
     spreadsheet,
     worksheet_title=WORKSHEET_TITLE,
@@ -73,18 +80,18 @@ def build_report_rows(
             result.get("status", ""),
             bank_tx.get("date", ""),
             bank_tx.get("time", ""),
-            bank_tx.get("description", ""),
+            _safe(bank_tx.get("description", "")),
             bank_tx.get("debit", 0),
             bank_tx.get("credit", 0),
             bank_tx.get("balance", 0),
             sheet_tx.get("date", ""),
             sheet_tx.get("pocket", ""),
-            sheet_tx.get("description", ""),
+            _safe(sheet_tx.get("description", "")),
             sheet_tx.get("debit", 0),
             sheet_tx.get("credit", 0),
             sheet_tx.get("row_number", ""),
             sheet_tx.get("ref_id", ""),
-            result.get("notes", ""),
+            _safe(result.get("notes", "")),
         ]
 
         rows.append(row)

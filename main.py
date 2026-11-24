@@ -65,15 +65,15 @@ AI_BASE = os.getenv("AI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
 AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini").strip()
 ACCOUNT_MAPPING = {
     "BNI": {
-        "account_number": os.getenv("BNI_ACCOUNT_NUMBER").strip(),
+        "account_number": (os.getenv("BNI_ACCOUNT_NUMBER") or "").strip(),
         "pocket": "BNI",
     },
     "BRI": {
-        "account_number": os.getenv("BRI_ACCOUNT_NUMBER").strip(),
+        "account_number": (os.getenv("BRI_ACCOUNT_NUMBER") or "").strip(),
         "pocket": "BRI",
     },
     "JAGO": {
-        "account_number": os.getenv("JAGO_ACCOUNT_NUMBER").strip(),
+        "account_number": (os.getenv("JAGO_ACCOUNT_NUMBER") or "").strip(),
         "pocket": "Jago",
     },
 }
@@ -481,7 +481,10 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
 
 def push_pending(rec: dict, error: str) -> None:
     with PENDING.open("a", encoding="utf-8") as f:
-        f.write(json.dumps({**rec, "_error": error, "_ts": int(time.time())}, ensure_ascii=False) + "\n")
+        # default=str: rec["tanggal"] kini bisa datetime — tanpa ini
+        # json.dumps TypeError dan transaksi hilang saat tulis gagal.
+        f.write(json.dumps({**rec, "_error": error, "_ts": int(time.time())},
+                           ensure_ascii=False, default=str) + "\n")
 
 
 def flush_pending(client: httpx.AsyncClient) -> int:
@@ -519,7 +522,7 @@ def flush_pending(client: httpx.AsyncClient) -> int:
             # Simpan dengan anotasi error; ditulis sekali di akhir, bukan
             # append per baris, agar isi file tidak tercampur dua sumber.
             sisa.append(json.dumps({**rec, "_error": f"retry gagal: {e}", "_ts": int(time.time())},
-                                   ensure_ascii=False))
+                                   ensure_ascii=False, default=str))
 
     # Tulis ulang hanya bila masih ada sisa; file kosong dihapus agar /health
     # melaporkan pending=false dengan benar.
@@ -724,11 +727,16 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
         return
 
     if not doc and not photo:
-        await tg_send(
-            client,
-            chat_id,
-            "Kirim foto bukti transaksi (JPG/PNG) atau file PDF mutasi bank.",
-        )
+        # Routing: foto/dokumen ke ekstraksi; teks ke tanya-jawab (lihat qa.py).
+        text = str(msg.get("text") or "").strip()
+        if text:
+            await handle_text(client, chat_id, text)
+        else:
+            await tg_send(
+                client,
+                chat_id,
+                "Kirim foto bukti transaksi (JPG/PNG) atau file PDF mutasi bank.",
+            )
         return
 
     if photo:

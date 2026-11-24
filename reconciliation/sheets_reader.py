@@ -6,7 +6,8 @@ from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
 
-CR_FOLDER_ID = os.getenv("CASH_REPORT_FOLDER_ID")
+# CR_FOLDER_ID dibaca saat dipanggil, bukan saat import: modul ini diimpor
+# main sebelum load_dotenv() berjalan, sehingga nilai saat import selalu None.
 
 SPREADSHEET_NAME = "Cash Report 2026"
 WORKSHEET_TITLE = "TRANSAKSI"
@@ -73,7 +74,7 @@ def find_cash_report_spreadsheet_id(
     Find Cash Report spreadsheet based on statement period.
     """
 
-    folder_id = folder_id or CR_FOLDER_ID
+    folder_id = folder_id or os.getenv("CASH_REPORT_FOLDER_ID")
 
     if not folder_id:
         raise ValueError("CR_FOLDER_ID belum dikonfigurasi.")
