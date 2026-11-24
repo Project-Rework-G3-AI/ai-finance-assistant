@@ -21,7 +21,7 @@ Kriteria yang sudah bisa diukur:
 ```bash
 git clone https://github.com/Project-Rework-G3-AI/ai-finance-assistant.git
 cd ai-finance-assistant
-git checkout test/success-criteria
+git checkout test/integration-testing
 
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
