@@ -6,6 +6,7 @@ google-api-python-client
 google-auth-oauthlib
 python-dotenv
 sentry-sdk[fastapi]>=2.0,<3
+pymupdf                     # render halaman PDF mutasi bank -> gambar (reconciliation)
 
 # Pengembangan dan pengujian
 pytest>=8

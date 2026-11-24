@@ -31,6 +31,20 @@ import sentry_setup
 from cash_report import categories as KAT
 from cash_report import qa
 
+# ---------- Bank statement reconciliation ----------
+from reconciliation.extractor import extract_bank_statement
+from reconciliation.statement_validator import validate_statement
+from reconciliation.sheets_reader import get_cash_report_transactions
+from reconciliation.normalizer import (
+    normalize_statement,
+    normalize_sheet_transactions,
+)
+from reconciliation.matcher import (
+    reconcile_transactions,
+    summarize_reconciliation,
+)
+from reconciliation.report_writer import write_reconciliation_report
+
 load_dotenv(Path(__file__).parent / ".env")
 
 # Logging dan Sentry dipasang sebelum apa pun yang bisa gagal, supaya error saat
@@ -49,6 +63,20 @@ CR_DEFAULT_BANK = os.getenv("CR_DEFAULT_BANK", "TUNAI").strip().upper()
 AI_KEY = os.getenv("AI_API_KEY", "").strip()
 AI_BASE = os.getenv("AI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
 AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini").strip()
+ACCOUNT_MAPPING = {
+    "BNI": {
+        "account_number": (os.getenv("BNI_ACCOUNT_NUMBER") or "").strip(),
+        "pocket": "BNI",
+    },
+    "BRI": {
+        "account_number": (os.getenv("BRI_ACCOUNT_NUMBER") or "").strip(),
+        "pocket": "BRI",
+    },
+    "JAGO": {
+        "account_number": (os.getenv("JAGO_ACCOUNT_NUMBER") or "").strip(),
+        "pocket": "Jago",
+    },
+}
 
 PENDING = Path(__file__).parent / "pending.jsonl"
 GOOGLE_SCOPES = [
@@ -92,13 +120,36 @@ def _gabung_keterangan(llm_ket: str, caption: str, filename: str) -> str:
         return f"{llm} — {cap}"
     return llm or cap or filename
 
+def _parse_tanggal_ke_datetime(raw_tanggal: object) -> tuple[datetime, bool]:
+    """Mengubah nilai tanggal dari AI menjadi datetime.
+
+    Mengembalikan (dt, valid_dari_ai).
+    """
+    if isinstance(raw_tanggal, datetime):
+        return raw_tanggal, True
+
+    teks = str(raw_tanggal or "").strip()
+    if not teks:
+        return datetime.now(), False
+
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(teks[:19], fmt), True
+        except ValueError:
+            continue
+
+    with suppress(ValueError):
+        return datetime.fromisoformat(teks), True
+
+    return datetime.now(), False
+
 
 async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes: bytes, caption: str) -> dict:
     b64 = base64.b64encode(image_bytes).decode()
     mime = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
     prompt = (
         "Ekstrak data transaksi dari bukti ini. Balas HANYA JSON tanpa teks lain: "
-        '{"tanggal":"YYYY-MM-DD","keterangan":"...","nominal":number,'
+        '{"tanggal":"YYYY-MM-DD HH:MM:SS","keterangan":"...","nominal":number,'
         '"arah":"masuk|keluar|transfer",'
         f'"kategori":"satu dari: {KAT.PROMPT_KATEGORI}",'
         '"bank":"kantong asal dana — salah satu dari: BRI, BNI, Jago, TUNAI; '
@@ -140,9 +191,10 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
     data = json.loads(m.group(0))
     arah = str(data.get("arah", "")).lower()
     keterangan = _gabung_keterangan(str(data.get("keterangan") or ""), caption, filename)
+    tanggal_dt, tanggal_valid = _parse_tanggal_ke_datetime(data.get("tanggal"))
 
     notes = []
-    if not data.get("tanggal"):
+    if not tanggal_valid:
         notes.append("tanggal tidak terbaca — pakai hari ini")
     if not data.get("nominal"):
         notes.append("nominal tidak terbaca — isi manual")
@@ -160,7 +212,7 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
         catatan += " (" + ", ".join(notes) + ")"
 
     return {
-        "tanggal": str(data.get("tanggal") or datetime.now().strftime("%Y-%m-%d")),
+        "tanggal": tanggal_dt,
         "keterangan": keterangan,
         "nominal": int(data["nominal"]) if data.get("nominal") else None,
         "arah": arah if arah in ("masuk", "keluar", "transfer") else "keluar",
@@ -357,8 +409,19 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
     """
     if not CR_FOLDER_ID or not CR_TEMPLATE_ID:
         raise RuntimeError("CASH_REPORT_FOLDER_ID / CASH_REPORT_TEMPLATE_ID belum diisi")
-    tanggal = str(rec.get("tanggal") or datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d"))
-    year = tanggal[:4]
+    raw_tgl = rec.get("tanggal")
+    if isinstance(raw_tgl, datetime):
+        dt = raw_tgl
+    elif isinstance(raw_tgl, str) and raw_tgl.strip():
+        try:
+            dt = datetime.fromisoformat(raw_tgl.strip())
+        except ValueError:
+            dt = datetime.now(ZoneInfo("Asia/Jakarta"))
+    else:
+        dt = datetime.now(ZoneInfo("Asia/Jakarta"))
+
+    tanggal = dt.strftime("%Y-%m-%d %H:%M:%S")
+    year = dt.strftime("%Y")
     kantong = str(rec.get("bank") or "").strip().upper() or CR_DEFAULT_BANK
 
     year_folder = _find_or_create_folder(year, CR_FOLDER_ID)
@@ -418,7 +481,10 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
 
 def push_pending(rec: dict, error: str) -> None:
     with PENDING.open("a", encoding="utf-8") as f:
-        f.write(json.dumps({**rec, "_error": error, "_ts": int(time.time())}, ensure_ascii=False) + "\n")
+        # default=str: rec["tanggal"] kini bisa datetime — tanpa ini
+        # json.dumps TypeError dan transaksi hilang saat tulis gagal.
+        f.write(json.dumps({**rec, "_error": error, "_ts": int(time.time())},
+                           ensure_ascii=False, default=str) + "\n")
 
 
 def flush_pending(client: httpx.AsyncClient) -> int:
@@ -456,7 +522,7 @@ def flush_pending(client: httpx.AsyncClient) -> int:
             # Simpan dengan anotasi error; ditulis sekali di akhir, bukan
             # append per baris, agar isi file tidak tercampur dua sumber.
             sisa.append(json.dumps({**rec, "_error": f"retry gagal: {e}", "_ts": int(time.time())},
-                                   ensure_ascii=False))
+                                   ensure_ascii=False, default=str))
 
     # Tulis ulang hanya bila masih ada sisa; file kosong dihapus agar /health
     # melaporkan pending=false dengan benar.
@@ -465,6 +531,113 @@ def flush_pending(client: httpx.AsyncClient) -> int:
     else:
         PENDING.unlink(missing_ok=True)
     return len(sisa)
+
+
+# ---------- Rekonsiliasi mutasi bank ----------
+
+async def reconcile_bank_statement(pdf_bytes: bytes) -> dict:
+    """Ekstrak PDF, validasi, cocokkan dengan Cash Report, lalu tulis laporan."""
+    if not AI_KEY:
+        raise RuntimeError("AI_API_KEY wajib diisi untuk ekstraksi mutasi bank")
+
+    statement = await extract_bank_statement(
+        pdf_bytes=pdf_bytes,
+        ai_key=AI_KEY,
+        ai_base=AI_BASE,
+        ai_model=AI_MODEL,
+    )
+
+    validation = validate_statement(statement)
+    if not validation["is_valid"]:
+        raise ValueError(
+            "Validasi mutasi bank gagal: " + "; ".join(validation["errors"])
+        )
+
+    bank_transactions = normalize_statement(statement, ACCOUNT_MAPPING)
+
+    # Ambil ulang data Cash Report setiap upload agar hasil selalu dibandingkan
+    # dengan isi spreadsheet terbaru, termasuk bila PDF diunggah berulang.
+    drive_service = _drive()
+    sheets_service = _sheets()
+    spreadsheet_id, raw_sheet_transactions = get_cash_report_transactions(
+        drive_service,
+        sheets_service,
+        statement,
+    )
+
+    sheet_transactions, normalization_errors = normalize_sheet_transactions(
+        raw_sheet_transactions
+    )
+
+    results = reconcile_transactions(
+        bank_transactions=bank_transactions,
+        sheet_transactions=sheet_transactions,
+        period_start=statement["period_start"],
+        period_end=statement["period_end"],
+    )
+    summary = summarize_reconciliation(results)
+
+    report_rows_written = write_reconciliation_report(
+        sheets_service=sheets_service,
+        spreadsheet_id=spreadsheet_id,
+        statement=statement,
+        reconciliation_results=results,
+    )
+
+    return {
+        "statement": statement,
+        "validation": validation,
+        "summary": summary,
+        "normalization_errors": normalization_errors,
+        "report_rows_written": report_rows_written,
+        "spreadsheet_id": spreadsheet_id,
+        "report_url": f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit",
+    }
+
+
+async def handle_bank_statement_pdf(
+    client: httpx.AsyncClient,
+    chat_id: int,
+    file_id: str,
+    filename: str,
+) -> None:
+    """Unduh PDF mutasi dari Telegram dan jalankan rekonsiliasi."""
+    info = await tg_call(client, "getFile", file_id=file_id)
+    url = f"https://api.telegram.org/file/bot{TG_TOKEN}/{info['file_path']}"
+    response = await client.get(url, timeout=120)
+    response.raise_for_status()
+
+    try:
+        result = await reconcile_bank_statement(response.content)
+    except Exception as e:
+        log.exception("Rekonsiliasi mutasi bank gagal: %s", filename)
+        await tg_send(
+            client,
+            chat_id,
+            f"❌ Rekonsiliasi gagal ({type(e).__name__}): {e}",
+        )
+        return
+
+    summary = result["summary"]
+    report_text = (
+        f'\\nBaris laporan ditulis: {result["report_rows_written"]}'
+        f'\\n<a href="{result["report_url"]}">Buka Cash Report</a>'
+    )
+    await tg_send(
+        client,
+        chat_id,
+        "✅ Rekonsiliasi selesai\\n"
+        f"Bank: {result['statement'].get('bank')}\\n"
+        f"Rekening: {result['statement'].get('account_number')}\\n"
+        f"Periode: {result['statement'].get('period_start')} s.d. "
+        f"{result['statement'].get('period_end')}\\n"
+        f"Total transaksi: {summary.get('total', 0)}\\n"
+        f"Matched: {summary.get('matched', 0)}\\n"
+        f"Bank only: {summary.get('bank_only', 0)}\\n"
+        f"Sheet only: {summary.get('sheet_only', 0)}\\n"
+        f"Perlu ditinjau: {summary.get('needs_review', 0)}"
+        f"{report_text}",
+    )
 
 
 # ---------- Telegram ----------
@@ -541,20 +714,38 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
 
     doc = msg.get("document")
     photo = msg.get("photo")
+
+    # PDF diperlakukan sebagai mutasi bank, bukan receipt transaksi.
+    if doc and (
+        doc.get("mime_type") == "application/pdf"
+        or str(doc.get("file_name", "")).lower().endswith(".pdf")
+    ):
+        await handle_bank_statement_pdf(
+            client=client,
+            chat_id=chat_id,
+            file_id=doc["file_id"],
+            filename=doc.get("file_name") or "bank_statement.pdf",
+        )
+        return
+
     if not doc and not photo:
         # Routing: foto/dokumen ke ekstraksi; teks ke tanya-jawab (lihat qa.py).
         text = str(msg.get("text") or "").strip()
         if text:
             await handle_text(client, chat_id, text)
         else:
-            await tg_send(client, chat_id, "Kirim foto/screenshot bukti transaksi (bisa pakai caption, mis. <i>Rp195.000 penjualan satvika</i>).")
+            await tg_send(
+                client,
+                chat_id,
+                "Kirim foto bukti transaksi (JPG/PNG) atau file PDF mutasi bank.",
+            )
         return
 
     if photo:
         fid = photo[-1]["file_id"]
         filename = f"photo_{msg.get('date', int(time.time()))}.jpg"
     else:
-        mime = (doc.get("mime_image") or doc.get("mime_type") or "")
+        mime = (doc.get("mime_type") or "")
         if not mime.startswith("image/"):
             await tg_send(client, chat_id, "File bukan gambar. Kirim JPG/PNG bukti transaksi.")
             return
@@ -632,6 +823,11 @@ class ExtractReq(BaseModel):
     caption: str = ""
 
 
+class ReconcileReq(BaseModel):
+    filename: str = "bank_statement.pdf"
+    pdf_base64: str
+    
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = None
@@ -659,6 +855,31 @@ def health():
         "pending": PENDING.exists(),
         "sentry": SENTRY_AKTIF,
     }
+
+
+@app.post("/api/reconcile")
+async def api_reconcile(req: ReconcileReq):
+    """Endpoint untuk menguji/memanggil rekonsiliasi PDF tanpa Telegram."""
+    try:
+        pdf_bytes = base64.b64decode(req.pdf_base64, validate=True)
+        if not pdf_bytes.startswith(b"%PDF"):
+            raise ValueError("File yang dikirim bukan PDF yang valid")
+        result = await reconcile_bank_statement(pdf_bytes)
+        return {
+            "ok": True,
+            "filename": req.filename,
+            "bank": result["statement"].get("bank"),
+            "account_number": result["statement"].get("account_number"),
+            "period_start": result["statement"].get("period_start"),
+            "period_end": result["statement"].get("period_end"),
+            "summary": result["summary"],
+            "normalization_errors": result["normalization_errors"],
+            "report_rows_written": result["report_rows_written"],
+            "report_url": result["report_url"],
+        }
+    except Exception as e:
+        log.exception("API reconciliation gagal")
+        raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}") from e
 
 
 @app.post("/api/extract")

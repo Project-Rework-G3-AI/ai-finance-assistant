@@ -213,11 +213,21 @@ Routing: foto/dokumen → jalur ekstraksi (tidak pernah lewat LLM); teks → com
 
 Aturan main: tool **baca-saja** (`aggregate`, `list_rows`, `get_receipt`); angka dihitung kode, LLM hanya merangkai kalimat dan wajib menyebut sumber (periode + TRANSAKSI). Angka **verified dan draft disebut terpisah**, termasuk rincian transfer; transfer antar kantong dikecualikan dari total (konsisten dengan RECAP). Tanpa `AI_API_KEY` atau AI gagal → balasan bantuan; **tidak ada env baru, tidak ada database**.
 
+## Rekonsiliasi Mutasi (milestone 2)
+
+Kirim **file PDF mutasi bank** (BNI/BRI/Jago) ke bot, atau `POST /api/reconcile` (`{"pdf_base64": ...}`):
+
+1. PDF dirender per halaman → dibaca vision AI (JSON ketat, retry5xx) → divalidasi keras (total debit/kredit, saldo jalan, saldo akhir).
+2. Baris Cash Report periode itu dibaca (UNFORMATTED), cocok dengan kunci **(tanggal, kantong, debit, credit)** → status `matched` / `bank_only` / `sheet_only` / `needs_review`.
+3. Hasil ditulis ke tab **RECONCILIATION** — periode/bank sama → **diganti** (idempotent), tab TRANSAKSI tidak disentuh.
+
+Butuh env `BNI_ACCOUNT_NUMBER` / `BRI_ACCOUNT_NUMBER` / `JAGO_ACCOUNT_NUMBER` (lihat `.env.example`); butuh `AI_API_KEY`. Catatan: berjalan inline di polling loop — PDF tebal menunda balasan bot lain selama pemrosesan.
+
 ## Batasan (milestone 1)
 
 - Ekstraksi mock tanpa AI = nominal hanya dari caption (gambar tidak dibaca); tanpa caption, kolom `Nominal` kosong.
 - Klasifikasi awal kosong (kolom Kategori diisi AI bila vision aktif, sisanya manual).
-- Belum ada balancing (milestone 2); tanya-jawab (milestone 3) sudah aktif — lihat bagian **Tanya-jawab**.
+- Belum ada hal lain di luar balancing yang tertunda; tanya-jawab (milestone 3) dan rekonsiliasi mutasi (milestone 2) sudah aktif — lihat bagian **Tanya-jawab** dan **Rekonsiliasi Mutasi**.
 
 ## Pengembangan Berikutnya
 

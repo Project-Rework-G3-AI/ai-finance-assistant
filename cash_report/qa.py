@@ -84,14 +84,21 @@ def _tgl(v) -> date | None:
     s = str(v or "").strip()
     if not s:
         return None
+    # Sel kini boleh berisi date-time ("1/6/2026 14:33:12") — buang waktu di
+    # belakang sebelum dicoba; tampilan date-only tetap dipertahankan.
+    kandidat = [s]
+    s2 = re.sub(r"\s+\d{1,2}:\d{2}(:\d{2})?$", "", s)
+    if s2 != s:
+        kandidat.append(s2)
     # %d-%b-%y = tampilan default Sheets en_US ("6-Jan-26") — format yang
     # paling sering muncul di TRANSAKSI; tanpa ini filter periode nihil.
-    for f in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%d-%m-%Y",
-              "%d-%b-%y", "%d-%b-%Y", "%b %d, %Y"):
-        try:
-            return datetime.strptime(s, f).date()
-        except ValueError:
-            pass
+    for teks in kandidat:
+        for f in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%d-%m-%Y",
+                  "%d-%b-%y", "%d-%b-%Y", "%b %d, %Y"):
+            try:
+                return datetime.strptime(teks, f).date()
+            except ValueError:
+                pass
     return None
 
 
