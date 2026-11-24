@@ -17,7 +17,7 @@ Bot memakai **long polling** (koneksi keluar ke Telegram), jadi butuh proses yan
 ```
 push ke main (GitHub)
    → Render build otomatis: pip install -r requirements.txt
-   → start: python main.py  (HOST=0.0.0.0, PORT dari Render)
+   → start: uvicorn main:app --host 0.0.0.0 --port $PORT
    → bot long-polling Telegram + endpoint API berjalan 24/7
 UptimeRobot → GET /health tiap 5 menit → free tier tetap terjaga
 ```
@@ -37,10 +37,16 @@ UptimeRobot → GET /health tiap 5 menit → free tier tetap terjaga
 | `GOOGLE_DRIVE_FOLDER_ID` | (opsional) ID folder `Receipts` — arsip foto bukti |
 | `AI_API_KEY` | kunci vision (kosongkan = mode mock) |
 | `AI_BASE_URL`, `AI_MODEL` | opsional (default OpenAI) |
+| `BNI_ACCOUNT_NUMBER`, `BRI_ACCOUNT_NUMBER`, `JAGO_ACCOUNT_NUMBER` | opsional — nomor rekening untuk rekonsiliasi PDF mutasi; **kosong = PDF mutasi ditolak** (lihat `samples/README.md` untuk nilai uji) |
 
 Build/Start command:
 - Build: `pip install -r requirements.txt`
-- Start: `python main.py`
+- Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+  - Opsional, supaya `SENTRY_RELEASE` terisi otomatis tiap deploy: awali dengan
+    `SENTRY_RELEASE=ai-finance-assistant@$(git rev-parse --short HEAD)` — kalau
+    memakai ini, **hapus** `SENTRY_RELEASE` dari Environment (nilai di Environment
+    menimpa nilai start command). Tanpa `.git` di folder service, release jadi
+    kosong (tidak fatal). `SENTRY_*` lain diatur di bagian Sentry.
 
 Kredensial **tidak** ada di repository — hanya di environment variable Render dan `.env` lokal (`.gitignore`).
 
