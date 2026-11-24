@@ -46,6 +46,9 @@ EXTRACT_KEYS = {
     "mode": "mode",
     "keterangan": "note",
     "catatan": "remark",
+    "bank": "bank",
+    "arah": "direction",
+    "kantong_tujuan": "target_wallet",
 }
 
 

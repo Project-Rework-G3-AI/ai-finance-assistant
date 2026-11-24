@@ -217,15 +217,24 @@ diminta secara eksplisit.
 pytest
 ```
 
-Menjalankan test rumus metrik, validasi dataset, dan batas ruang lingkup SC-01.
-Tidak memanggil AI, tidak butuh jaringan, tidak butuh dataset. Ini yang aman
-dijalankan di CI.
+Menjalankan test rumus metrik SC-01, aturan penilaian SC-02, validasi dataset,
+dan batas ruang lingkup. Tidak memanggil AI, tidak butuh jaringan, tidak butuh
+dataset. Ini yang aman dijalankan di CI.
 
-### Evaluasi SC-01 (akurasi kategori)
+### Evaluasi kriteria keberhasilan
 
-SC-01 mengukur seberapa tepat usulan kategori sistem dibanding kategori yang
-ditetapkan Admin. Target BRD minimal **85%**. Pengukurannya memakai model asli
-pada 65 pasangan gambar-transaksi, jadi berbayar dan berjalan 10 sampai 20 menit.
+Kriteria keberhasilan (SC) pada BRD diukur dengan satu set data dan satu runner.
+Yang berbeda hanya cara menilainya.
+
+| Kriteria | Yang diukur | Status |
+|---|---|---|
+| SC-01 | Akurasi usulan kategori | sudah |
+| SC-02 | Kelengkapan field wajib | sudah |
+| SC-03 | Waktu proses sampai tersimpan | belum |
+| SC-04 | Biaya per gambar | belum |
+| SC-05 | Duplikat ditolak | belum |
+| SC-06 | Semua kolom wajib terpetakan | belum |
+| SC-07 | Waktu satu periode vs manual | belum, tidak dapat diotomasi |
 
 Persiapan sekali saja:
 
@@ -238,33 +247,40 @@ python3 tests/sc_runner.py --download     # unduh 65 gambar, sekali saja
 Menjalankan:
 
 ```bash
-python3 tests/sc_runner.py                # ukur akurasi
-python3 tests/sc_runner.py --metrics-only # hitung ulang tanpa biaya
-python3 tests/sc_runner.py --repeat 3     # lihat sebaran antar-run
+python3 tests/sc_runner.py --all           # SC-01 dan SC-02 sekaligus
+python3 tests/sc_runner.py                 # SC-01 saja
+python3 tests/sc_runner.py --sc02          # SC-02 saja
+python3 tests/sc_runner.py --metrics-only  # hitung ulang tanpa biaya
+python3 tests/sc_runner.py --repeat 3      # lihat sebaran antar-run
 ```
 
-Hasil ada di `sc01-out/`:
+`--all` tidak menambah biaya, karena SC-01 dan SC-02 membaca keluaran ekstraksi
+yang sama.
+
+Hasil ada di `sc-out/`:
 
 | Berkas | Isi |
 |---|---|
-| `report.txt` | Ringkasan, rincian per kategori, confusion matrix, daftar baris salah |
-| `metrics.json` | Angka yang sama dalam bentuk JSON |
-| `results_per_row.csv` | Keluaran per gambar, termasuk nominal dan tanggal |
+| `report.txt` | SC-01: ringkasan, rincian per kategori, confusion matrix, baris salah |
+| `metrics.json` | SC-01 dalam bentuk JSON |
+| `sc02_report.txt` | SC-02: kelengkapan dan kecocokan per field wajib |
+| `sc02_metrics.json` | SC-02 dalam bentuk JSON |
+| `results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
 
 Dataset tidak disimpan di repo ini karena berisi data keuangan riil perusahaan.
 `--download` mengambilnya dari repo dataset terpisah, dan tidak memerlukan token
-GitHub. Folder `dataset/` dan `sc01-out/` sudah masuk `.gitignore`.
+GitHub. Folder `dataset/` dan `sc-out/` sudah masuk `.gitignore`.
 
-Untuk memaksa evaluasi berjalan sebagai assertion lulus/gagal terhadap target
-85%, pakai opt-in ganda karena sifatnya berbayar dan lama:
+Untuk memaksa evaluasi berjalan sebagai assertion lulus atau gagal terhadap
+target BRD, pakai opt-in karena sifatnya berbayar dan lama:
 
 ```bash
 SC_RUN_MODEL=1 pytest -m sc_model -v
 ```
 
-Panduan rinci, termasuk pemecahan masalah dan alasan angka antar-run berbeda,
-ada di [`docs/sc01-cara-menjalankan.md`](docs/sc01-cara-menjalankan.md). Hasil
-pengukuran yang sudah dilakukan ada di
+Panduan rinci, termasuk jebakan penilaian SC-02 dan alasan angka antar-run
+berbeda, ada di [`docs/sc-cara-menjalankan.md`](docs/sc-cara-menjalankan.md).
+Hasil pengukuran SC-01 ada di
 [`docs/sc01-hasil-evaluasi.md`](docs/sc01-hasil-evaluasi.md).
 
 ## Batasan (milestone 1)

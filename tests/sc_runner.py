@@ -46,11 +46,13 @@ cfg.load_env()
 import httpx  # noqa: E402
 
 from sc_metrics import compute  # noqa: E402
+import sc02_completeness  # noqa: E402
 
 OUTPUT_COLUMNS = [
     "file", "reference_category", "proposed_category", "match",
     "reference_amount", "proposed_amount", "amount_diff",
     "reference_date", "proposed_date",
+    "proposed_bank", "proposed_direction", "proposed_note",
     "mode", "note", "model_note", "seconds",
 ]
 
@@ -124,6 +126,9 @@ async def run_pairs(pairs: list[dict], images_dir: Path, out: Path,
                 "amount_diff": _amount_diff(p.get("reference_amount"), rec.get("amount")),
                 "reference_date": (p.get("reference_date") or "").strip(),
                 "proposed_date": rec.get("date") or "",
+                "proposed_bank": rec.get("bank") or "",
+                "proposed_direction": rec.get("direction") or "",
+                "proposed_note": rec.get("note") or "",
                 "mode": rec.get("mode") or ("error" if error else ""),
                 "note": (rec.get("remark") or error)[:300],
                 "model_note": (rec.get("note") or "")[:200],
@@ -195,18 +200,102 @@ def write_report(results: list[dict], out: Path) -> dict:
     return {"metrics": m, "text": text}
 
 
+
+def build_sc02_rows(results: list[dict]) -> list[dict]:
+    """Ubah hasil per baris menjadi masukan SC-02.
+
+    Acuan diambil dari `sc_pairs.csv` bila tersedia, supaya "terbaca" bisa
+    dibedakan dari "terbaca benar". Tanpa acuan, hanya keterbacaan yang dinilai.
+    """
+    reference_by_file = {}
+    try:
+        for p in cfg.read_pairs(cfg.pairs_file()):
+            name = (p.get("file") or "").strip()
+            if name:
+                reference_by_file[name] = {
+                    "date": p.get("reference_date") or "",
+                    "amount": p.get("reference_amount") or "",
+                    "bank": p.get("bank") or "",
+                    # Arah tidak punya kolom acuan di dataset. Dibandingkan hanya
+                    # bila kelak ditambahkan, bukan ditebak sekarang.
+                    "direction": p.get("reference_direction") or "",
+                    "category": p.get("reference_category") or "",
+                }
+    except SystemExit:
+        reference_by_file = {}
+
+    rows = []
+    for r in results:
+        name = (r.get("file") or "").strip()
+        record = {
+            "date": r.get("proposed_date") or "",
+            "amount": r.get("proposed_amount") or "",
+            "bank": r.get("proposed_bank") or "",
+            "direction": r.get("proposed_direction") or "",
+            "category": r.get("proposed_category") or "",
+            "note": r.get("proposed_note") or "",
+            # `catatan` di main.py ditulis ke kolom `note` pada CSV hasil.
+            "remark": r.get("note") or "",
+            "mode": r.get("mode") or "",
+        }
+        rows.append({"file": name, "record": record,
+                     "reference": reference_by_file.get(name)})
+    return rows
+
+
+def write_sc02_report(results: list[dict], out: Path) -> dict:
+    """Hitung SC-02 lalu tulis `sc02_report.txt` dan `sc02_metrics.json`."""
+    rows = build_sc02_rows(results)
+    c = sc02_completeness.compute(rows)
+
+    target = 0.90
+    lines = [
+        "SC-02 — Kelengkapan field wajib",
+        "=" * 60,
+        c.summary(),
+        "",
+        "Target BRD: minimal 90% field wajib terbaca benar",
+        f"Status    : {'TERCAPAI' if c.overall_accuracy >= target else 'BELUM TERCAPAI'}",
+        "",
+        "Catatan penilaian",
+        "-" * 60,
+        "kelengkapan = field terbaca, tanpa penanda gagal baca dan bukan mode mock",
+        "akurasi     = terbaca dan nilainya cocok dengan acuan (bila acuan ada)",
+        "tebakan     = field yang diisi nilai bawaan kode karena model gagal membaca",
+    ]
+    text = "\n".join(lines)
+    (out / "sc02_report.txt").write_text(text, encoding="utf-8")
+    (out / "sc02_metrics.json").write_text(
+        json.dumps({
+            "total": c.total,
+            "overall_completeness": c.overall_completeness,
+            "overall_accuracy": c.overall_accuracy,
+            "all_fields_complete": c.all_fields_complete,
+            "fields": {n: {"total": f.total, "readable": f.readable,
+                           "correct": f.correct, "fallback": f.fallback,
+                           "scored": f.scored, "has_reference": f.has_reference,
+                           "completeness": f.completeness, "accuracy": f.accuracy}
+                       for n, f in c.fields.items()},
+        }, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {"result": c, "text": text}
+
+
 def main_cli() -> int:
     ap = argparse.ArgumentParser(
-        description="Runner evaluasi SC-01 (akurasi kategori)")
+        description="Runner evaluasi kriteria keberhasilan (SC-01, SC-02)")
     ap.add_argument("--download", action="store_true",
                     help="unduh gambar dataset dari repo, lalu berhenti")
     ap.add_argument("--pairs", default="", help="timpa SC_PAIRS")
     ap.add_argument("--images", default="", help="timpa SC_IMAGES")
-    ap.add_argument("--out", default="sc01-out", help="folder keluaran (default: sc01-out)")
+    ap.add_argument("--out", default="sc-out", help="folder keluaran (default: sc-out)")
     ap.add_argument("--restart", action="store_true", help="abaikan hasil lama, proses dari awal")
     ap.add_argument("--repeat", type=int, default=1, metavar="N",
                     help="jalankan N kali lalu laporkan rentang akurasi (untuk mengukur kestabilan)")
     ap.add_argument("--metrics-only", action="store_true", help="hitung metrik tanpa memanggil AI")
+    ap.add_argument("--sc02", action="store_true",
+                    help="ukur kelengkapan field wajib (SC-02), bukan akurasi kategori")
+    ap.add_argument("--all", action="store_true",
+                    help="ukur SC-01 dan SC-02 sekaligus dalam satu lintasan")
     a = ap.parse_args()
 
     # Argumen CLI menang atas .env, supaya bisa dipakai tanpa menyunting file.
@@ -236,8 +325,12 @@ def main_cli() -> int:
         results = list(read_results(out / "results_per_row.csv").values())
         if not results:
             raise SystemExit(f"tidak ada hasil di {out / 'results_per_row.csv'}")
-        r = write_report(results, out)
-        print(r["text"])
+        if a.sc02 or a.all:
+            r2 = write_sc02_report(results, out)
+            print(r2["text"])
+        if not a.sc02 or a.all:
+            r = write_report(results, out)
+            print("\n" + r["text"])
         return 0
 
     is_ready, reason = cfg.ready()
@@ -276,8 +369,16 @@ def main_cli() -> int:
 
     results = asyncio.run(run_pairs(pairs, cfg.images_dir(),
                                     out / "results_per_row.csv", a.restart))
-    r = write_report(results, out)
-    print("\n" + r["text"])
+
+    # Satu lintasan panggilan model cukup untuk SC-01 dan SC-02: keduanya
+    # membaca keluaran ekstraksi yang sama. Memisahkan lintasan hanya akan
+    # menggandakan biaya tanpa menambah informasi.
+    if a.sc02 or a.all:
+        r2 = write_sc02_report(results, out)
+        print("\n" + r2["text"])
+    if not a.sc02 or a.all:
+        r = write_report(results, out)
+        print("\n" + r["text"])
     return 0
 
 

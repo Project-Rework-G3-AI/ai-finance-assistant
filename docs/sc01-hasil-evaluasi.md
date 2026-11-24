@@ -42,7 +42,7 @@ setiap gambar tanpa melihat isinya.
 ## Cara pengukuran
 
 Langkah menjalankan evaluasi ini di komputer lokal ada di
-[`sc01-cara-menjalankan.md`](sc01-cara-menjalankan.md). Ringkasnya:
+[`sc-cara-menjalankan.md`](sc-cara-menjalankan.md). Ringkasnya:
 
 ```bash
 python3 tests/sc_runner.py --download   # unduh 65 gambar (sekali)
