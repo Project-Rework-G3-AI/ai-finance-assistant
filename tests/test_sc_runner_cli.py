@@ -102,3 +102,63 @@ def test_sc01_and_all_cannot_be_combined():
             main_cli()
     finally:
         sys.argv = argv
+
+
+# --------------------------------------------------------------- urutan log
+
+def test_reports_follow_criteria_order_not_hand_written_order():
+    """SC-01 harus tampil lebih dulu, sesuai urutan AVAILABLE_CRITERIA.
+
+    Sebelumnya urutan cetak ditulis tangan sebagai dua blok `if` dan blok SC-02
+    kebetulan diletakkan lebih dulu, sehingga log terlihat seperti SC-02
+    berjalan sebelum SC-01. Yang benar: satu lintasan ekstraksi dipakai
+    bersama, jadi urutan log hanya soal penyajian.
+    """
+    from sc_runner import join_reports, run_reports
+
+    captured = []
+
+    def fake(name):
+        def builder(results, out):
+            captured.append(name)
+            return {"text": f"laporan-{name}"}
+        return builder
+
+    import sc_runner
+    asli = dict(sc_runner.__dict__)
+    try:
+        sc_runner.write_report = fake("sc01")
+        sc_runner.write_sc02_report = fake("sc02")
+        reports = run_reports([], Path("."), ["sc01", "sc02"])
+    finally:
+        for key in ("write_report", "write_sc02_report"):
+            sc_runner.__dict__[key] = asli[key]
+
+    assert captured == ["sc01", "sc02"]
+    assert list(reports) == ["sc01", "sc02"]
+    teks = join_reports(reports)
+    assert teks.index("laporan-sc01") < teks.index("laporan-sc02")
+
+
+def test_order_is_respected_for_a_single_criterion():
+    from sc_runner import run_reports
+
+    import sc_runner
+    asli = dict(sc_runner.__dict__)
+    try:
+        sc_runner.write_report = lambda r, o: {"text": "satu"}
+        sc_runner.write_sc02_report = lambda r, o: {"text": "dua"}
+        assert list(run_reports([], Path("."), ["sc02"])) == ["sc02"]
+    finally:
+        for key in ("write_report", "write_sc02_report"):
+            sc_runner.__dict__[key] = asli[key]
+
+
+def test_every_available_criterion_has_a_report_builder():
+    """Kriteria baru tanpa builder akan gagal jelas, bukan hilang diam-diam."""
+    import sc_runner
+
+    for name in AVAILABLE_CRITERIA:
+        assert name in ("sc01", "sc02"), (
+            f"{name} belum punya builder di run_reports"
+        )

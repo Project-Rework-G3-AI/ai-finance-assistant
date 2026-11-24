@@ -298,6 +298,53 @@ def selected_criteria(args) -> list[str]:
     return picked or list(AVAILABLE_CRITERIA)
 
 
+def run_reports(results: list[dict], out: Path, criteria: list[str]) -> dict[str, dict]:
+    """Hitung laporan tiap kriteria, dikembalikan sesuai urutan `criteria`.
+
+    Sebelumnya urutan cetak ditulis tangan sebagai dua blok `if` terpisah, dan
+    blok SC-02 kebetulan diletakkan lebih dulu. Akibatnya log menampilkan SC-02
+    di atas SC-01 seolah SC-02 berjalan lebih dulu, padahal satu lintasan
+    ekstraksi dipakai bersama dan tidak ada yang berjalan dua kali. Dengan
+    dispatch ini, urutan keluaran selalu mengikuti `criteria`, jadi menambah
+    kriteria baru tidak bisa lagi menghasilkan urutan yang menyesatkan.
+    """
+    builders = {
+        "sc01": write_report,
+        "sc02": write_sc02_report,
+    }
+    return {name: builders[name](results, out) for name in criteria}
+
+
+def join_reports(reports: dict[str, dict]) -> str:
+    """Gabungkan teks laporan dengan satu pemisah di antaranya."""
+    return "\n".join(r["text"] for r in reports.values())
+
+
+def spread_value(name: str, report: dict) -> float:
+    """Angka utama satu kriteria, dipakai untuk mengukur sebaran antar-run."""
+    if name == "sc01":
+        return report["metrics"].accuracy
+    return report["result"].overall_accuracy
+
+
+def spread_block(name: str, values: list[float], repeat: int,
+                 baseline: tuple[float, str] | None = None) -> str:
+    """Ringkasan sebaran satu kriteria pada `repeat` run."""
+    lowest, highest = min(values), max(values)
+    average = sum(values) / len(values)
+    label = {"sc01": "akurasi", "sc02": "kecocokan"}.get(name, "nilai")
+    lines = [
+        f"{name.upper()} — sebaran {repeat} run",
+        f"{label} terendah : {lowest:.1%}",
+        f"{label} tertinggi: {highest:.1%}",
+        f"rata-rata        : {average:.1%}",
+        f"rentang          : {(highest - lowest) * 100:.1f} poin persen",
+    ]
+    if baseline:
+        lines.append(f"baseline         : {baseline[0]:.1%} ({baseline[1]})")
+    return "\n".join(lines)
+
+
 def main_cli() -> int:
     ap = argparse.ArgumentParser(
         description="Runner evaluasi kriteria keberhasilan (SC-01, SC-02)",
@@ -352,12 +399,8 @@ def main_cli() -> int:
         results = list(read_results(out / "results_per_row.csv").values())
         if not results:
             raise SystemExit(f"tidak ada hasil di {out / 'results_per_row.csv'}")
-        if "sc02" in criteria:
-            r2 = write_sc02_report(results, out)
-            print(r2["text"])
-        if "sc01" in criteria:
-            r = write_report(results, out)
-            print("\n" + r["text"])
+        reports = run_reports(results, out, criteria)
+        print(join_reports(reports))
         return 0
 
     is_ready, reason = cfg.ready()
@@ -370,44 +413,25 @@ def main_cli() -> int:
     if a.repeat > 1:
         # Dijalankan berulang untuk melihat sebaran angka. Model tidak menjamin
         # hasil identik antar-run, jadi satu angka saja bisa menyesatkan.
-        all_metrics = []
-        all_completeness = []
+        per_criterion: dict[str, list[float]] = {name: [] for name in criteria}
+        baselines: dict[str, tuple[float, str]] = {}
         for n in range(1, a.repeat + 1):
             print(f"\n===== run {n} dari {a.repeat} =====")
             run_dir = out / f"run-{n}"
             run_dir.mkdir(parents=True, exist_ok=True)
             run_results = asyncio.run(run_pairs(pairs, cfg.images_dir(),
                                                 run_dir / "results_per_row.csv", True))
-            if "sc02" in criteria:
-                r2 = write_sc02_report(run_results, run_dir)
-                all_completeness.append(r2["result"].overall_accuracy)
-                print("\n" + r2["text"])
-            if "sc01" in criteria:
-                r = write_report(run_results, run_dir)
-                all_metrics.append(r["metrics"])
-                print("\n" + r["text"])
+            reports = run_reports(run_results, run_dir, criteria)
+            for name, rep in reports.items():
+                per_criterion[name].append(spread_value(name, rep))
+                if name == "sc01":
+                    m = rep["metrics"]
+                    baselines[name] = (m.baseline, m.majority_label)
+            print(join_reports(reports))
 
-        blocks = []
-        if all_metrics:
-            accuracies = [m.accuracy for m in all_metrics]
-            blocks.append("\n".join([
-                f"SC-01 — sebaran {a.repeat} run",
-                f"akurasi terendah : {min(accuracies):.1%}",
-                f"akurasi tertinggi: {max(accuracies):.1%}",
-                f"rata-rata        : {sum(accuracies)/len(accuracies):.1%}",
-                f"rentang          : {(max(accuracies)-min(accuracies))*100:.1f} poin persen",
-                f"baseline         : {all_metrics[0].baseline:.1%} "
-                f"({all_metrics[0].majority_label})",
-            ]))
-        if all_completeness:
-            blocks.append("\n".join([
-                f"SC-02 — sebaran {a.repeat} run",
-                f"kecocokan terendah : {min(all_completeness):.1%}",
-                f"kecocokan tertinggi: {max(all_completeness):.1%}",
-                f"rata-rata          : {sum(all_completeness)/len(all_completeness):.1%}",
-                f"rentang            : "
-                f"{(max(all_completeness)-min(all_completeness))*100:.1f} poin persen",
-            ]))
+        blocks = [spread_block(name, per_criterion[name], a.repeat,
+                               baselines.get(name))
+                  for name in criteria if per_criterion[name]]
         text = f"\n{'=' * 60}\n".join(blocks)
         (out / "spread.txt").write_text(text, encoding="utf-8")
         print("\n" + "=" * 60 + "\n" + text)
@@ -416,15 +440,11 @@ def main_cli() -> int:
     results = asyncio.run(run_pairs(pairs, cfg.images_dir(),
                                     out / "results_per_row.csv", a.restart))
 
-    # Satu lintasan panggilan model cukup untuk SC-01 dan SC-02: keduanya
+    # Satu lintasan panggilan model cukup untuk semua kriteria: semuanya
     # membaca keluaran ekstraksi yang sama. Memisahkan lintasan hanya akan
     # menggandakan biaya tanpa menambah informasi.
-    if "sc02" in criteria:
-        r2 = write_sc02_report(results, out)
-        print("\n" + r2["text"])
-    if "sc01" in criteria:
-        r = write_report(results, out)
-        print("\n" + r["text"])
+    reports = run_reports(results, out, criteria)
+    print(join_reports(reports))
     return 0
 
 
