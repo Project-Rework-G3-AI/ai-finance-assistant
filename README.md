@@ -152,7 +152,7 @@ python oauth_init.py
 
 Verifikasi: `/health` → `"drive": true`; kirim foto → balasan ada tautan "Bukti transfer" dan baris Cash Report punya isi kolom Link Bukti.
 
-Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan hanya bila tulis Cash Report sukses. Gagal unggah Drive tidak mematikan proses — kolom dibiarkan kosong, error muncul di log. Refresh token tidak kedaluwarsa selama tidak dicabut (atau password Gmail diganti).
+Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan hanya bila tulis Cash Report sukses. Gagal unggah Drive tidak mematikan proses — kolom dibiarkan kosong, error muncul di log. **Refresh token OAuth aplikasi status Testing di Google Cloud kedaluwarsa7 hari** (terbukti25Nov2026: Sentry `invalid_grant: Token has been expired or revoked`). Pemulihan: `python oauth_init.py` lokal → salin refresh token baru → update `GOOGLE_OAUTH_REFRESH_TOKEN` di Environment Render → restart; antrean `pending.jsonl` di-flush otomatis. Supaya tidak berulang tiap minggu: pindahkan aplikasi ke status Production (tanpa review; butuh URL privacy policy/ToS) atau ganti jalur Drive ke Apps Script (Opsi2).
 
 ## Alur
 
@@ -178,7 +178,7 @@ Flat ledger — baris 1 header, data mulai baris 2, append di baris pertama kolo
 | F Keterangan | hasil ekstraksi LLM, caption digabung dengan ` — ` bila berbeda | reviewer boleh rapikan |
 | G Status | `draft` saat tulis; reviewer → `verified` | |
 | H Catatan | catatan sistem (bukan LLM): "wajib ditinjau", nilai tidak terbaca, anomali | |
-| I Ref ID | dedupe (`tg:…` / `manual:…`) | pasangan transfer memakai Ref ID sama |
+| I Ref ID | dedupe (`tg:<file_id>` / `manual:…`) — identitas = **konten file**: rename diabaikan, kompres ulang dianggap bukti baru (jaring review `draft`; rencana `doc:` di Pengembangan Berikutnya) | pasangan transfer memakai Ref ID sama |
 | J Sumber File | nama file foto asli dari Telegram | |
 | K Link Bukti | tautan foto di Drive (kosong bila fitur off/gagal) | |
 
