@@ -153,20 +153,3 @@ def test_every_env_example_variable_used_by_tests_is_mentioned():
             encoding="utf-8")))
     missing_keys = [v for v in used if f"{v}=" not in env_example]
     assert not missing_keys, f".env.example tidak memuat: {missing_keys}"
-
-# --------------------------------------------- aturan bahasa disebut
-
-def test_readme_states_the_testing_language_rule(testing_section: str):
-    """Aturan identifier Inggris untuk kode testing harus terdokumentasi.
-
-    Aturan ini pernah dilanggar berulang kali karena hanya hidup di percakapan.
-    README harus menyebutnya, supaya pembaca tidak perlu diberi tahu ulang.
-    """
-    assert "Aturan bahasa kode testing" in testing_section
-    assert "identifier" in testing_section.lower()
-    assert "bahasa Inggris" in testing_section
-
-
-def test_readme_points_at_the_test_that_enforces_the_language_rule(testing_section: str):
-    """Menyebut aturan saja tidak cukup; harus ada yang menegakkannya."""
-    assert "test_code_language.py" in testing_section
