@@ -28,9 +28,9 @@ import sc05_dedupe as sc05  # noqa: E402
 
 # ------------------------------------------------------- penilaian
 
-def case(requirement="wajib", uploads=2, rows=1, expected=1):
+def case(requirement="required", uploads=2, rows=1, expected=1):
     return sc05.Case(
-        name="uji", label="uji", requirement=requirement,
+        name="case", label="case", requirement=requirement,
         expected_rows=expected,
         upload_item=[sc05.Upload(f"id{i}", b"x") for i in range(uploads)],
         row=rows,
@@ -38,8 +38,8 @@ def case(requirement="wajib", uploads=2, rows=1, expected=1):
 
 
 def test_all_required_duplicates_rejected_passes():
-    c = sc05.compute([case("wajib", uploads=2, rows=1, expected=1),
-                      case("kendali", uploads=1, rows=1, expected=1)])
+    c = sc05.compute([case("required", uploads=2, rows=1, expected=1),
+                      case("control", uploads=1, rows=1, expected=1)])
     assert c["required_rejected"] == 1
     assert c["required_duplicates"] == 1
     assert c["pass"] is True
@@ -48,8 +48,8 @@ def test_all_required_duplicates_rejected_passes():
 
 def test_one_duplicate_escaping_fails():
     """Satu saja yang lolos berarti tidak "seluruhnya" ditolak."""
-    c = sc05.compute([case("wajib", uploads=2, rows=2, expected=1),
-                      case("kendali", uploads=1, rows=1, expected=1)])
+    c = sc05.compute([case("required", uploads=2, rows=2, expected=1),
+                      case("control", uploads=1, rows=1, expected=1)])
     assert c["required_rejected"] == 0
     assert c["pass"] is False
     assert sc05.verdict(c) == "BELUM TERCAPAI"
@@ -58,7 +58,7 @@ def test_one_duplicate_escaping_fails():
 def test_five_images_give_a_meaningful_denominator():
     """Lima gambar harus menghasilkan penyebut lima, bukan satu."""
     cases = sc05.build_cases(5)
-    required = next(c for c in cases if c.requirement == "wajib")
+    required = next(c for c in cases if c.requirement == "required")
     assert len(required.upload_item) == 10          # lima gambar, masing-masing dua kali
     assert required.expected_rows == 5
     assert required.duplicates_expected == 5
@@ -70,13 +70,13 @@ def test_control_failure_fails_the_criterion():
     Ini syarat yang mudah terlupa: kalau hanya kasus wajib yang diperiksa,
     aplikasi yang menolak segalanya akan lulus 100%.
     """
-    c = sc05.compute([case("wajib", uploads=2, rows=1, expected=1),
-                      case("kendali", uploads=1, rows=0, expected=1)])
+    c = sc05.compute([case("required", uploads=2, rows=1, expected=1),
+                      case("control", uploads=1, rows=0, expected=1)])
     assert c["pass"] is False
 
 
 def test_no_control_means_no_control_credit():
-    c = sc05.compute([case("wajib", uploads=2, rows=1, expected=1)])
+    c = sc05.compute([case("required", uploads=2, rows=1, expected=1)])
     assert c["control_total"] == 0
     assert c["control_passed"] == 0
 
@@ -89,9 +89,9 @@ def test_findings_do_not_decide_the_verdict():
     produksi.
     """
     passes = sc05.compute([
-        case("wajib", uploads=2, rows=1, expected=1),
-        case("kendali", uploads=1, rows=1, expected=1),
-        case("temuan", uploads=2, rows=2, expected=1),
+        case("required", uploads=2, rows=1, expected=1),
+        case("control", uploads=1, rows=1, expected=1),
+        case("finding", uploads=2, rows=2, expected=1),
     ])
     assert passes["findings_rejected"] == 0
     assert passes["findings_duplicates"] == 1
@@ -106,7 +106,7 @@ def test_nothing_measured_never_passes():
 
 
 def test_duplicate_count_is_uploads_minus_rows():
-    c = case("wajib", uploads=4, rows=2, expected=1)
+    c = case("required", uploads=4, rows=2, expected=1)
     assert c.duplicate == 2
     assert c.duplicates_expected == 3
     assert c.matches_expectation is False
@@ -115,29 +115,29 @@ def test_duplicate_count_is_uploads_minus_rows():
 # ------------------------------------------------------- laporan
 
 def test_report_names_the_judged_number_before_the_status():
-    c = sc05.compute([case("wajib", uploads=2, rows=1, expected=1),
-                      case("kendali", uploads=1, rows=1, expected=1)])
+    c = sc05.compute([case("required", uploads=2, rows=1, expected=1),
+                      case("control", uploads=1, rows=1, expected=1)])
     text = sc05.report(c)
     assert text.index("Angka yang dinilai") < text.index("Status")
     assert "1 dari 1" in text
 
 
 def test_report_states_the_target_in_words():
-    c = sc05.compute([case("wajib", uploads=2, rows=1, expected=1),
-                      case("kendali", uploads=1, rows=1, expected=1)])
+    c = sc05.compute([case("required", uploads=2, rows=1, expected=1),
+                      case("control", uploads=1, rows=1, expected=1)])
     assert "seluruh duplikat ditolak" in sc05.report(c)
 
 
 def test_report_shows_every_case_with_rows_and_uploads():
-    c = sc05.compute([case("wajib", uploads=2, rows=1, expected=1)])
+    c = sc05.compute([case("required", uploads=2, rows=1, expected=1)])
     text = sc05.report(c)
     assert "2 kiriman" in text
     assert "1 baris tersimpan" in text
 
 
 def test_report_explains_the_control():
-    c = sc05.compute([case("wajib", uploads=2, rows=1, expected=1),
-                      case("kendali", uploads=1, rows=1, expected=1)])
+    c = sc05.compute([case("required", uploads=2, rows=1, expected=1),
+                      case("control", uploads=1, rows=1, expected=1)])
     assert "Kendali" in sc05.report(c)
 
 
@@ -182,7 +182,7 @@ def test_harness_passes_when_dedupe_works(app_with_sheet):
     app, ws = app_with_sheet
     cases = asyncio.run(sc05.measure(app, 3))
     result = sc05.compute(cases)
-    required = next(c for c in cases if c.requirement == "wajib")
+    required = next(c for c in cases if c.requirement == "required")
     assert required.row == 3          # tiga gambar, masing-masing dua kali
     assert result["required_rejected"] == 3
     assert result["pass"] is True
@@ -203,7 +203,7 @@ def test_harness_goes_red_when_dedupe_is_disabled(app_with_sheet, monkeypatch):
     cases = asyncio.run(sc05.measure(app, 3))
     result = sc05.compute(cases)
 
-    required = next(c for c in cases if c.requirement == "wajib")
+    required = next(c for c in cases if c.requirement == "required")
     assert required.row == 6          # semua kiriman tercatat
     assert result["required_rejected"] == 0
     assert result["pass"] is False
@@ -219,7 +219,7 @@ def test_control_still_passes_when_dedupe_is_disabled(app_with_sheet, monkeypatc
     disable_dedup(monkeypatch)
 
     cases = asyncio.run(sc05.measure(app, 3))
-    control = next(c for c in cases if c.requirement == "kendali")
+    control = next(c for c in cases if c.requirement == "control")
     assert control.matches_expectation is True
 
 
@@ -227,7 +227,7 @@ def test_duplicate_reply_is_sent_to_the_user(app_with_sheet):
     """Pengguna harus diberi tahu, bukan hanya diabaikan diam-diam."""
     app, ws = app_with_sheet
     cases = asyncio.run(sc05.measure(app, 2))
-    required = next(c for c in cases if c.requirement == "wajib")
+    required = next(c for c in cases if c.requirement == "required")
     assert required.duplicate_reply == 2   # dua gambar, satu balasan masing-masing
 
 

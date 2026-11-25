@@ -139,7 +139,7 @@ def test_sc02_target_is_90_percent(tmp_path):
 
 def test_sc02_wrong_category_fails_the_target(tmp_path):
     """Kategori salah menurunkan kecocokan, jadi status harus gagal."""
-    text = sc02_report(tmp_path, category="SALAH")
+    text = sc02_report(tmp_path, category="WRONG")
     assert "BELUM TERCAPAI" in text
 
 

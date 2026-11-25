@@ -31,7 +31,7 @@ def clear_env(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
-def price(prompt=1e-6, completion=2e-6, model="uji/model"):
+def price(prompt=1e-6, completion=2e-6, model="test/model"):
     return sc04.Pricing(model=model, prompt_usd=prompt,
                         completion_usd=completion, source="test")
 
@@ -160,7 +160,7 @@ def test_missing_exchange_rate_is_zero_not_a_guess(monkeypatch):
 
 
 def test_bad_exchange_rate_is_refused(monkeypatch):
-    monkeypatch.setenv(sc04.ENV_USD_IDR, "bukan-angka")
+    monkeypatch.setenv(sc04.ENV_USD_IDR, "not-a-number")
     with pytest.raises(SystemExit):
         sc04.usd_to_idr_from()
 

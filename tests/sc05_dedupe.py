@@ -137,14 +137,14 @@ class FakeTelegram:
         return FakeResponse(self.image)
 
 
-# Nama fungsi dan variabel modul yang diganti `pasang_tiruan`, dicatat di satu
+# Nama fungsi dan variabel modul yang diganti `install_fakes`, dicatat di satu
 # tempat supaya pemulihannya tidak bisa ketinggalan.
 REPLACED = ("_find_or_create_folder", "_find_or_create_spreadsheet",
            "_open_spreadsheet", "_drive_ready", "extract", "tg_call")
 
 
 def restore_module(main, original: dict) -> None:
-    """Kembalikan modul ke keadaan sebelum `pasang_tiruan`.
+    """Kembalikan modul ke keadaan sebelum `install_fakes`.
 
     Tanpa ini, tiruan tertinggal di modul dan mencemari test lain yang berjalan
     setelahnya. Gejalanya menyesatkan: test lulus sendiri-sendiri tetapi gagal
@@ -160,20 +160,20 @@ def install_fakes(main, ws: FakeWorksheet, image: bytes) -> dict:
     Hanya fungsi di luar aplikasi yang diganti. `write_cash_report` dan
     `handle_update` tetap yang asli, karena logika dedup ada di sana.
 
-    Mengembalikan keadaan asli untuk diberikan ke `pulihkan`.
+    Mengembalikan keadaan asli untuk diberikan ke `restore_module`.
     """
     original = {name: getattr(main, name) for name in REPLACED if hasattr(main, name)}
     original["CR_FOLDER_ID"] = getattr(main, "CR_FOLDER_ID", None)
     original["CR_TEMPLATE_ID"] = getattr(main, "CR_TEMPLATE_ID", None)
     original["CR_DEFAULT_BANK"] = getattr(main, "CR_DEFAULT_BANK", None)
 
-    main.CR_FOLDER_ID = "folder-uji"
-    main.CR_TEMPLATE_ID = "template-uji"
+    main.CR_FOLDER_ID = "test-folder"
+    main.CR_TEMPLATE_ID = "test-template"
     main.CR_DEFAULT_BANK = "BNI"
 
-    main._find_or_create_folder = lambda name, parent: "folder-uji"
+    main._find_or_create_folder = lambda name, parent: "test-folder"
     main._find_or_create_spreadsheet = lambda year, folder: {
-        "id": "ss-uji", "name": f"Cash Report {year}"}
+        "id": "test-ss", "name": f"Cash Report {year}"}
 
     class _Sheet:
         def worksheet(self, name: str):
@@ -218,7 +218,7 @@ class Case:
 
     name: str
     label: str
-    requirement: str          # "wajib" | "kendali" | "temuan"
+    requirement: str          # "required" | "control" | "finding"
     expected_rows: int
     upload_item: list[Upload] = field(default_factory=list)
     row: int = 0
@@ -311,21 +311,21 @@ def build_cases(image_count: int = 5) -> list[Case]:
         Case(
             name="kirim_ulang_berkas_sama",
             label="Kirim ulang berkas yang sama",
-            requirement="wajib",
+            requirement="required",
             expected_rows=len(image),
             upload_item=same,
         ),
         Case(
             name="isi_sama_file_id_baru",
             label="Isi sama, file_id berbeda",
-            requirement="temuan",
+            requirement="finding",
             expected_rows=len(image),
             upload_item=different_id,
         ),
         Case(
             name="gambar_berbeda",
             label="Gambar berbeda (kendali)",
-            requirement="kendali",
+            requirement="control",
             expected_rows=len(image),
             upload_item=control,
         ),
@@ -353,9 +353,9 @@ def compute(cases: list[Case]) -> dict:
     skenario yang "sesuai". Dengan lima gambar, angkanya jadi "lima dari lima",
     bukan "satu dari satu".
     """
-    required = [c for c in cases if c.requirement == "wajib"]
-    control = [c for c in cases if c.requirement == "kendali"]
-    findings = [c for c in cases if c.requirement == "temuan"]
+    required = [c for c in cases if c.requirement == "required"]
+    control = [c for c in cases if c.requirement == "control"]
+    findings = [c for c in cases if c.requirement == "finding"]
 
     required_duplicates = sum(c.duplicates_expected for c in required)
     required_rejected = sum(c.duplicate for c in required)

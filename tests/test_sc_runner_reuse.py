@@ -97,11 +97,11 @@ def test_source_records_zero_calls_when_results_are_reused(tmp_path):
 
 
 def test_source_line_names_the_model_when_it_was_called(tmp_path):
-    write_source(tmp_path, model_calls=65, model="contoh/model",
+    write_source(tmp_path, model_calls=65, model="example/model",
                  computed_at="2026-01-01 10:00:00 UTC")
     text = source_line(tmp_path)
     assert "65 panggilan model" in text
-    assert "contoh/model" in text
+    assert "example/model" in text
 
 
 def test_source_line_is_honest_when_nothing_was_recorded(tmp_path):
@@ -172,7 +172,7 @@ def test_report_shows_accuracy_without_category(tmp_path):
     rows = [
         {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
                                  "bank": "BNI", "direction": "keluar",
-                                 "category": "SALAH", "remark": "", "mode": "vision"},
+                                 "category": "WRONG", "remark": "", "mode": "vision"},
          "reference": {"date": "2026-01-01", "amount": "1000",
                        "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
     ]
@@ -200,7 +200,7 @@ def test_accuracy_excluding_removes_only_the_named_field():
     rows = [
         {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
                                  "bank": "BNI", "direction": "keluar",
-                                 "category": "SALAH", "remark": "", "mode": "vision"},
+                                 "category": "WRONG", "remark": "", "mode": "vision"},
          "reference": {"date": "2026-01-01", "amount": "1000",
                        "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
     ]
