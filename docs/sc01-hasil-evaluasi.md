@@ -12,14 +12,14 @@ berkas pendukungnya disertakan agar hasil bisa diperiksa ulang.
 Laporan SC-01 memuat beberapa angka sekaligus, jadi mana yang dinilai perlu
 disebut terang-terangan:
 
-| Angka | Nilai (run 4) | Dipakai menilai target? |
+| Angka | Nilai (run terbaru) | Dipakai menilai target? |
 |---|---|---|
-| **Akurasi** (benar / total) | **4,6%** | **ya** |
+| **Akurasi** (benar / total) | **7,7%** | **ya** |
 | Baseline kelas mayoritas | 75,4% | tidak, batas bawah |
-| Macro-average recall | 40,4% | tidak, penjelas |
-| Lift atas baseline | −70,8% | tidak, penjelas |
+| Macro-average recall | 21,6% | tidak, penjelas |
+| Lift atas baseline | −67,7% | tidak, penjelas |
 
-**Yang dibandingkan dengan target 85% adalah akurasi 4,6%**, yaitu 3 jawaban
+**Yang dibandingkan dengan target 85% adalah akurasi 7,7%**, yaitu 5 jawaban
 benar dari 65 pasangan.
 
 Alasannya: BRD menyebut "akurasi usulan kategori", dan akurasi berarti proporsi
@@ -33,38 +33,34 @@ jadi statusnya tidak bergantung pada pilihan angka. Tetapi menyebut angka mana
 yang dinilai tetap penting, karena laporan yang hanya menulis "BELUM TERCAPAI"
 memaksa pembaca menebak.
 
-Satu bukti tambahan bahwa akurasi memang pilihan yang tepat: dua run berbeda
-bisa punya akurasi sama tetapi macro-average berbeda. Run 4 di tabel bawah
-mencatat 3 benar dengan macro 40,4%, sedangkan run lain juga 3 benar tetapi
-macro 50,0%, karena yang benar berbeda kategorinya. Akurasi tidak berubah,
-macro berubah. Jadi menyebut keduanya perlu, tetapi hanya satu yang bisa
-dibandingkan dengan target secara konsisten.
+## Riwayat eksekusi
 
-## Ringkasan
+Akurasi diukur berulang kali karena model tidak deterministik. Semua run memakai
+65 pasangan yang sama:
 
-| Metrik | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 | Run 6 |
-|---|---|---|---|---|---|---|
-| Total pasangan diuji | 65 | 65 | 65 | 65 | 65 | 65 |
-| Benar | 10 | 9 | 8 | 3 | 5 | 7 |
-| **Akurasi** | **15,4%** | **13,8%** | **12,3%** | **4,6%** | **7,7%** | **10,8%** |
-| Baseline kelas mayoritas | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% |
-| **Lift atas baseline** | **−60,0%** | **−61,5%** | **−63,1%** | **−70,8%** | **−67,7%** | **−64,6%** |
-| Macro-average recall | 52,9% | 52,4% | 42,4% | 40,4% | 41,2% | 22,4% |
-| Target BRD | 85% | 85% | 85% | 85% | 85% | 85% |
-| Status | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** | **Belum tercapai** |
+| Metrik | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 | Run 6 | Run 7 (terbaru) |
+|---|---|---|---|---|---|---|---|
+| Total pasangan diuji | 65 | 65 | 65 | 65 | 65 | 65 | 65 |
+| Benar | 10 | 9 | 8 | 3 | 5 | 7 | **5** |
+| **Akurasi** | **15,4%** | **13,8%** | **12,3%** | **4,6%** | **7,7%** | **10,8%** | **7,7%** |
+| Baseline kelas mayoritas | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% |
+| **Lift atas baseline** | **−60,0%** | **−61,5%** | **−63,1%** | **−70,8%** | **−67,7%** | **−64,6%** | **−67,7%** |
+| Macro-average recall | 52,9% | 52,4% | 42,4% | 40,4% | 41,2% | 22,4% | **21,6%** |
+| Target BRD | 85% | 85% | 85% | 85% | 85% | 85% | 85% |
+| Status | belum | belum | belum | belum | belum | belum | **belum** |
 
-Enam eksekusi pada data yang sama memberi akurasi antara **4,6% dan 15,4%**,
-rentang **10,8 poin persen**, dengan rata-rata 10,8%. Kode sudah mengirim
+Tujuh eksekusi pada data yang sama memberi akurasi antara **4,6% dan 15,4%**,
+rentang **10,8 poin persen**, dengan rata-rata 10,4%. Kode sudah mengirim
 `temperature: 0`, tetapi model penalaran lewat API pihak ketiga tidak menjamin
 determinisme penuh, dan tidak ada parameter `seed`.
 
 Model memang menjawab berbeda-beda, bukan gagal. Pada satu run ia memilih 17
-kategori berbeda untuk 65 gambar. Namun pada run 5 dan run 6 ada 1 dan 2 baris
-yang jatuh ke `mock` karena model membalas `content: null`, dan parser di
-`main.py` baris 135 belum menangani nilai kosong itu. Baris tersebut tercatat
-salah karena kategorinya kosong, sehingga ikut menekan akurasi.
+kategori berbeda untuk 65 gambar. Namun pada beberapa run ada baris yang jatuh
+ke `mock` karena model membalas `content: null`, dan parser di `main.py` belum
+menangani nilai kosong itu. Baris tersebut tercatat salah karena kategorinya
+kosong, sehingga ikut menekan akurasi.
 
-Karena itu satu angka saja menyesatkan. Yang stabil di keempat run: akurasi
+Karena itu satu angka saja menyesatkan. Yang stabil di semua run: akurasi
 berada jauh di bawah baseline 75,4% dan jauh dari target 85%. Bahkan pada run
 terbaik, model kalah 60 poin persen dari tebakan konstan.
 

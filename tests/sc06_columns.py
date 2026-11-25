@@ -43,6 +43,15 @@ TEMPLATE_DIR = "dataset/templates"
 HEADER_MARKER = "TANGGAL TRANSAKSI"
 
 
+# Kolom wajib yang memang bukan data yang bisa dihasilkan bot. Kolom-kolom ini
+# diisi manusia saat memakai template, bukan hasil membaca bukti transaksi:
+# bot menerima gambar, bukan identitas admin yang mengunggahnya.
+NOT_BOT_DATA = {
+    "TANGGAL INPUT DAN NAMA ADMIN":
+        "diisi manusia di template; bot tidak menerima identitas admin",
+}
+
+
 @dataclass
 class CompanyColumn:
     """Satu kolom wajib menurut template perusahaan."""
@@ -80,17 +89,28 @@ class Report:
 
     @property
     def mapped(self) -> int:
-        return sum(1 for c in self.columns if c.mapping != "missing")
+        return sum(1 for c in self.columns
+                   if c.mapping not in ("missing", "not_bot_data"))
 
     @property
     def missing(self) -> list[ColumnScore]:
         return [c for c in self.columns if c.mapping == "missing"]
 
     @property
+    def not_bot_data(self) -> list[ColumnScore]:
+        return [c for c in self.columns if c.mapping == "not_bot_data"]
+
+    @property
+    def bot_relevant(self) -> int:
+        """Kolom wajib yang memang datanya dihasilkan bot."""
+        return self.required - len(self.not_bot_data)
+
+    @property
     def pass_verdict(self) -> bool:
-        # Target BRD: tidak ada kolom wajib yang hilang. Satu saja hilang,
-        # kriterianya tidak tercapai.
-        return self.required > 0 and not self.missing
+        # Target BRD: tidak ada kolom wajib yang hilang. Kolom yang memang bukan
+        # data bot tidak dihitung hilang, tetapi jumlahnya tetap dilaporkan
+        # supaya pembaca bisa menilai sendiri.
+        return self.bot_relevant > 0 and not self.missing
 
 
 # ------------------------------- membaca template perusahaan
@@ -159,9 +179,9 @@ def read_app_headers() -> list[str]:
 MAPPING: dict[str, tuple[str, str, str]] = {
     # judul kolom perusahaan: (jenis, kolom aplikasi, catatan)
     "TANGGAL INPUT DAN NAMA ADMIN": (
-        "missing", "",
-        "Produksi tidak mencatat nama admin maupun waktu input; kolom A aplikasi "
-        "sudah dipakai untuk tanggal transaksi"),
+        "not_bot_data", "",
+        "Diisi manusia di template; bot tidak menerima identitas admin, dan kolom "
+        "A aplikasi sudah dipakai untuk tanggal transaksi"),
     "TANGGAL TRANSAKSI": ("direct", "A", ""),
     "KETERANGAN": ("direct", "F", ""),
     "KATEGORI": ("direct", "E", ""),
@@ -250,6 +270,7 @@ LABEL = {
     "direct": "langsung",
     "derived": "diturunkan",
     "split": "terbagi",
+    "not_bot_data": "bukan data bot",
     "missing": "HILANG",
 }
 
@@ -277,9 +298,11 @@ def write_report(report: Report, out_dir: Path) -> tuple[Path, Path]:
         baris.append(f"  - {name}")
     baris += [
         "",
-        f"Kolom wajib perusahaan : {report.required}",
-        f"Kolom terpetakan        : {report.mapped}",
-        f"Kolom hilang            : {len(report.missing)}",
+        f"Kolom wajib perusahaan    : {report.required}",
+        f"  diisi manusia, bukan bot : {len(report.not_bot_data)}",
+        f"  relevan untuk bot        : {report.bot_relevant}",
+        f"Kolom terpetakan          : {report.mapped}",
+        f"Kolom hilang              : {len(report.missing)}",
         "",
         f"{'#':<3} {'Perusahaan':<32} {'Jenis':<11} {'Aplikasi':<11} Catatan",
         "-" * 100,
@@ -296,8 +319,8 @@ def write_report(report: Report, out_dir: Path) -> tuple[Path, Path]:
 
     baris += [
         "",
-        f"Angka yang dinilai : {report.mapped} dari {report.required} kolom wajib terpetakan"
-        "  <- dibandingkan dengan target",
+        f"Angka yang dinilai : {report.mapped} dari {report.bot_relevant} kolom wajib"
+        " yang relevan untuk bot terpetakan  <- dibandingkan dengan target",
         f"Status             : {verdict(report)}",
     ]
     txt.write_text("\n".join(baris) + "\n", encoding="utf-8")

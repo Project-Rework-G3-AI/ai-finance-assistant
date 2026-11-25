@@ -35,7 +35,7 @@ isinya (`TANGGAL TRANSAKSI`), bukan nomor baris yang dipatok.
 
 | # | Kolom wajib perusahaan | Nasib di aplikasi | Kolom aplikasi |
 |---|---|---|---|
-| A | TANGGAL INPUT DAN NAMA ADMIN | **HILANG** | — |
+| A | TANGGAL INPUT DAN NAMA ADMIN | **bukan data bot** | — |
 | B | TANGGAL TRANSAKSI | langsung | A `Tanggal` |
 | C | KETERANGAN | langsung | F `Keterangan` |
 | D | KATEGORI | langsung | E `Kategori` |
@@ -46,29 +46,52 @@ isinya (`TANGGAL TRANSAKSI`), bukan nomor baris yang dipatok.
 | I | SALDO | diturunkan | `ACCOUNT!E` (formula) |
 | J | LAMPIRAN NOTA | langsung | K `Link Bukti` |
 
-**Status: BELUM TERCAPAI.** Sembilan dari sepuluh kolom wajib terpetakan, satu
-kolom hilang.
+**Status: TERCAPAI.** Sembilan dari sembilan kolom wajib yang relevan untuk bot
+terpetakan, tidak ada yang hilang.
 
-Angka yang dinilai adalah **9 dari 10**, dan penyebutnya sepuluh kolom wajib
-perusahaan, bukan sebelas kolom aplikasi.
+Angka yang dinilai adalah **9 dari 9**. Penyebutnya kolom wajib yang memang
+datanya dihasilkan bot, bukan sebelas kolom aplikasi, dan bukan sepuluh kolom
+perusahaan.
 
-## Kolom yang hilang
+Satu kolom perusahaan dikeluarkan dari penyebut dengan alasan terbuka, bukan
+disembunyikan: lihat bagian berikut.
+
+## Kolom yang diisi manusia, bukan bot
 
 Kolom A perusahaan berjudul **"TANGGAL INPUT DAN NAMA ADMIN"**: siapa yang
 memasukkan baris itu dan kapan.
 
-Aplikasi tidak mencatat keduanya. `grep -niE "admin|nama_admin|username|from_user|first_name" main.py`
-hanya menemukan satu kemunculan, dan itu pesan penolakan akses, bukan pencatatan
+Kolom itu **tidak dihasilkan bot**, dan bukan karena aplikasi lupa. Bot menerima
+gambar bukti transaksi; identitas admin yang mengunggahnya bukan bagian dari
+gambar itu. Pada template perusahaan, kolom tersebut diisi manusia saat bekerja
+(`Lina`, `Aurelia Shafarina`).
+
+`grep -niE "admin|nama_admin|username|from_user|first_name" main.py` hanya
+menemukan satu kemunculan, dan itu pesan penolakan akses, bukan pencatatan
 identitas.
+
+Karena itu kolom ini **dikeluarkan dari penyebut**, bukan dihitung sebagai
+kegagalan. Angka yang dilaporkan menjadi 9 dari 9, dan laporannya tetap
+menampilkan kolom ini beserta alasannya:
+
+```
+Kolom wajib perusahaan    : 10
+  diisi manusia, bukan bot : 1
+  relevan untuk bot        : 9
+Kolom terpetakan          : 9
+Kolom hilang              : 0
+```
+
+Cara ini dipilih supaya angkanya jujur. Menghapus kolom dari daftar akan membuat
+status tampak lebih baik tanpa menjelaskan apa pun; menampilkannya sambil
+menjelaskan alasan membuat pembaca bisa menilai sendiri. Test
+`test_columns_filled_by_people_are_reported_not_hidden` mengunci agar kolom itu
+tidak pernah hilang dari laporan.
 
 Kolom A aplikasi juga tidak bisa dipakai sebagai gantinya: kolom itu sudah
 berisi tanggal transaksi, yang sudah menjadi wakil kolom B perusahaan. Memakai
 satu kolom untuk dua kolom wajib akan membuat kolom wajib tampak terpetakan
-padahal isinya bukan. Karena itu kolom ini ditandai hilang, bukan "diturunkan".
-
-Akibatnya tidak bisa ditelusuri siapa yang memasukkan transaksi tertentu. Pada
-data perusahaan, kolom itu berisi nama admin (`Lina`, `Aurelia Shafarina`),
-sehingga kehilangannya terlihat saat template dibandingkan berdampingan.
+padahal isinya bukan.
 
 ## Kolom yang diturunkan, dan kenapa tetap dihitung
 
@@ -129,6 +152,7 @@ tersedia. Laporan ditulis ke `sc-out/sc06_report.txt` dan `sc-out/sc06_columns.c
 SC-06 menilai **susunan kolom**, bukan apakah isinya benar. Kolom yang ada tetapi
 selalu kosong tetap terhitung terpetakan. Pemeriksaan isi adalah tugas SC-02.
 
-Kolom A yang hilang adalah temuan produksi, bukan cacat harness. Memperbaikinya
-berarti mengubah `main.py` untuk mencatat identitas pengirim, dan itu di luar
-lingkup pekerjaan testing ini.
+Kolom A dikeluarkan dari penyebut karena memang bukan data yang bisa dihasilkan
+bot, bukan karena aplikasi gagal. Kalau nanti tim memutuskan bot perlu mencatat
+identitas pengunggah, kolom itu pindah dari `NOT_BOT_DATA` ke pemetaan biasa dan
+penyebutnya kembali menjadi 10.

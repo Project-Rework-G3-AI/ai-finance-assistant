@@ -211,6 +211,12 @@ async def run_pairs(pairs: list[dict], images_dir: Path, out: Path,
     print(f"model: {main.AI_MODEL} via {main.AI_BASE}")
     print(f"gambar: {images_dir}\nkeluaran: {out}\n")
 
+    # `--restart` berarti menghitung ulang dari awal, jadi berkas hasil lama
+    # harus dipotong. Tanpa ini, penulisan mode "a" menambahkan hasil baru ke
+    # hasil lama dan berkas berisi dua baris untuk gambar yang sama.
+    if restart and out.exists():
+        out.unlink()
+
     # Tulis header lebih dulu agar file tetap valid walau proses mati di tengah.
     write_header = not out.exists()
     f = open(out, "a", encoding="utf-8", newline="")

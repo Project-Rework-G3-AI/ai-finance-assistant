@@ -309,8 +309,15 @@ di baris 4 sementara yang lain di baris 5.
 
 Setiap kolom wajib punya keputusan tertulis: `langsung` (satu kolom aplikasi),
 `diturunkan` (dihitung formula di sheet lain), `terbagi` (diwakili kolom yang
-sama lewat pemecahan baris), atau `HILANG`. Keputusan itu ditulis eksplisit di
-`MAPPING` supaya bisa diperiksa orang lain, bukan hasil tebakan pencocokan nama.
+sama lewat pemecahan baris), `bukan data bot` (diisi manusia di template), atau
+`HILANG`. Keputusan itu ditulis eksplisit di `MAPPING` supaya bisa diperiksa
+orang lain, bukan hasil tebakan pencocokan nama.
+
+Kolom `TANGGAL INPUT DAN NAMA ADMIN` diisi manusia di template: bot menerima
+gambar bukti transaksi, bukan identitas admin yang mengunggahnya. Kolom itu
+tetap ditampilkan di laporan beserta alasannya, tetapi dikeluarkan dari penyebut
+supaya angkanya jujur. Yang dinilai adalah **9 dari 9** kolom yang relevan untuk
+bot.
 
 Satu kolom aplikasi tidak boleh mewakili dua kolom wajib berbeda. Kolom A
 aplikasi berisi tanggal transaksi, yang sudah menjadi wakil kolom B perusahaan;

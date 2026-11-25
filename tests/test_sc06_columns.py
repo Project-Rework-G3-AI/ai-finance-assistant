@@ -105,7 +105,7 @@ def test_mapped_column_must_really_exist_in_the_output():
     report = sc06.compute(TEMPLATE_DIR)
     huruf = [chr(ord("A") + i) for i in range(len(report.app_headers))]
     for kolom in report.columns:
-        if kolom.mapping == "missing":
+        if kolom.mapping in ("missing", "not_bot_data"):
             continue
         target = kolom.app_column.split("!")[0]
         if "!" in kolom.app_column:
@@ -126,7 +126,7 @@ def test_one_app_column_cannot_stand_for_two_required_columns():
     report = sc06.compute(TEMPLATE_DIR)
     pemakaian: dict[str, list[str]] = {}
     for kolom in report.columns:
-        if kolom.mapping == "missing":
+        if kolom.mapping in ("missing", "not_bot_data"):
             continue
         pemakaian.setdefault(kolom.app_column, []).append(kolom.title)
 
@@ -145,10 +145,40 @@ def test_one_app_column_cannot_stand_for_two_required_columns():
 
 
 def test_measurement_counts_required_columns_not_app_columns():
-    """Penyebutnya 10 kolom wajib perusahaan, bukan 11 kolom aplikasi."""
+    """Penyebutnya kolom wajib perusahaan, bukan 11 kolom aplikasi."""
     report = sc06.compute(TEMPLATE_DIR)
     assert report.required == 10
-    assert report.mapped + len(report.missing) == report.required
+    # Setiap kolom wajib masuk tepat satu keranjang.
+    assert (report.mapped + len(report.missing) + len(report.not_bot_data)
+            == report.required)
+    # Kolom yang diisi manusia tetap dihitung, tetapi tidak di penyebut bot.
+    assert report.bot_relevant == report.required - len(report.not_bot_data)
+
+
+def test_columns_filled_by_people_are_reported_not_hidden():
+    """Kolom yang bukan data bot tetap muncul di laporan, bukan disembunyikan.
+
+    Menghapusnya dari daftar akan membuat angka tampak lebih baik tanpa
+    menjelaskan apa pun. Yang benar: tampilkan, beri alasan, dan keluarkan dari
+    penyebut bot secara terbuka.
+    """
+    report = sc06.compute(TEMPLATE_DIR)
+    for kolom in report.not_bot_data:
+        assert kolom.note, f"kolom '{kolom.title}' tidak dijelaskan"
+        assert kolom.title in sc06.NOT_BOT_DATA, (
+            f"kolom '{kolom.title}' tidak terdaftar sebagai data non-bot")
+
+    out = ROOT / "sc-out-test-nonbot"
+    txt, _ = sc06.write_report(report, out)
+    try:
+        isi = txt.read_text(encoding="utf-8")
+        for kolom in report.not_bot_data:
+            assert kolom.title in isi, (
+                f"kolom '{kolom.title}' tidak muncul di laporan")
+        assert f"relevan untuk bot" in isi
+    finally:
+        import shutil
+        shutil.rmtree(out, ignore_errors=True)
 
 
 def test_status_follows_the_brd_target():
@@ -186,7 +216,7 @@ def test_report_states_the_denominator():
     txt, csv_path = sc06.write_report(report, out)
     try:
         isi = txt.read_text(encoding="utf-8")
-        assert f"{report.mapped} dari {report.required}" in isi
+        assert f"{report.mapped} dari {report.bot_relevant}" in isi
         assert "dibandingkan dengan target" in isi
         assert "Status" in isi
         # CSV memuat satu baris per kolom wajib

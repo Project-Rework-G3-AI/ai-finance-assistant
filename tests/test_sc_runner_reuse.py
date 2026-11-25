@@ -222,3 +222,50 @@ def test_accuracy_excluding_returns_zero_when_nothing_left():
     ]
     c = compute(rows)
     assert c.accuracy_excluding("date", "amount", "bank", "category") == 0.0
+
+def test_restart_truncates_the_old_results_file(tmp_path):
+    """`--restart` harus memotong berkas hasil lama, bukan menambahinya.
+
+    Berkas hasil ditulis dalam mode "a" supaya hasil yang sudah ada tidak hilang
+    saat proses mati di tengah. Tanpa pemotongan, `--restart` menambahkan hasil
+    baru di atas hasil lama dan satu gambar punya dua baris. Ini pernah terjadi:
+    65 gambar menjadi 70 baris.
+    """
+    import asyncio
+
+    import sc_common as cfg
+    import sc_runner
+
+    out = tmp_path / "results_per_row.csv"
+    # Berkas lama dengan satu baris hasil usang.
+    out.write_text(
+        ",".join(sc_runner.OUTPUT_COLUMNS) + "\n"
+        + "gambar-lama.jpg,,,,,,,,,,,,,,,\n",
+        encoding="utf-8")
+    assert len(out.read_text(encoding="utf-8").strip().splitlines()) == 2
+
+    pairs = [{"file": "gambar-baru.jpg"}]
+    images = tmp_path / "img"
+    images.mkdir()
+    (images / "gambar-baru.jpg").write_bytes(b"\xff\xd8\xff")
+
+    async def fake_extract(client, name, image_bytes, caption):
+        return {"tanggal": "2026-01-01", "nominal": 1000, "bank": "BNI",
+                "arah": "keluar", "kategori": "X", "keterangan": "uji",
+                "catatan": "", "mode": "vision"}
+
+    import main
+
+    asli_extract = main.extract
+    main.extract = fake_extract
+    try:
+        asyncio.run(sc_runner.run_pairs(pairs, images, out, restart=True))
+    finally:
+        main.extract = asli_extract
+
+    isi = out.read_text(encoding="utf-8").strip().splitlines()
+    berkas = [b.split(",")[0] for b in isi[1:]]
+    assert "gambar-lama.jpg" not in berkas, (
+        "hasil lama masih ada setelah --restart; berkas tidak dipotong")
+    assert berkas == ["gambar-baru.jpg"], f"baris hasil tidak seperti diharapkan: {berkas}"
+

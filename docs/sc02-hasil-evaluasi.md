@@ -13,17 +13,17 @@ sekaligus. Jawabannya:
 
 | Angka | Nilai | Dipakai menilai target? |
 |---|---|---|
-| Kelengkapan rata-rata | 98,2% | **tidak** |
-| Kecocokan rata-rata | **72,5%** | **ya** |
-| Kecocokan tanpa kategori | 95,2% | tidak, hanya penjelas |
+| Kelengkapan rata-rata | 90,2% | **tidak** |
+| Kecocokan rata-rata | **64,5%** | **ya** |
+| Kecocokan tanpa kategori | 83,4% | tidak, hanya penjelas |
 
-**Yang dibandingkan dengan target 90% adalah kecocokan rata-rata 72,5%.**
+**Yang dibandingkan dengan target 90% adalah kecocokan rata-rata 64,5%.**
 
-Alasannya: BRD menyebut "terbaca **benar**", bukan "terisi". Kelengkapan 98,2%
+Alasannya: BRD menyebut "terbaca **benar**", bukan "terisi". Kelengkapan 90,2%
 hanya berarti model membaca sesuatu di hampir semua field, termasuk saat
 nilainya salah. Jadi angka itu tidak boleh dipakai menilai target.
 
-Penyebut 72,5% adalah **4 field**, bukan 5. Field `arah` tidak punya acuan di
+Penyebut 64,5% adalah **4 field**, bukan 5. Field `arah` tidak punya acuan di
 dataset, jadi tidak ikut dirata-rata. Rata-rata dihitung per field, bukan per
 baris, supaya satu field yang selalu gagal tidak tertutup oleh field lain yang
 selalu berhasil.
@@ -32,24 +32,69 @@ selalu berhasil.
 
 | Ukuran | Hasil | Target | Status |
 |---|---|---|---|
-| Kelengkapan (field terbaca) | **98,2%** | — | bukan penentu |
-| **Kecocokan (terbaca benar)** | **72,5%** | 90% | **belum tercapai** |
-| Kecocokan tanpa kategori | 95,2% | — | penjelas sebab |
-| Baris dengan 5/5 field lengkap | **59 dari 65** | — | — |
+| Kelengkapan (field terbaca) | **90,2%** | — | bukan penentu |
+| **Kecocokan (terbaca benar)** | **64,5%** | 90% | **belum tercapai** |
+| Kecocokan tanpa kategori | 83,4% | — | penjelas sebab |
+| Baris dengan 5/5 field lengkap | **37 dari 65** | — | — |
 
 ## Rincian per field
 
 | Field | Terbaca | Kelengkapan | Cocok | Akurasi | Nilai bawaan terpakai |
 |---|---|---|---|---|---|
-| Tanggal | 65/65 | 100,0% | 65 | **100,0%** | 0 |
-| Nominal | 65/65 | 100,0% | 64 | **98,5%** | 0 |
-| Kantong | 59/65 | 90,8% | 54 | **87,1%** | 6 |
-| Arah | 65/65 | 100,0% | — | tidak dinilai | 0 |
-| Kategori | 65/65 | 100,0% | 3 | **4,6%** | 0 |
+| Tanggal | 64/65 | 98,5% | 64 | **98,5%** | 0 |
+| Nominal | 64/65 | 98,5% | 63 | **96,9%** | 0 |
+| Kantong | 37/65 | 56,9% | 34 | **54,8%** | 27 |
+| Arah | 64/65 | 98,5% | — | tidak dinilai | 0 |
+| Kategori | 64/65 | 98,5% | 5 | **7,7%** | 0 |
 
 Kolom "cocok" untuk kantong berpenyebut 62, bukan 65, karena hanya 62 baris di
 `pairs.csv` yang punya acuan `bank`. Kolom "arah" tidak dinilai karena
 dataset tidak menyediakan acuan arah.
+
+Seluruh angka dihitung dari **64 baris bermode `vision`**. Satu baris jatuh ke
+`mock` karena pemanggilan model gagal, dan baris itu dihitung sebagai tidak
+terbaca, bukan dilewati.
+
+## Riwayat pengukuran
+
+Angka di dokumen ini **berbeda** dari pengukuran sebelumnya (72,5%), dan
+perbedaannya bukan karena kode test berubah:
+
+| Field | Sebelum merge | Sesudah merge | Selisih |
+|---|---|---|---|
+| Tanggal | 100,0% | 98,5% | −1,5 |
+| Nominal | 98,5% | 96,9% | −1,6 |
+| Kantong | 87,1% | 54,8% | **−32,3** |
+| Kategori | 4,6% | 7,7% | +3,1 |
+| **Rata-rata** | **72,5%** | **64,5%** | **−8,0** |
+
+Penurunan terbesar ada di kantong: 27 dari 65 gambar tidak menyebut kantong sama
+sekali, sehingga kode memakai nilai bawaan. Prompt produksi untuk field ini
+tidak berubah antar-merge (`"bank":"kantong asal dana — salah satu dari: BRI,
+BNI, Jago, TUNAI; kosong bila tidak terbaca"`), jadi ini bukan regresi prompt.
+
+Satu hal yang perlu dicatat: `.env` pengukuran hanya memuat kunci model, tanpa
+`CR_DEFAULT_BANK`. Nilai bawaannya `TUNAI`, dan 27 baris itu menyimpan kantong
+kosong alih-alih `TUNAI` karena nilainya dibaca lewat jalur yang berbeda di
+`main.py` (baris 425 memakai nilai bawaan, baris 787 tidak). Perbedaan itu tidak
+mengubah angka terbaca, tetapi menjelaskan kenapa kolom kantong bisa kosong
+meski ada nilai bawaan.
+
+## Sebab kegagalan satu baris
+
+Satu gambar, `photo_2026-01-15_20-40-42.jpg`, gagal total dan jatuh ke mock:
+
+```
+TypeError: expected string or bytes-like object, got 'NoneType'
+```
+
+Penyebabnya di `main.py`: balasan model dibaca `r.json()["choices"][0]["message"]["content"]`
+lalu diberikan ke `re.search(r"\{.*\}", text, re.S)`. Ketika model membalas
+`content: null`, `re.search` menerima `None` dan melempar `TypeError`. Ekstraksi
+lalu jatuh ke `_mock_extract`, sehingga transaksi itu tidak pernah dibaca model.
+
+Pemanggilan itu juga memakan **461 detik**, jauh di atas rata-rata 10 detik,
+karena percobaan pertama menghabiskan waktu sebelum gagal.
 
 ## Temuan utama
 
