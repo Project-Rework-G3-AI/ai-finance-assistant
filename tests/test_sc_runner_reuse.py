@@ -223,7 +223,7 @@ def test_accuracy_excluding_returns_zero_when_nothing_left():
     c = compute(rows)
     assert c.accuracy_excluding("date", "amount", "bank", "category") == 0.0
 
-def test_restart_truncates_the_old_results_file(tmp_path):
+def test_restart_truncates_the_old_results_file(tmp_path, monkeypatch):
     """`--restart` harus memotong berkas hasil lama, bukan menambahinya.
 
     Berkas hasil ditulis dalam mode "a" supaya hasil yang sudah ada tidak hilang
@@ -255,6 +255,11 @@ def test_restart_truncates_the_old_results_file(tmp_path):
                 "catatan": "", "mode": "vision"}
 
     import main
+
+    # Test ini tidak boleh butuh kunci model: yang diuji pemotongan berkas,
+    # bukan pemanggilan AI. `run_pairs` menolak jalan tanpa kunci, jadi kunci
+    # tiruan dipasang supaya test tetap gratis.
+    monkeypatch.setattr(main, "AI_KEY", "test-key-not-used")
 
     asli_extract = main.extract
     main.extract = fake_extract
