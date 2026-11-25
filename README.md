@@ -52,8 +52,8 @@ Isi `.env` minimal:
 1. `TELEGRAM_BOT_TOKEN` — dari @BotFather.
 2. `TELEGRAM_ALLOWED_CHAT_IDS` — chat_id pengguna yang boleh (cek via @userinfobot), pisahkan koma.
 
-Untuk menjalankan test dan evaluasi akurasi (SC-01), lihat bagian
-[Pengujian](#pengujian).
+Untuk menjalankan test dan evaluasi seluruh kriteria keberhasilan (SC-01
+sampai SC-07), lihat bagian [Pengujian](#pengujian).
 
 ## Setup Google Sheets (service account)
 
@@ -217,24 +217,32 @@ diminta secara eksplisit.
 pytest
 ```
 
-Menjalankan test rumus metrik SC-01, aturan penilaian SC-02, validasi dataset,
-dan batas ruang lingkup. Tidak memanggil AI, tidak butuh jaringan, tidak butuh
-dataset. Ini yang aman dijalankan di CI.
+Menjalankan test rumus metrik SC-01, aturan penilaian SC-02, perhitungan waktu
+SC-03, perhitungan biaya SC-04, tata cara runner, penamaan, serta validasi
+dataset. Tidak memanggil AI, tidak butuh jaringan, tidak butuh dataset. Ini yang
+aman dijalankan di CI.
 
 ### Evaluasi kriteria keberhasilan
 
 Kriteria keberhasilan (SC) pada BRD diukur dengan satu set data dan satu runner.
 Yang berbeda hanya cara menilainya.
 
-| Kriteria | Yang diukur | Status |
-|---|---|---|
-| SC-01 | Akurasi usulan kategori | sudah |
-| SC-02 | Kelengkapan field wajib | sudah |
-| SC-03 | Waktu proses sampai tersimpan | belum |
-| SC-04 | Biaya per gambar | belum |
-| SC-05 | Duplikat ditolak | belum |
-| SC-06 | Semua kolom wajib terpetakan | belum |
-| SC-07 | Waktu satu periode vs manual | belum, tidak dapat diotomasi |
+| Kriteria | Yang diukur | Target | Status | Butuh |
+|---|---|---|---|---|
+| SC-01 | Akurasi usulan kategori | ≥85% | sudah | kunci AI |
+| SC-02 | Kelengkapan field wajib | ≥90% | sudah | kunci AI |
+| SC-03 | Waktu proses sampai tersimpan | <5 detik | sudah | kunci AI + Google Sheets |
+| SC-04 | Biaya per gambar | <Rp50 | sudah | kunci AI + kurs |
+| SC-05 | Duplikat ditolak | — | belum | — |
+| SC-06 | Semua kolom wajib terpetakan | — | belum | — |
+| SC-07 | Waktu satu periode vs manual | — | belum, tidak dapat diotomasi | — |
+
+SC-01 dan SC-02 mengukur **isi** hasil ekstraksi, jadi bisa dihitung ulang dari
+`results_per_row.csv` kapan saja tanpa biaya.
+
+SC-03 dan SC-04 mengukur hal yang **tidak tersimpan** di hasil ekstraksi: durasi
+dan jumlah token. Keduanya perlu pengukuran sendiri lebih dulu, dan laporannya
+hanya merangkum sampel yang sudah ada.
 
 Persiapan sekali saja:
 
@@ -250,11 +258,13 @@ Menjalankan:
 python3 tests/sc_runner.py                 # semua kriteria (sama dengan --all)
 python3 tests/sc_runner.py --sc01          # SC-01 saja
 python3 tests/sc_runner.py --sc02          # SC-02 saja
+python3 tests/sc_runner.py --sc03          # SC-03 saja
+python3 tests/sc_runner.py --sc04          # SC-04 saja
 python3 tests/sc_runner.py --metrics-only  # hitung ulang tanpa biaya
 python3 tests/sc_runner.py --repeat 3      # lihat sebaran antar-run
 ```
 
-Tanpa flag berarti semua kriteria yang tersedia. Ketiga flag kriteria saling
+Tanpa flag berarti semua kriteria yang tersedia. Flag kriteria saling
 eksklusif, dan menggabungkannya akan ditolak.
 
 Menjalankan perintah yang sama dua kali **tidak** memanggil model lagi pada run
@@ -262,8 +272,63 @@ kedua: hasil per gambar disimpan di `sc-out/` dan dilanjutkan dari situ. Runner
 mengumumkannya dengan jelas, dan mencatat asal angkanya di `sc-out/source.json`.
 Pakai `--restart` untuk benar-benar mengukur ulang dari nol.
 
-Menambah kriteria tidak menambah biaya, karena semuanya membaca keluaran
-ekstraksi yang sama.
+### SC-03 dan SC-04 perlu pengukuran sendiri
+
+SC-01 dan SC-02 membaca keluaran ekstraksi, jadi menambah kriteria itu tidak
+menambah biaya. **SC-03 dan SC-04 berbeda.** Durasi dan jumlah token tidak
+tersimpan di `results_per_row.csv`, sehingga tidak bisa dihitung ulang dari
+sana. Keduanya punya pengukur sendiri yang harus dijalankan lebih dulu:
+
+```bash
+# SC-03: waktu sampai baris tersimpan (butuh Google Sheets)
+python3 tests/_sc03_run.py
+
+# SC-04: biaya per gambar (butuh kunci AI dan kurs)
+python3 tests/_sc04_run.py --usd-idr 18227
+python3 tests/_sc04_run.py --limit 5 --usd-idr 18227    # coba cepat
+```
+
+SC-03 menolak berjalan tanpa dua variabel sandbox, dan itu disengaja:
+
+```
+SC03_SANDBOX_FOLDER=...     # ID folder Drive khusus uji
+SC03_SANDBOX_TEMPLATE=...   # ID spreadsheet template di folder itu
+```
+
+Isi keduanya dengan folder **khusus uji**, bukan folder Cash Report perusahaan.
+Untuk menyiapkan template 7 tab di folder sandbox, pakai
+`python3 tests/_sandbox_build.py`.
+
+Setelah itu `--sc03` dan `--sc04` hanya merangkum sampel yang sudah ada, dan
+tidak memanggil model. Kalau sampelnya belum ada, laporannya bilang
+`BELUM DIUKUR` beserta perintah yang harus dijalankan.
+
+**SC-03 menulis baris sungguhan ke Google Sheets.** Pengukurannya memakai folder
+sandbox terpisah, bukan folder Cash Report perusahaan. Jangan arahkan ke folder
+perusahaan.
+
+**SC-04 menghitung uang.** Tarif model dan kurs adalah masukannya, dan keduanya
+bisa disesuaikan:
+
+```python
+# bagian atas tests/sc04_cost.py
+PRICE_PROMPT_USD = 0.00000015
+PRICE_COMPLETION_USD = 0.0000006
+USD_TO_IDR = 0.0        # 0 berarti wajib diisi lewat --usd-idr atau SC04_USD_IDR
+TARGET_IDR = 50.0
+```
+
+Mengubah tarif atau kurs langsung mengubah laporan tanpa mengukur ulang, karena
+biaya selalu diturunkan dari token x tarif x kurs dan tidak pernah disimpan.
+Bisa juga ditimpa untuk satu kali jalan tanpa menyunting kode:
+
+```bash
+python3 tests/_sc04_run.py --price-prompt 0.0000003 --price-completion 0.0000012 --usd-idr 18227
+SC04_USD_IDR=18227 python3 tests/sc_runner.py --sc04
+```
+
+Urutan siapa yang menang: argumen CLI, lalu variabel lingkungan, lalu variabel
+di kode, lalu katalog penyedia. Tidak ada tarif atau kurs yang ditebak.
 
 Hasil ada di `sc-out/`:
 
@@ -278,6 +343,8 @@ Hasil ada di `sc-out/`:
 | `sc04_report.txt` | SC-04: biaya per gambar dan token |
 | `sc04_metrics.json` | SC-04 dalam bentuk JSON |
 | `results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
+| `sc03_samples.csv` | SC-03: waktu per gambar dan pecahan tahap (bahan laporan SC-03) |
+| `sc04_samples.csv` | SC-04: token per gambar (bahan laporan SC-04) |
 
 Dataset tidak disimpan di repo ini karena berisi data keuangan riil perusahaan.
 `--download` mengambilnya dari repo dataset terpisah, dan tidak memerlukan token
@@ -290,10 +357,18 @@ target BRD, pakai opt-in karena sifatnya berbayar dan lama:
 SC_RUN_MODEL=1 pytest -m sc_model -v
 ```
 
-Panduan rinci, termasuk jebakan penilaian SC-02 dan alasan angka antar-run
-berbeda, ada di [`docs/sc-cara-menjalankan.md`](docs/sc-cara-menjalankan.md).
-Hasil pengukuran SC-01 ada di
-[`docs/sc01-hasil-evaluasi.md`](docs/sc01-hasil-evaluasi.md).
+Panduan rinci, termasuk jebakan penilaian tiap kriteria dan alasan angka
+antar-run berbeda, ada di
+[`docs/sc-cara-menjalankan.md`](docs/sc-cara-menjalankan.md).
+
+Hasil pengukuran tiap kriteria:
+
+| Kriteria | Dokumen hasil |
+|---|---|
+| SC-01 | [`docs/sc01-hasil-evaluasi.md`](docs/sc01-hasil-evaluasi.md) |
+| SC-02 | [`docs/sc02-hasil-evaluasi.md`](docs/sc02-hasil-evaluasi.md) |
+| SC-03 | [`docs/sc03-hasil-evaluasi.md`](docs/sc03-hasil-evaluasi.md) |
+| SC-04 | [`docs/sc04-hasil-evaluasi.md`](docs/sc04-hasil-evaluasi.md) |
 
 ## Batasan (milestone 1)
 
