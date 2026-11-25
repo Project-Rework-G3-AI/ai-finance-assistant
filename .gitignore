@@ -18,6 +18,9 @@ sc02_metrics.json
 sc03_report.txt
 sc03_metrics.json
 sc03_samples.csv
+sc04_report.txt
+sc04_metrics.json
+sc04_samples.csv
 
 # Dataset lokal untuk evaluasi (gambar bukti + daftar pasangan).
 # Berisi transaksi perusahaan; sumber aslinya ada di repo dataset terpisah.

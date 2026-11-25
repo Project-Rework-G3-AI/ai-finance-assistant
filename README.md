@@ -275,6 +275,8 @@ Hasil ada di `sc-out/`:
 | `sc02_metrics.json` | SC-02 dalam bentuk JSON |
 | `sc03_report.txt` | SC-03: sebaran waktu dan pecahan per tahap |
 | `sc03_metrics.json` | SC-03 dalam bentuk JSON |
+| `sc04_report.txt` | SC-04: biaya per gambar dan token |
+| `sc04_metrics.json` | SC-04 dalam bentuk JSON |
 | `results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
 
 Dataset tidak disimpan di repo ini karena berisi data keuangan riil perusahaan.

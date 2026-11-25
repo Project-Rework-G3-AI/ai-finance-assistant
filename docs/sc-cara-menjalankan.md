@@ -11,7 +11,7 @@ Kriteria yang sudah bisa diukur:
 | SC-01 | Akurasi usulan kategori | sudah |
 | SC-02 | Kelengkapan field wajib | sudah |
 | SC-03 | Waktu proses sampai tersimpan | sudah, perlu kredensial Google |
-| SC-04 | Biaya per gambar | belum |
+| SC-04 | Biaya per gambar | sudah, perlu kredensial + kurs |
 | SC-05 | Duplikat ditolak | belum |
 | SC-06 | Semua kolom wajib terpetakan | belum |
 | SC-07 | Waktu satu periode vs manual | belum, tidak dapat diotomasi |
@@ -117,6 +117,7 @@ python3 tests/sc_runner.py                 # semua kriteria (sama dengan --all)
 python3 tests/sc_runner.py --sc01          # SC-01 saja
 python3 tests/sc_runner.py --sc02          # SC-02 saja
 python3 tests/sc_runner.py --sc03          # SC-03 saja (melaporkan hasil ukur)
+python3 tests/sc_runner.py --sc04          # SC-04 saja (melaporkan biaya)
 python3 tests/sc_runner.py --all           # semua kriteria, eksplisit
 ```
 
@@ -134,6 +135,26 @@ python3 tests/_sc03_run.py --limit 5   # coba cepat pada 5 gambar
 Pengukuran SC-03 menulis baris sungguhan ke Google Sheets, karena itu
 dijalankan di folder **sandbox**, bukan folder Cash Report perusahaan. Lihat
 `docs/sc03-hasil-evaluasi.md`.
+
+**SC-04 juga berbeda.** Jumlah token tidak tersimpan di hasil ekstraksi, jadi
+biaya tidak bisa dihitung dari CSV hasil. `--sc04` merangkum
+`sc-out/sc04_samples.csv` yang berisi token per gambar. Ukur dulu:
+
+```bash
+python3 tests/_sc04_run.py --usd-idr 18227
+python3 tests/_sc04_run.py --limit 5 --usd-idr 18227
+```
+
+Tarif model disunting di satu tempat, di bagian atas `tests/sc04_cost.py`:
+
+```python
+PRICE_PROMPT_USD = 0.00000015
+PRICE_COMPLETION_USD = 0.0000006
+```
+
+Biaya tidak pernah disimpan, selalu diturunkan dari token x tarif x kurs. Jadi
+mengubah tarif atau kurs langsung mengubah laporan tanpa mengukur ulang. Lihat
+`docs/sc04-hasil-evaluasi.md`.
 
 Tanpa flag berarti semua kriteria yang tersedia. Ini disengaja: kriteria
 saling setara, jadi tidak ada alasan menjadikan salah satunya bawaan. Ketiga
@@ -246,6 +267,9 @@ Hapus berkas itu, atau jalankan dengan --restart.
 | `sc-out/sc03_report.txt` | SC-03: sebaran waktu dan pecahan per tahap |
 | `sc-out/sc03_metrics.json` | SC-03 dalam bentuk JSON |
 | `sc-out/sc03_samples.csv` | SC-03: satu baris per gambar, termasuk pecahan tahap |
+| `sc-out/sc04_report.txt` | SC-04: biaya per gambar dan token |
+| `sc-out/sc04_metrics.json` | SC-04 dalam bentuk JSON |
+| `sc-out/sc04_samples.csv` | SC-04: token per gambar (tanpa biaya) |
 | `sc-out/results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
 
 Folder `sc-out/` dan `dataset/` masuk `.gitignore` karena berisi data transaksi.

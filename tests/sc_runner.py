@@ -438,6 +438,61 @@ def write_sc03_report(results: list[dict], out: Path) -> dict:
     return {"result": c, "text": teks}
 
 
+def write_sc04_report(results: list[dict], out: Path) -> dict:
+    """Laporkan SC-04 dari token yang sudah direkam.
+
+    Seperti SC-03, SC-04 tidak bisa dihitung dari hasil ekstraksi: jumlah token
+    tidak tersimpan di sana. Yang dibaca adalah `sc04_samples.csv` berisi token
+    per gambar, lalu **biaya diturunkan** dari tarif dan kurs yang berlaku saat
+    ini. Biaya tidak pernah dibaca dari berkas, supaya menyesuaikan tarif atau
+    kurs selalu berefek pada laporan.
+    """
+    import sc04_cost as sc04
+
+    berkas = out / "sc04_samples.csv"
+    if not berkas.exists():
+        teks = (
+            "SC-04 — Biaya per gambar\n"
+            + "=" * 60 + "\n"
+            "Status             : BELUM DIUKUR\n\n"
+            "Jumlah token tidak tersimpan di hasil ekstraksi, jadi biaya tidak\n"
+            "bisa dihitung ulang dari sana. Jalankan pengukuran lebih dulu:\n\n"
+            "  python3 tests/_sc04_run.py --usd-idr <kurs>\n"
+        )
+        (out / "sc04_report.txt").write_text(teks, encoding="utf-8")
+        return {"result": None, "text": teks}
+
+    # Tarif dan kurs: env/kode, bukan ditebak.
+    harga = sc04.pricing_from()
+    kurs = sc04.usd_to_idr_from()
+    if not kurs:
+        teks = ("SC-04 — Biaya per gambar\n" + "=" * 60 + "\n"
+                "Status             : BELUM DIUKUR\n\n"
+                f"Kurs belum diisi. Isi {sc04.ENV_USD_IDR} atau variabel "
+                "USD_TO_IDR di tests/sc04_cost.py.\n")
+        (out / "sc04_report.txt").write_text(teks, encoding="utf-8")
+        return {"result": None, "text": teks}
+
+    samples = []
+    with berkas.open(encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            samples.append(sc04.Sample(
+                file=r["file"], ok=(r.get("ok") == "True"),
+                error=r.get("error", ""),
+                prompt_tokens=int(r.get("prompt_tokens") or 0),
+                completion_tokens=int(r.get("completion_tokens") or 0)))
+
+    c = sc04.compute(samples, target=sc04.target_from(), pricing=harga,
+                     usd_to_idr=kurs)
+    teks = sc04.report(c, "Sumber data: token dibaca dari respons penyedia "
+                          "saat pengukuran; biaya diturunkan dari tarif dan kurs "
+                          "yang berlaku sekarang.")
+    (out / "sc04_report.txt").write_text(teks, encoding="utf-8")
+    (out / "sc04_metrics.json").write_text(
+        json.dumps(c, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"result": c, "text": teks}
+
+
 def write_sc02_report(results: list[dict], out: Path) -> dict:
     """Hitung SC-02 lalu tulis `sc02_report.txt` dan `sc02_metrics.json`."""
     rows = build_sc02_rows(results)
@@ -492,7 +547,7 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
     return {"result": c, "text": text}
 
 
-AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03")
+AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03", "sc04")
 
 
 def selected_criteria(args) -> list[str]:
@@ -524,6 +579,7 @@ def run_reports(results: list[dict], out: Path, criteria: list[str]) -> dict[str
         "sc01": write_sc01_report,
         "sc02": write_sc02_report,
         "sc03": write_sc03_report,
+        "sc04": write_sc04_report,
     }
     return {name: builders[name](results, out) for name in criteria}
 
@@ -581,6 +637,8 @@ def main_cli() -> int:
                       help="ukur kelengkapan field wajib (SC-02) saja")
     pick.add_argument("--sc03", action="store_true",
                       help="ukur waktu proses sampai tersimpan (SC-03) saja")
+    pick.add_argument("--sc04", action="store_true",
+                      help="ukur biaya per gambar (SC-04) saja")
     pick.add_argument("--all", action="store_true",
                       help="ukur semua kriteria yang tersedia (sama dengan tanpa flag)")
     a = ap.parse_args()
@@ -614,7 +672,7 @@ def main_cli() -> int:
         # SC-03 tidak punya hasil ekstraksi untuk dibaca ulang: waktu tidak
         # tersimpan di CSV hasil. Kalau hanya SC-03 yang diminta, cukup
         # rangkum sampel waktunya tanpa menyentuh `results_per_row.csv`.
-        if criteria == ["sc03"]:
+        if criteria in (["sc03"], ["sc04"]):
             reports = run_reports([], out, criteria)
             print(join_reports(reports))
             return 0
@@ -628,7 +686,11 @@ def main_cli() -> int:
     # SC-03 mengukur waktu, bukan isi. Waktunya sudah direkam harness pengukur,
     # jadi meminta SC-03 saja tidak boleh menuntut kunci model: laporan SC-03
     # hanya merangkum sampel yang sudah ada.
-    if criteria == ["sc03"]:
+    if criteria in (["sc03"], ["sc04"]):
+        # Keduanya mengukur hal yang tidak tersimpan di hasil ekstraksi: waktu
+        # dan token. Laporannya hanya merangkum sampel yang sudah ada, jadi
+        # tidak perlu memanggil model dan tidak boleh mencetak banner "hasil
+        # lama dipakai lagi" yang menyiratkan ada ekstraksi.
         reports = run_reports([], out, criteria)
         print(join_reports(reports))
         return 0
