@@ -8,35 +8,48 @@ Deploy aktif: https://ai-finance-assistant-z473.onrender.com/health — detail d
 
 ```mermaid
 flowchart LR
-    U["Pengguna<br/>(Finance/Admin)"] -->|"kirim foto + caption"| TG["Telegram API<br/>(cloud)"]
-    TG -->|"getUpdates<br/>long polling, koneksi keluar"| BOT["Bot — main.py<br/>FastAPI + asyncio<br/>(berjalan di lokal)"]
+    U["Pengguna<br/>(Finance/Admin)"] -->|"foto · teks · PDF"| TG["Telegram API<br/>(cloud)"]
+    TG -->|"getUpdates<br/>long polling"| BOT["Bot — main.py<br/>FastAPI + asyncio<br/>(Render; lokal = fallback uji)"]
+    BOT -.->|"error / log"| SEN["Sentry<br/>(observability)"]
+    BOT --> ROUT{"jenis<br/>pesan?"}
 
-    BOT -->|"baca gambar"| EXT{"Ekstraksi"}
+    ROUT -->|"gambar"| EXT{"Ekstraksi"}
     EXT -->|"AI_API_KEY terisi"| VIS["Vision LLM<br/>(chat/completions)"]
     EXT -->|"tanpa AI / AI gagal"| MOCK["Mock<br/>nama file + caption"]
     VIS -.->|"gagal → fallback"| MOCK
 
-    BOT -->|"Ref ID (kolom I) duplikat?"| DUP{"sudah<br/>ada?"}
+    EXT -->|"Ref ID (kolom I) duplikat?"| DUP{"sudah<br/>ada?"}
     DUP -->|"ya"| SKIP["balasan: dilewati"]
     DUP -->|"tidak"| CR[("Cash Report {tahun}<br/>sheet TRANSAKSI<br/>(cloud, SA)")]
 
+    ROUT -->|"PDF mutasi bank"| REC["Rekonsiliasi (reconciliation/)<br/>render → vision → validasi saldo<br/>→ matching tgl + kantong + nominal"]
+    REC -->|"baca periode"| CR
+    REC --> RC[("tab RECONCILIATION<br/>replace per bank+rekening+periode")]
+    REC -->|"balasan + link tab"| U
+
+    ROUT -->|"teks"| QA["Tanya-jawab (qa.py)<br/>/total · /rekap · /help deterministik<br/>bahasa bebas → satu tool-calling"]
+    QA -->|"baca saja (read-only)"| CR
+    QA -->|"balasan"| U
+
     CR -->|"cari/copy template"| YR["Folder tahun +<br/>file Cash Report {tahun}<br/>(Drive OAuth)"]
     CR -->|"upload foto baru<br/>(opsional)"| DRIVE["Google Drive<br/>Receipts · kolom Link Bukti"]
-    CR -->|"gagal"| PEND["pending.jsonl<br/>(lokal)"]
+    CR -->|"gagal"| PEND["pending.jsonl<br/>(disk bot)"]
     PEND -->|"retry tiap siklus"| CR
 
     CR -->|"review manual:<br/>draft → verified"| U
-    W["Browser lokal<br/>GET /health<br/>POST /api/extract"] --> BOT
+    W["Browser lokal<br/>GET /health<br/>POST /api/extract<br/>POST /api/reconcile"] --> BOT
 
     classDef cloud fill:#1e3a5f,stroke:#3b82f6,color:#fff
     classDef local fill:#14532d,stroke:#22c55e,color:#fff
-    class TG,CR,VIS,DRIVE,YR cloud
+    class TG,CR,VIS,DRIVE,YR,RC,SEN cloud
     class BOT,MOCK,PEND,W local
 ```
 
-- Satu proses di lokal: polling Telegram + endpoint API berjalan bersamaan; semua koneksi **keluar** (internet), tanpa server publik.
+- **Routing pesan**: foto → ekstraksi (milestone 1); PDF mutasi → rekonsiliasi (milestone 2); teks → tanya-jawab `/total` `/rekap` `/help` + bahasa bebas via tool-calling (milestone 3). Semua dalam satu proses `main.py` — polling Telegram + endpoint API bersamaan, koneksi **keluar** semua, tanpa server publik.
 - Mode vision (AI) dipakai bila `AI_API_KEY` ada; selalu fallback ke mock agar alur tidak pernah putus.
 - **Split kredensial**: Drive (cari folder, copy template, upload foto) = OAuth user; sel/tab Cash Report = service account. `pending.jsonl` = penahan gagal, bukan penyimpanan utama.
+- Tanya-jawab **hanya membaca** TRANSAKSI; rekonsiliasi hanya menulis tab RECONCILIATION — tidak pernah mengubah baris transaksi. Error apa pun dilaporkan ke Sentry.
+- Warna: biru = layanan cloud (Telegram/Google/Sentry); hijau = milik bot (proses & file — di Render, atau lokal saat uji).
 
 ## Setup
 
