@@ -476,6 +476,13 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
         range_name=f"A{row}:K{row + len(values) - 1}",
         value_input_option="USER_ENTERED",
     )
+    # Format kolom Tanggal diseragamkan: penulisan datetime (jam transaksi) membuat
+    # Sheets memakai format otomatis yyyy-mm-dd h:mm:ss sehingga tampilan tercampur
+    # dengan baris lama d-MMM-yy. Format eksplisit ditulis ulang setelah append.
+    ws.format(
+        f"A{row}:A{row + len(values) - 1}",
+        {"numberFormat": {"type": "DATE", "pattern": "d-MMM-yy"}},
+    )
     return {"status": "ok", "worksheet": ws.title, "row": row, "link": link}
 
 
