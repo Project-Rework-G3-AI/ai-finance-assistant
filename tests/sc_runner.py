@@ -438,6 +438,31 @@ def write_sc03_report(results: list[dict], out: Path) -> dict:
     return {"result": c, "text": text}
 
 
+def write_sc06_report(results: list[dict], out: Path) -> dict:
+    """Jalankan SC-06 dan tulis laporannya.
+
+    Seperti SC-05, kriteria ini tidak butuh kunci AI, Google, maupun jaringan:
+    yang dibandingkan adalah kolom wajib template perusahaan dengan kolom yang
+    ditulis aplikasi. Tidak ada model yang dipanggil.
+    """
+    import sc06_columns as sc06
+
+    try:
+        report = sc06.compute()
+    except FileNotFoundError as e:
+        text = ("SC-06 — Kolom wajib cash report terpetakan\n"
+                + "=" * 60 + "\n"
+                "Status             : BELUM DIUKUR\n\n"
+                f"{e}\n\n"
+                "Unduh templatenya lebih dulu:\n"
+                "  python3 tests/sc_runner.py --sc06 --download-templates\n")
+        (out / "sc06_report.txt").write_text(text, encoding="utf-8")
+        return {"result": None, "text": text}
+
+    txt, _ = sc06.write_report(report, out)
+    return {"result": report, "text": txt.read_text(encoding="utf-8")}
+
+
 def write_sc05_report(results: list[dict], out: Path) -> dict:
     """Jalankan SC-05 dan tulis laporannya.
 
@@ -580,7 +605,12 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
     return {"result": c, "text": text}
 
 
-AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03", "sc04", "sc05")
+AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03", "sc04", "sc05", "sc06")
+
+# Kriteria yang tidak butuh kunci model, dataset gambar, maupun jaringan.
+# Daftar ini dipakai untuk memutuskan apakah runner boleh berhenti tanpa
+# memanggil model sama sekali.
+FREE_CRITERIA = {"sc03", "sc04", "sc05", "sc06"}
 
 
 def selected_criteria(args) -> list[str]:
@@ -614,6 +644,7 @@ def run_reports(results: list[dict], out: Path, criteria: list[str]) -> dict[str
         "sc03": write_sc03_report,
         "sc04": write_sc04_report,
         "sc05": write_sc05_report,
+        "sc06": write_sc06_report,
     }
     return {name: builders[name](results, out) for name in criteria}
 
@@ -675,6 +706,10 @@ def main_cli() -> int:
                       help="ukur biaya per gambar (SC-04) saja")
     pick.add_argument("--sc05", action="store_true",
                       help="uji penolakan duplikat (SC-05) saja")
+    pick.add_argument("--sc06", action="store_true",
+                      help="periksa kolom wajib cash report (SC-06) saja")
+    pick.add_argument("--download-templates", action="store_true",
+                      help="unduh template cash report perusahaan untuk SC-06")
     pick.add_argument("--all", action="store_true",
                       help="ukur semua kriteria yang tersedia (sama dengan tanpa flag)")
     a = ap.parse_args()
@@ -686,6 +721,17 @@ def main_cli() -> int:
         os.environ["SC_PAIRS"] = a.pairs
     if a.images:
         os.environ["SC_IMAGES"] = a.images
+
+    if a.download_templates:
+        import sc06_columns as sc06
+
+        target = ROOT / sc06.TEMPLATE_DIR
+        print(f"mengunduh template perusahaan ke: {target}")
+        berkas = sc06.download_templates(target)
+        for b in berkas:
+            print(f"  {b.name} ({b.stat().st_size} byte)")
+        print(f"selesai: {len(berkas)} berkas")
+        return 0
 
     if a.download:
         # Daftar pasangan diunduh dulu: tanpa itu tidak diketahui gambar mana
@@ -708,7 +754,7 @@ def main_cli() -> int:
         # SC-03 tidak punya hasil ekstraksi untuk dibaca ulang: waktu tidak
         # tersimpan di CSV hasil. Kalau hanya SC-03 yang diminta, cukup
         # rangkum sampel waktunya tanpa menyentuh `results_per_row.csv`.
-        if criteria in (["sc03"], ["sc04"], ["sc05"]):
+        if set(criteria) <= FREE_CRITERIA:
             reports = run_reports([], out, criteria)
             print(join_reports(reports))
             return 0
@@ -722,7 +768,7 @@ def main_cli() -> int:
     # SC-03 mengukur waktu, bukan isi. Waktunya sudah direkam harness pengukur,
     # jadi meminta SC-03 saja tidak boleh menuntut kunci model: laporan SC-03
     # hanya merangkum sampel yang sudah ada.
-    if criteria in (["sc03"], ["sc04"], ["sc05"]):
+    if set(criteria) <= FREE_CRITERIA:
         # Keduanya mengukur hal yang tidak tersimpan di hasil ekstraksi: waktu
         # dan token. Laporannya hanya merangkum sampel yang sudah ada, jadi
         # tidak perlu memanggil model dan tidak boleh mencetak banner "hasil

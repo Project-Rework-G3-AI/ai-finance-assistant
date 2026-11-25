@@ -250,7 +250,7 @@ Target di bawah dikutip dari tabel Success Criteria pada BRD bagian 6.
 | SC-03 | Waktu proses sampai tersimpan | Rata-rata di bawah 5 detik | sudah | kunci AI + Google Sheets |
 | SC-04 | Biaya per gambar | Di bawah Rp50 per gambar | sudah | kunci AI + kurs |
 | SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | sudah | tidak ada |
-| SC-06 | Semua kolom wajib terpetakan | Tidak ada kolom wajib yang hilang | belum | tidak ada |
+| SC-06 | Semua kolom wajib terpetakan | Tidak ada kolom wajib yang hilang | sudah | tidak ada |
 | SC-07 | Waktu satu periode vs manual | Di bawah 1 hari kerja | belum, tidak dapat diotomasi | manusia |
 
 SC-01 dan SC-02 mengukur **isi** hasil ekstraksi, jadi bisa dihitung ulang dari
@@ -277,6 +277,8 @@ python3 tests/sc_runner.py --sc02          # SC-02 saja
 python3 tests/sc_runner.py --sc03          # SC-03 saja
 python3 tests/sc_runner.py --sc04          # SC-04 saja
 python3 tests/sc_runner.py --sc05          # SC-05 saja
+python3 tests/sc_runner.py --sc06          # SC-06 saja
+python3 tests/sc_runner.py --download-templates  # unduh template SC-06
 python3 tests/sc_runner.py --metrics-only  # hitung ulang tanpa biaya
 python3 tests/sc_runner.py --repeat 3      # lihat sebaran antar-run
 ```
@@ -288,6 +290,32 @@ Menjalankan perintah yang sama dua kali **tidak** memanggil model lagi pada run
 kedua: hasil per gambar disimpan di `sc-out/` dan dilanjutkan dari situ. Runner
 mengumumkannya dengan jelas, dan mencatat asal angkanya di `sc-out/source.json`.
 Pakai `--restart` untuk benar-benar mengukur ulang dari nol.
+
+### SC-06 membandingkan dengan template perusahaan, bukan daftar salinan
+
+SC-06 memeriksa apakah setiap kolom wajib cash report punya tempat di keluaran
+aplikasi. Yang dibandingkan adalah **berkas template perusahaan** di repo
+dataset (`Cash Report dan Mutasi Rekening/`), bukan daftar kolom yang ditulis
+ulang di kode test.
+
+```bash
+python3 tests/sc_runner.py --download-templates   # sekali saja
+python3 tests/sc_runner.py --sc06
+```
+
+Ketiga berkas template dibaca semuanya, dan header dicari lewat isinya
+(`TANGGAL TRANSAKSI`), bukan nomor baris, karena berkas Operasional menaruhnya
+di baris 4 sementara yang lain di baris 5.
+
+Setiap kolom wajib punya keputusan tertulis: `langsung` (satu kolom aplikasi),
+`diturunkan` (dihitung formula di sheet lain), `terbagi` (diwakili kolom yang
+sama lewat pemecahan baris), atau `HILANG`. Keputusan itu ditulis eksplisit di
+`MAPPING` supaya bisa diperiksa orang lain, bukan hasil tebakan pencocokan nama.
+
+Satu kolom aplikasi tidak boleh mewakili dua kolom wajib berbeda. Kolom A
+aplikasi berisi tanggal transaksi, yang sudah menjadi wakil kolom B perusahaan;
+memakainya lagi untuk kolom A perusahaan akan membuat kolom wajib tampak
+terpetakan padahal isinya bukan.
 
 ### Yang perlu diperiksa saat `main` berubah
 
@@ -413,6 +441,8 @@ Hasil ada di `sc-out/`:
 | `sc04_metrics.json` | SC-04 dalam bentuk JSON |
 | `sc05_report.txt` | SC-05: tiap skenario duplikat dan jumlah baris tersimpan |
 | `sc05_metrics.json` | SC-05 dalam bentuk JSON |
+| `sc06_report.txt` | SC-06: tiap kolom wajib dan nasibnya |
+| `sc06_columns.csv` | SC-06: rincian pemetaan per kolom |
 | `results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
 | `sc03_samples.csv` | SC-03: waktu per gambar dan pecahan tahap (bahan laporan SC-03) |
 | `sc04_samples.csv` | SC-04: token per gambar (bahan laporan SC-04) |
@@ -441,6 +471,7 @@ Hasil pengukuran tiap kriteria:
 | SC-03 | [`docs/sc03-hasil-evaluasi.md`](docs/sc03-hasil-evaluasi.md) |
 | SC-04 | [`docs/sc04-hasil-evaluasi.md`](docs/sc04-hasil-evaluasi.md) |
 | SC-05 | [`docs/sc05-hasil-evaluasi.md`](docs/sc05-hasil-evaluasi.md) |
+| SC-06 | [`docs/sc06-hasil-evaluasi.md`](docs/sc06-hasil-evaluasi.md) |
 ## Tanya-jawab (milestone 3)
 
 Routing: foto/dokumen → jalur ekstraksi (tidak pernah lewat LLM); teks → command `/` dulu (deterministik, gratis), lalu bahasa bebas lewat **satu panggilan LLM tool-calling** (modul `cash_report/qa.py`).
