@@ -291,12 +291,12 @@ def download_images(target: Path | None = None, token: str | None = None,
     downloaded = skipped = failed = 0
     error_message = ""
     for i, name in enumerate(needed, 1):
-        dst = target / name
-        if dst.is_file() and dst.stat().st_size > 1000:
+        etc_items = target / name
+        if etc_items.is_file() and etc_items.stat().st_size > 1000:
             skipped += 1
             continue
         try:
-            dst.write_bytes(_fetch_file(_repo_path(IMAGES_SUBDIR, name)))
+            etc_items.write_bytes(_fetch_file(_repo_path(IMAGES_SUBDIR, name)))
         except SystemExit as e:
             # Pesan sudah informatif; simpan sekali, jangan cetak 65 kali.
             error_message = error_message or str(e)

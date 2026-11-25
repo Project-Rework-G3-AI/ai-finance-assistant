@@ -125,33 +125,33 @@ def test_reports_follow_criteria_order_not_hand_written_order():
         return builder
 
     import sc_runner
-    asli = dict(sc_runner.__dict__)
+    original = dict(sc_runner.__dict__)
     try:
         sc_runner.write_sc01_report = fake("sc01")
         sc_runner.write_sc02_report = fake("sc02")
         reports = run_reports([], Path("."), ["sc01", "sc02"])
     finally:
         for key in ("write_sc01_report", "write_sc02_report"):
-            sc_runner.__dict__[key] = asli[key]
+            sc_runner.__dict__[key] = original[key]
 
     assert captured == ["sc01", "sc02"]
     assert list(reports) == ["sc01", "sc02"]
-    teks = join_reports(reports)
-    assert teks.index("laporan-sc01") < teks.index("laporan-sc02")
+    text = join_reports(reports)
+    assert text.index("laporan-sc01") < text.index("laporan-sc02")
 
 
 def test_order_is_respected_for_a_single_criterion():
     from sc_runner import run_reports
 
     import sc_runner
-    asli = dict(sc_runner.__dict__)
+    original = dict(sc_runner.__dict__)
     try:
         sc_runner.write_sc01_report = lambda r, o: {"text": "satu"}
         sc_runner.write_sc02_report = lambda r, o: {"text": "dua"}
         assert list(run_reports([], Path("."), ["sc02"])) == ["sc02"]
     finally:
         for key in ("write_sc01_report", "write_sc02_report"):
-            sc_runner.__dict__[key] = asli[key]
+            sc_runner.__dict__[key] = original[key]
 
 
 def test_every_available_criterion_has_a_report_builder():
@@ -170,13 +170,13 @@ def test_every_available_criterion_has_a_report_builder():
         assert hasattr(sc_runner, f"write_{name}_report"), (
             f"{name} belum punya fungsi write_{name}_report"
         )
-        dipanggil = []
-        asli = getattr(sc_runner, f"write_{name}_report")
+        called_names = []
+        original = getattr(sc_runner, f"write_{name}_report")
         try:
             setattr(sc_runner, f"write_{name}_report",
-                    lambda r, o: dipanggil.append(1) or {"text": ""})
-            hasil = sc_runner.run_reports([], Path("."), [name])
-            assert name in hasil, f"{name} tidak dilaporkan oleh run_reports"
-            assert dipanggil, f"builder {name} tidak pernah dipanggil"
+                    lambda r, o: called_names.append(1) or {"text": ""})
+            result = sc_runner.run_reports([], Path("."), [name])
+            assert name in result, f"{name} tidak dilaporkan oleh run_reports"
+            assert called_names, f"builder {name} tidak pernah dipanggil"
         finally:
-            setattr(sc_runner, f"write_{name}_report", asli)
+            setattr(sc_runner, f"write_{name}_report", original)

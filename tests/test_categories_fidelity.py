@@ -60,10 +60,10 @@ def _sheet_map(z: zipfile.ZipFile) -> dict[str, str]:
 
 def _blocks() -> list[tuple[str, str, str, list[str]]]:
     """Semua blok dataValidation kolom D. Satu sheet bisa punya lebih dari satu."""
-    hasil = []
+    result = []
     for f in sorted(Path(DATASET_DIR).glob("*.xlsx")):
         with zipfile.ZipFile(f) as z:
-            for part, nama in _sheet_map(z).items():
+            for part, name in _sheet_map(z).items():
                 if part not in z.namelist():
                     continue
                 xml = z.read(part).decode("utf-8", "replace")
@@ -75,92 +75,92 @@ def _blocks() -> list[tuple[str, str, str, list[str]]]:
                     f1 = re.search(r"<formula1>(.*?)</formula1>", dv, re.S)
                     if not f1:
                         continue
-                    potongan = re.findall(r'"([^"]*)"', _unesc(f1.group(1)))
-                    nilai = [x.strip() for x in "".join(potongan).split(",") if x.strip()]
-                    if nilai:
-                        hasil.append((f.name, nama, sq, nilai))
-    return hasil
+                    segment = re.findall(r'"([^"]*)"', _unesc(f1.group(1)))
+                    value = [x.strip() for x in "".join(segment).split(",") if x.strip()]
+                    if value:
+                        result.append((f.name, name, sq, value))
+    return result
 
 
 @pytest.fixture(scope="module")
 def dataset() -> set[str]:
     blocks = _blocks()
     assert blocks, f"tidak ada dropdown kolom D ditemukan di {DATASET_DIR}"
-    nilai: set[str] = set()
-    for _, _, _, kategori in blocks:
-        nilai |= set(kategori)
-    nilai.discard(HEADER)
-    return nilai
+    value: set[str] = set()
+    for _, _, _, category in blocks:
+        value |= set(category)
+    value.discard(HEADER)
+    return value
 
 
 @pytest.fixture(scope="module")
-def isi_sel() -> set[str]:
+def cell_content() -> set[str]:
     openpyxl = pytest.importorskip("openpyxl")
-    hasil: set[str] = set()
+    result: set[str] = set()
     for f in sorted(Path(DATASET_DIR).glob("*.xlsx")):
         wb = openpyxl.load_workbook(f, data_only=True)
         for ws in wb.worksheets:
             for row in ws.iter_rows(min_col=4, max_col=4, values_only=True):
                 v = row[0]
                 if isinstance(v, str) and v.strip():
-                    hasil.add(" ".join(v.split()))
+                    result.add(" ".join(v.split()))
         wb.close()
-    hasil.discard(HEADER)
-    return hasil
+    result.discard(HEADER)
+    return result
 
 
-def test_setiap_kategori_dataset_dikenal_repo(dataset):
+def test_every_dataset_category_known_to_repo(dataset):
     """Tidak boleh ada kategori perusahaan yang jatuh ke Perlu Ditinjau."""
-    tidak = sorted(k for k in dataset if C.normalize(k) == C.PERLU_DITINJAU)
-    assert not tidak, (
-        "kategori dataset tidak dikenali repo:\n  " + "\n  ".join(tidak))
+    not_ok = sorted(k for k in dataset if C.normalize(k) == C.PERLU_DITINJAU)
+    assert not not_ok, (
+        "kategori dataset tidak dikenali repo:\n  " + "\n  ".join(not_ok))
 
 
-def test_setiap_kategori_repo_ada_di_dataset(dataset):
+def test_every_repo_category_in_dataset(dataset):
     """Tidak boleh ada nama kategori yang dikarang.
 
     Satu-satunya pengecualian adalah penanda internal, yang dideklarasikan
     eksplisit dan tidak pernah ditawarkan ke model.
     """
-    karangan = sorted(k for k in C.KATEGORI
+    fabricated = sorted(k for k in C.KATEGORI
                       if k != C.PERLU_DITINJAU and k not in dataset)
-    assert not karangan, (
-        "kategori repo tidak ada di dataset (dikarang?):\n  " + "\n  ".join(karangan))
+    assert not fabricated, (
+        "kategori repo tidak ada di dataset (dikarang?):\n  " + "\n  ".join(fabricated))
 
 
-def test_isi_sel_tidak_di_luar_dropdown(dataset, isi_sel):
+def test_cell_content_within_dropdown(dataset, cell_content):
     """Nilai kategori yang diketik manual di luar dropdown akan lolos dari audit."""
-    luar = sorted(isi_sel - dataset)
-    assert not luar, (
-        "nilai kolom D di luar dropdown:\n  " + "\n  ".join(repr(x) for x in luar))
+    outside = sorted(cell_content - dataset)
+    assert not outside, (
+        "nilai kolom D di luar dropdown:\n  " + "\n  ".join(repr(x) for x in outside))
 
 
-def test_penanda_internal_tidak_ditawarkan_ke_model():
+def test_internal_marker_not_offered_to_model():
     assert C.PERLU_DITINJAU not in C.KATEGORI_UNTUK_MODEL
     assert C.PERLU_DITINJAU not in C.PROMPT_KATEGORI.split(", ")
 
 
-def test_saldo_awal_dikenali_tapi_tidak_ditawarkan():
+def test_opening_balance_known_but_not_offered():
     assert C.normalize("Saldo Awal") == "Saldo Awal"
     assert "Saldo Awal" not in C.KATEGORI_UNTUK_MODEL
 
 
-def test_setiap_item_model_bisa_dinormalkan_kembali():
+def test_every_model_item_can_be_normalised_back():
     """Normalisasi harus idempoten: nama final tidak boleh berubah lagi."""
     for k in C.KATEGORI_UNTUK_MODEL:
         assert C.normalize(k) == k, f"tidak idempoten: {k!r}"
 
 
-def test_alias_tidak_menunjuk_ke_nama_yang_tidak_ada():
+def test_alias_points_to_existing_name():
     for a, t in C.ALIAS.items():
         assert t in C.KATEGORI, f"alias {a!r} -> {t!r} yang tidak ada di KATEGORI"
 
 
-def test_tidak_ada_duplikat():
+def test_no_duplicates():
     assert len(C.KATEGORI) == len(set(C.KATEGORI)), "ada kategori duplikat"
 
 
-def test_setup_memuat_setiap_kategori_tepat_sekali():
+def test_setup_loads_every_category_exactly_once():
     """Setiap kategori harus punya tempat di SETUP, dan hanya satu.
 
     Duplikat antar kolom pernah terjadi: "Transfer Antar Bank" masuk kolom
@@ -169,25 +169,25 @@ def test_setup_memuat_setiap_kategori_tepat_sekali():
     """
     from cash_report import build_template as BT
 
-    kolom = {
+    column = {
         "KATEGORI PENDAPATAN": BT.KAT_INCOME,
         "KATEGORI NERACA": BT.KAT_NERACA,
         "KATEGORI PENGELUARAN": BT.KAT_EXPENSE,
         "KATEGORI LAIN": BT.KAT_LAIN,
     }
-    semua = [k for isi in kolom.values() for k in isi]
+    everything = [k for content in column.values() for k in content]
 
-    dobel = sorted({k for k in semua if semua.count(k) > 1})
-    assert not dobel, f"kategori muncul di lebih dari satu kolom SETUP: {dobel}"
+    doubled = sorted({k for k in everything if everything.count(k) > 1})
+    assert not doubled, f"kategori muncul di lebih dari satu kolom SETUP: {doubled}"
 
-    hilang = [k for k in C.KATEGORI if k not in semua]
-    assert not hilang, f"kategori tidak punya tempat di SETUP: {hilang}"
+    missing_keys = [k for k in C.KATEGORI if k not in everything]
+    assert not missing_keys, f"kategori tidak punya tempat di SETUP: {missing_keys}"
 
-    asing = sorted(set(semua) - set(C.KATEGORI))
-    assert not asing, f"SETUP memuat kategori di luar KATEGORI: {asing}"
+    foreign = sorted(set(everything) - set(C.KATEGORI))
+    assert not foreign, f"SETUP memuat kategori di luar KATEGORI: {foreign}"
 
 
-def test_dropdown_transaksi_merujuk_daftar_lengkap():
+def test_transaction_dropdown_uses_full_list():
     """Dropdown kolom Kategori harus memuat ke-31 kategori, tanpa sel kosong.
 
     Dropdown-nya memakai ONE_OF_RANGE ke SETUP, bukan daftar inline: 31
@@ -211,19 +211,19 @@ def test_dropdown_transaksi_merujuk_daftar_lengkap():
         f"baris awal dropdown ({BT.BARIS_AWAL_DROPDOWN}) menabrak header baris 3")
 
     req = BT._validasi_dropdown(1)["setDataValidation"]
-    rentang = req["rule"]["condition"]["values"][0]["userEnteredValue"]
+    range_value = req["rule"]["condition"]["values"][0]["userEnteredValue"]
     kol = BT._col_letter(BT.KOL_DROPDOWN)
-    awal = BT.BARIS_AWAL_DROPDOWN
-    akhir = awal + len(BT.KAT_DROPDOWN) - 1
-    assert rentang == f"=SETUP!${kol}${awal}:${kol}${akhir}", (
-        f"rentang dropdown salah: {rentang}")
+    start = BT.BARIS_AWAL_DROPDOWN
+    end = start + len(BT.KAT_DROPDOWN) - 1
+    assert range_value == f"=SETUP!${kol}${start}:${kol}${end}", (
+        f"rentang dropdown salah: {range_value}")
 
     # Kolom Kategori = E (indeks 4), mulai baris 2.
     assert req["range"]["startColumnIndex"] == 4
     assert req["range"]["startRowIndex"] == 1
 
 
-def test_dropdown_tidak_memblokir_nilai_lama():
+def test_dropdown_does_not_block_old_value():
     """strict=False: file lama yang memuat nilai di luar daftar tidak jadi galat."""
     from cash_report import build_template as BT
 

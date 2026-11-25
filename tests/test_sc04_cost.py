@@ -24,14 +24,14 @@ import sc04_cost as sc04  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def bersihkan_env(monkeypatch):
+def clear_env(monkeypatch):
     """Env dari mesin tidak boleh bocor ke test; tiap test mengatur sendiri."""
-    for nama in (sc04.ENV_PROMPT, sc04.ENV_COMPLETION, sc04.ENV_USD_IDR,
+    for name in (sc04.ENV_PROMPT, sc04.ENV_COMPLETION, sc04.ENV_USD_IDR,
                  sc04.ENV_TARGET, sc04.ENV_MODEL):
-        monkeypatch.delenv(nama, raising=False)
+        monkeypatch.delenv(name, raising=False)
 
 
-def harga(prompt=1e-6, completion=2e-6, model="uji/model"):
+def price(prompt=1e-6, completion=2e-6, model="uji/model"):
     return sc04.Pricing(model=model, prompt_usd=prompt,
                         completion_usd=completion, source="test")
 
@@ -45,13 +45,13 @@ def sample(file="a.jpg", prompt=1000, completion=500, ok=True):
 
 def test_cost_is_prompt_plus_completion_times_rate():
     """Rumus dasar: dua komponen token, bukan satu."""
-    p = harga(prompt=2e-6, completion=5e-6)
+    p = price(prompt=2e-6, completion=5e-6)
     # 1000 x 2e-6 = 0.002 ; 500 x 5e-6 = 0.0025 -> 0.0045 USD
     assert p.cost_usd(1000, 500) == pytest.approx(0.0045)
 
 
 def test_cost_in_idr_multiplies_by_the_exchange_rate():
-    p = harga(prompt=1e-6, completion=0.0)
+    p = price(prompt=1e-6, completion=0.0)
     assert sc04.cost_idr(p, 1000, 0, 18000) == pytest.approx(18.0)
 
 
@@ -62,8 +62,8 @@ def test_prompt_and_completion_have_different_rates():
     Dengan jumlah token yang sama, menukar dua tarif menghasilkan angka identik
     dan test-nya tidak membuktikan apa pun.
     """
-    a = sc04.cost_idr(harga(prompt=1e-6, completion=9e-6), 1000, 100, 1)
-    b = sc04.cost_idr(harga(prompt=9e-6, completion=1e-6), 1000, 100, 1)
+    a = sc04.cost_idr(price(prompt=1e-6, completion=9e-6), 1000, 100, 1)
+    b = sc04.cost_idr(price(prompt=9e-6, completion=1e-6), 1000, 100, 1)
     assert a != b
     # a = 1000e-6 + 900e-6 = 0.0019 ; b = 9000e-6 + 100e-6 = 0.0091
     assert a == pytest.approx(0.0019)
@@ -190,7 +190,7 @@ def test_cli_target_beats_env(monkeypatch):
 
 def test_pass_when_mean_is_below_target():
     c = sc04.compute([sample(prompt=1000, completion=0)],
-                     target=50, pricing=harga(prompt=1e-6, completion=0),
+                     target=50, pricing=price(prompt=1e-6, completion=0),
                      usd_to_idr=10000)
     # 1000 x 1e-6 x 10000 = Rp10
     assert c["mean_idr"] == pytest.approx(10.0)
@@ -200,7 +200,7 @@ def test_pass_when_mean_is_below_target():
 
 def test_fail_when_mean_is_above_target():
     c = sc04.compute([sample(prompt=10000, completion=0)],
-                     target=50, pricing=harga(prompt=1e-6, completion=0),
+                     target=50, pricing=price(prompt=1e-6, completion=0),
                      usd_to_idr=10000)
     assert c["pass"] is False
     assert sc04.verdict(c) == "BELUM TERCAPAI"
@@ -208,7 +208,7 @@ def test_fail_when_mean_is_above_target():
 
 def test_exactly_at_target_counts_as_pass():
     c = sc04.compute([sample(prompt=5000, completion=0)],
-                     target=50, pricing=harga(prompt=1e-6, completion=0),
+                     target=50, pricing=price(prompt=1e-6, completion=0),
                      usd_to_idr=10000)
     assert c["mean_idr"] == pytest.approx(50.0)
     assert c["pass"] is True
@@ -225,9 +225,9 @@ def test_failed_samples_do_not_enter_the_average():
     """Gambar gagal bukan biaya Rp0; itu tidak ada data."""
     ok = sample(file="a.jpg", prompt=1000, completion=0)
     ok.cost_idr = 10.0
-    gagal = sample(file="b.jpg", ok=False)
-    gagal.cost_idr = 0.0
-    c = sc04.compute([ok, gagal], target=50)
+    failed = sample(file="b.jpg", ok=False)
+    failed.cost_idr = 0.0
+    c = sc04.compute([ok, failed], target=50)
     assert c["measured"] == 1
     assert c["failed"] == 1
     assert c["mean_idr"] == pytest.approx(10.0)
@@ -235,11 +235,11 @@ def test_failed_samples_do_not_enter_the_average():
 
 def test_over_target_counts_per_image_not_just_the_mean():
     """Rata-rata bisa lulus meski sebagian gambar mahal; itu harus terlihat."""
-    murah = sample(file="a.jpg")
-    murah.cost_idr = 5.0
-    mahal = sample(file="b.jpg")
-    mahal.cost_idr = 500.0
-    c = sc04.compute([murah, mahal], target=50)
+    cheapest = sample(file="a.jpg")
+    cheapest.cost_idr = 5.0
+    expensive = sample(file="b.jpg")
+    expensive.cost_idr = 500.0
+    c = sc04.compute([cheapest, expensive], target=50)
     assert c["over_target"] == 1
 
 
@@ -264,10 +264,10 @@ def test_editing_the_tariff_changes_the_cost(monkeypatch):
     """Mengubah tarif di kode harus mengubah biaya yang dilaporkan."""
     s = sample(prompt=1000, completion=0)
     monkeypatch.setattr(sc04, "PRICE_PROMPT_USD", 1e-6)
-    a = sc04.compute([s], target=50, pricing=harga(prompt=1e-6, completion=0),
+    a = sc04.compute([s], target=50, pricing=price(prompt=1e-6, completion=0),
                      usd_to_idr=10000)["mean_idr"]
     monkeypatch.setattr(sc04, "PRICE_PROMPT_USD", 3e-6)
-    b = sc04.compute([s], target=50, pricing=harga(prompt=3e-6, completion=0),
+    b = sc04.compute([s], target=50, pricing=price(prompt=3e-6, completion=0),
                      usd_to_idr=10000)["mean_idr"]
     assert b == pytest.approx(a * 3)
 
@@ -287,40 +287,40 @@ def test_zero_tariff_falls_back_to_the_catalog(monkeypatch):
 
 def test_report_names_the_judged_number_before_the_status():
     c = sc04.compute([sample(prompt=1000, completion=0)], target=50,
-                     pricing=harga(prompt=1e-6, completion=0), usd_to_idr=10000)
-    teks = sc04.report(c)
-    assert teks.index("Angka yang dinilai") < teks.index("Status")
-    assert "per gambar" in teks
+                     pricing=price(prompt=1e-6, completion=0), usd_to_idr=10000)
+    text = sc04.report(c)
+    assert text.index("Angka yang dinilai") < text.index("Status")
+    assert "per gambar" in text
 
 
 def test_report_states_target_and_rate_source():
     c = sc04.compute([sample(prompt=1000, completion=0)], target=50,
-                     pricing=harga(prompt=1e-6, completion=0), usd_to_idr=10000)
-    teks = sc04.report(c)
-    assert "Rp50.00" in teks
-    assert "sumber tarif" in teks
-    assert "kurs" in teks
+                     pricing=price(prompt=1e-6, completion=0), usd_to_idr=10000)
+    text = sc04.report(c)
+    assert "Rp50.00" in text
+    assert "sumber tarif" in text
+    assert "kurs" in text
 
 
 def test_report_shows_tokens_so_the_cost_can_be_rechecked():
     """Tanpa token, pembaca tidak bisa memverifikasi biaya sendiri."""
     c = sc04.compute([sample(prompt=1000, completion=500)], target=50,
-                     pricing=harga(), usd_to_idr=10000)
-    teks = sc04.report(c)
-    assert "prompt" in teks
-    assert "completion" in teks
-    assert "1000" in teks
+                     pricing=price(), usd_to_idr=10000)
+    text = sc04.report(c)
+    assert "prompt" in text
+    assert "completion" in text
+    assert "1000" in text
 
 
 def test_report_says_not_measured_without_samples():
-    teks = sc04.report(sc04.compute([]))
-    assert "BELUM DIUKUR" in teks
-    assert "_sc04_run.py" in teks
+    text = sc04.report(sc04.compute([]))
+    assert "BELUM DIUKUR" in text
+    assert "_sc04_run.py" in text
 
 
 def test_write_report_creates_both_files(tmp_path):
     c = sc04.compute([sample(prompt=1000, completion=0)], target=50,
-                     pricing=harga(), usd_to_idr=10000)
+                     pricing=price(), usd_to_idr=10000)
     sc04.write_report(c, tmp_path)
     assert (tmp_path / "sc04_report.txt").exists()
     data = json.loads((tmp_path / "sc04_metrics.json").read_text(encoding="utf-8"))
@@ -336,17 +336,17 @@ def test_compute_recomputes_cost_from_tokens_and_current_rate():
     disimpan di CSV dan dipakai ulang, test ini akan gagal.
     """
     s = sample(prompt=1000, completion=0)
-    murah = sc04.compute([s], target=50, pricing=harga(prompt=1e-6, completion=0),
+    cheapest = sc04.compute([s], target=50, pricing=price(prompt=1e-6, completion=0),
                          usd_to_idr=10000)["mean_idr"]
-    mahal = sc04.compute([s], target=50, pricing=harga(prompt=2e-6, completion=0),
+    expensive = sc04.compute([s], target=50, pricing=price(prompt=2e-6, completion=0),
                          usd_to_idr=10000)["mean_idr"]
-    assert mahal == pytest.approx(murah * 2)
+    assert expensive == pytest.approx(cheapest * 2)
 
 
 def test_compute_recomputes_cost_from_tokens_and_current_exchange_rate():
     s = sample(prompt=1000, completion=0)
-    a = sc04.compute([s], target=50, pricing=harga(prompt=1e-6, completion=0),
+    a = sc04.compute([s], target=50, pricing=price(prompt=1e-6, completion=0),
                      usd_to_idr=10000)["mean_idr"]
-    b = sc04.compute([s], target=50, pricing=harga(prompt=1e-6, completion=0),
+    b = sc04.compute([s], target=50, pricing=price(prompt=1e-6, completion=0),
                      usd_to_idr=20000)["mean_idr"]
     assert b == pytest.approx(a * 2)

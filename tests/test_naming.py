@@ -47,9 +47,9 @@ def test_environment_variables_are_not_named_after_one_criterion():
     """SC_PAIRS dan SC_IMAGES dipakai semua kriteria, bukan hanya SC-01."""
     import inspect
 
-    sumber = inspect.getsource(sc_common)
-    for salah in ("SC01_PAIRS", "SC01_IMAGES", "SC01_RUN_MODEL"):
-        assert salah not in sumber, f"{salah} seharusnya SC_*"
+    source = inspect.getsource(sc_common)
+    for wrong in ("SC01_PAIRS", "SC01_IMAGES", "SC01_RUN_MODEL"):
+        assert wrong not in source, f"{wrong} seharusnya SC_*"
 
 
 # ------------------------------------------------ simetri nama keluaran
@@ -57,35 +57,35 @@ def test_environment_variables_are_not_named_after_one_criterion():
 def test_report_files_are_symmetric(tmp_path):
     """Kedua kriteria menulis berkas dengan pola nama yang sama."""
     tmp_path.mkdir(parents=True, exist_ok=True)
-    hasil = [{"file": "a.jpg", "reference_category": "A",
+    result = [{"file": "a.jpg", "reference_category": "A",
               "proposed_category": "A", "reference_date": "2026-01-01",
               "proposed_date": "2026-01-01", "reference_amount": "1000",
               "proposed_amount": 1000, "proposed_bank": "BNI",
               "proposed_direction": "keluar", "proposed_note": "",
               "mode": "vision", "note": "", "model_note": "", "seconds": 1}]
-    sc_runner.write_sc01_report(hasil, tmp_path)
-    sc_runner.write_sc02_report(hasil, tmp_path)
+    sc_runner.write_sc01_report(result, tmp_path)
+    sc_runner.write_sc02_report(result, tmp_path)
 
-    dibuat = {p.name for p in tmp_path.iterdir()}
-    assert "sc01_report.txt" in dibuat
-    assert "sc01_metrics.json" in dibuat
-    assert "sc02_report.txt" in dibuat
-    assert "sc02_metrics.json" in dibuat
+    created = {p.name for p in tmp_path.iterdir()}
+    assert "sc01_report.txt" in created
+    assert "sc01_metrics.json" in created
+    assert "sc02_report.txt" in created
+    assert "sc02_metrics.json" in created
 
 
 def test_sc01_does_not_write_unsuffixed_output_names(tmp_path):
     """Nama tanpa awalan menyembunyikan bahwa berkas itu milik SC-01 saja."""
     tmp_path.mkdir(parents=True, exist_ok=True)
-    hasil = [{"file": "a.jpg", "reference_category": "A",
+    result = [{"file": "a.jpg", "reference_category": "A",
               "proposed_category": "A", "reference_date": "2026-01-01",
               "proposed_date": "2026-01-01", "reference_amount": "1000",
               "proposed_amount": 1000, "proposed_bank": "BNI",
               "proposed_direction": "keluar", "proposed_note": "",
               "mode": "vision", "note": "", "model_note": "", "seconds": 1}]
-    sc_runner.write_sc01_report(hasil, tmp_path)
-    dibuat = {p.name for p in tmp_path.iterdir()}
-    assert "report.txt" not in dibuat
-    assert "metrics.json" not in dibuat
+    sc_runner.write_sc01_report(result, tmp_path)
+    created = {p.name for p in tmp_path.iterdir()}
+    assert "report.txt" not in created
+    assert "metrics.json" not in created
 
 
 def test_builder_functions_are_named_after_their_criterion():
@@ -102,6 +102,6 @@ def test_criterion_specific_names_are_allowed_to_keep_the_prefix():
     """Yang khusus SC-01 justru harus tetap berawalan sc01."""
     import inspect
 
-    sumber = inspect.getsource(sc_runner)
-    assert "sc01_report.txt" in sumber
-    assert "sc01_metrics.json" in sumber
+    source = inspect.getsource(sc_runner)
+    assert "sc01_report.txt" in source
+    assert "sc01_metrics.json" in source

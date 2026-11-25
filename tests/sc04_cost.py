@@ -120,8 +120,8 @@ class Sample:
         return self.prompt_tokens + self.completion_tokens
 
 
-def _dari_env(nama: str) -> str:
-    return (os.getenv(nama) or "").strip()
+def _from_env(name: str) -> str:
+    return (os.getenv(name) or "").strip()
 
 
 def target_from(override: float | None = None) -> float:
@@ -131,13 +131,13 @@ def target_from(override: float | None = None) -> float:
     """
     if override is not None:
         return float(override)
-    mentah = _dari_env(ENV_TARGET)
-    if mentah:
+    raw = _from_env(ENV_TARGET)
+    if raw:
         try:
-            return float(mentah)
+            return float(raw)
         except ValueError:
             raise SystemExit(
-                f"{ENV_TARGET} harus berupa angka, bukan {mentah!r}")
+                f"{ENV_TARGET} harus berupa angka, bukan {raw!r}")
     return TARGET_IDR
 
 
@@ -150,13 +150,13 @@ def usd_to_idr_from(override: float | None = None) -> float:
     """
     if override is not None:
         return float(override)
-    mentah = _dari_env(ENV_USD_IDR)
-    if mentah:
+    raw = _from_env(ENV_USD_IDR)
+    if raw:
         try:
-            return float(mentah)
+            return float(raw)
         except ValueError:
             raise SystemExit(
-                f"{ENV_USD_IDR} harus berupa angka, bukan {mentah!r}")
+                f"{ENV_USD_IDR} harus berupa angka, bukan {raw!r}")
     return USD_TO_IDR
 
 
@@ -169,21 +169,21 @@ def pricing_from(prompt: float | None = None, completion: float | None = None,
     tarif tidak diberikan lewat CLI maupun env. Bila semuanya kosong, berhenti:
     menebak tarif berarti melaporkan biaya yang tidak bisa dipertanggungjawabkan.
     """
-    nama_model = (model or _dari_env(ENV_MODEL) or "").strip()
+    model_name = (model or _from_env(ENV_MODEL) or "").strip()
 
     # 1. CLI
     if prompt is not None and completion is not None:
-        return Pricing(model=nama_model or "(ditentukan manual)",
+        return Pricing(model=model_name or "(ditentukan manual)",
                        prompt_usd=float(prompt),
                        completion_usd=float(completion),
                        source="argumen CLI")
 
     # 2. env
-    env_p = _dari_env(ENV_PROMPT)
-    env_c = _dari_env(ENV_COMPLETION)
+    env_p = _from_env(ENV_PROMPT)
+    env_c = _from_env(ENV_COMPLETION)
     if prompt is None and completion is None and env_p and env_c:
         try:
-            return Pricing(model=nama_model or "(ditentukan manual)",
+            return Pricing(model=model_name or "(ditentukan manual)",
                            prompt_usd=float(env_p),
                            completion_usd=float(env_c),
                            source=f"variabel lingkungan {ENV_PROMPT}/{ENV_COMPLETION}")
@@ -194,7 +194,7 @@ def pricing_from(prompt: float | None = None, completion: float | None = None,
     # 3. tarif umum di kode (PRICE_PROMPT_USD / PRICE_COMPLETION_USD)
     if prompt is None and completion is None:
         if PRICE_PROMPT_USD and PRICE_COMPLETION_USD:
-            return Pricing(model=nama_model or "(ditentukan manual)",
+            return Pricing(model=model_name or "(ditentukan manual)",
                            prompt_usd=float(PRICE_PROMPT_USD),
                            completion_usd=float(PRICE_COMPLETION_USD),
                            source="variabel PRICE_*_USD di tests/sc04_cost.py")
@@ -210,15 +210,15 @@ def pricing_from(prompt: float | None = None, completion: float | None = None,
 
     # 4. katalog penyedia
     if catalog:
-        harga = catalog.get("pricing", {})
+        price = catalog.get("pricing", {})
         try:
-            return Pricing(model=catalog.get("id", nama_model),
-                           prompt_usd=float(harga["prompt"]),
-                           completion_usd=float(harga["completion"]),
+            return Pricing(model=catalog.get("id", model_name),
+                           prompt_usd=float(price["prompt"]),
+                           completion_usd=float(price["completion"]),
                            source="katalog OpenRouter saat pengukuran")
         except (KeyError, TypeError, ValueError):
             raise SystemExit(
-                f"Katalog tidak memuat tarif lengkap untuk {nama_model!r}. "
+                f"Katalog tidak memuat tarif lengkap untuk {model_name!r}. "
                 "Isi --price-prompt dan --price-completion secara manual.")
 
     raise SystemExit(
@@ -235,28 +235,28 @@ def cost_idr(pricing: Pricing, prompt_tokens: int, completion_tokens: int,
     return pricing.cost_usd(prompt_tokens, completion_tokens) * usd_to_idr
 
 
-def _stats(nilai: list[float]) -> dict:
+def _stats(value: list[float]) -> dict:
     """Ringkasan sebaran. Persentil dihitung dengan interpolasi linear."""
-    if not nilai:
+    if not value:
         return {"n": 0, "mean": 0.0, "median": 0.0, "min": 0.0, "max": 0.0,
                 "p90": 0.0}
-    urut = sorted(nilai)
+    ordered = sorted(value)
 
-    def persen(p: float) -> float:
-        if len(urut) == 1:
-            return urut[0]
-        pos = (len(urut) - 1) * p
-        bawah = int(pos)
-        atas = min(bawah + 1, len(urut) - 1)
-        return urut[bawah] + (urut[atas] - urut[bawah]) * (pos - bawah)
+    def percent(p: float) -> float:
+        if len(ordered) == 1:
+            return ordered[0]
+        pos = (len(ordered) - 1) * p
+        low = int(pos)
+        high = min(low + 1, len(ordered) - 1)
+        return ordered[low] + (ordered[high] - ordered[low]) * (pos - low)
 
     return {
-        "n": len(nilai),
-        "mean": statistics.fmean(nilai),
-        "median": statistics.median(nilai),
-        "min": urut[0],
-        "max": urut[-1],
-        "p90": persen(0.9),
+        "n": len(value),
+        "mean": statistics.fmean(value),
+        "median": statistics.median(value),
+        "min": ordered[0],
+        "max": ordered[-1],
+        "p90": percent(0.9),
     }
 
 
@@ -269,7 +269,7 @@ def compute(samples: list[Sample], target: float = TARGET_IDR,
     gagal akan terbaca sebagai "gratis", padahal yang terjadi adalah tidak ada
     data.
     """
-    berhasil = [s for s in samples if s.ok]
+    ok_items = [s for s in samples if s.ok]
 
     # Biaya SELALU diturunkan dari token x tarif x kurs, bukan dibaca dari
     # `s.cost_idr` yang mungkin sudah terisi. Kalau membaca nilai jadi, mengubah
@@ -277,35 +277,35 @@ def compute(samples: list[Sample], target: float = TARGET_IDR,
     # penyesuaian tarif yang diminta jadi sia-sia. `s.cost_idr` hanya dipakai
     # sebagai cadangan bila tarif memang tidak diberikan.
     if pricing is not None and usd_to_idr:
-        biaya = [cost_idr(pricing, s.prompt_tokens, s.completion_tokens,
-                          usd_to_idr) for s in berhasil]
-        for s, b in zip(berhasil, biaya):
+        cost = [cost_idr(pricing, s.prompt_tokens, s.completion_tokens,
+                          usd_to_idr) for s in ok_items]
+        for s, b in zip(ok_items, cost):
             s.cost_idr = b
     else:
-        biaya = [s.cost_idr for s in berhasil]
+        cost = [s.cost_idr for s in ok_items]
 
-    hasil = {
-        "measured": len(berhasil),
-        "failed": len(samples) - len(berhasil),
+    result = {
+        "measured": len(ok_items),
+        "failed": len(samples) - len(ok_items),
         "target_idr": target,
-        "mean_idr": statistics.fmean(biaya) if biaya else 0.0,
-        "cost": _stats(biaya),
-        "prompt_tokens": _stats([float(s.prompt_tokens) for s in berhasil]),
-        "completion_tokens": _stats([float(s.completion_tokens) for s in berhasil]),
-        "total_tokens": _stats([float(s.total_tokens) for s in berhasil]),
-        "over_target": sum(1 for x in biaya if x > target),
+        "mean_idr": statistics.fmean(cost) if cost else 0.0,
+        "cost": _stats(cost),
+        "prompt_tokens": _stats([float(s.prompt_tokens) for s in ok_items]),
+        "completion_tokens": _stats([float(s.completion_tokens) for s in ok_items]),
+        "total_tokens": _stats([float(s.total_tokens) for s in ok_items]),
+        "over_target": sum(1 for x in cost if x > target),
         "usd_to_idr": usd_to_idr,
     }
     if pricing:
-        hasil["pricing"] = {
+        result["pricing"] = {
             "model": pricing.model,
             "prompt_usd_per_token": pricing.prompt_usd,
             "completion_usd_per_token": pricing.completion_usd,
             "source": pricing.source,
         }
     # Nol pengukuran bukan hasil; jangan pernah dianggap lulus.
-    hasil["pass"] = bool(biaya) and hasil["mean_idr"] <= target
-    return hasil
+    result["pass"] = bool(cost) and result["mean_idr"] <= target
+    return result
 
 
 def verdict(c: dict) -> str:
@@ -322,23 +322,23 @@ def report(c: dict, source: str = "") -> str:
     kriteria lain. Tanpa itu, pembaca melihat beberapa angka dan satu status
     tanpa tahu mana yang menentukan.
     """
-    baris = ["SC-04 — Biaya per gambar", "=" * 60]
+    row = ["SC-04 — Biaya per gambar", "=" * 60]
     if source:
-        baris.append(source)
-    baris.append("")
+        row.append(source)
+    row.append("")
 
     if not c.get("measured"):
-        baris += [
+        row += [
             f"Status             : {verdict(c)}",
             "",
             "Belum ada sampel biaya. Jalankan pengukuran lebih dulu:",
             "",
             "  python3 tests/_sc04_run.py",
         ]
-        return "\n".join(baris)
+        return "\n".join(row)
 
-    harga = c.get("pricing", {})
-    baris += [
+    price = c.get("pricing", {})
+    row += [
         f"Target             : di bawah Rp{c['target_idr']:.2f} per gambar",
         f"Angka yang dinilai : rata-rata biaya per gambar Rp{c['mean_idr']:.2f} "
         f"({c['measured']} gambar)  <- dibandingkan dengan target",
@@ -346,18 +346,18 @@ def report(c: dict, source: str = "") -> str:
         "",
         "Tarif yang dipakai",
         "-" * 60,
-        f"  model              : {harga.get('model', '(tidak dicatat)')}",
+        f"  model              : {price.get('model', '(tidak dicatat)')}",
     ]
-    if harga:
-        baris += [
-            f"  prompt             : ${harga['prompt_usd_per_token']:.10f} / token",
-            f"  completion         : ${harga['completion_usd_per_token']:.10f} / token",
+    if price:
+        row += [
+            f"  prompt             : ${price['prompt_usd_per_token']:.10f} / token",
+            f"  completion         : ${price['completion_usd_per_token']:.10f} / token",
         ]
-    baris.append(f"  kurs               : Rp{c['usd_to_idr']:.2f} per USD")
-    if harga.get("source"):
-        baris.append(f"  sumber tarif       : {harga['source']}")
+    row.append(f"  kurs               : Rp{c['usd_to_idr']:.2f} per USD")
+    if price.get("source"):
+        row.append(f"  sumber tarif       : {price['source']}")
 
-    baris += [
+    row += [
         "",
         "Sebaran biaya per gambar",
         "-" * 60,
@@ -379,9 +379,9 @@ def report(c: dict, source: str = "") -> str:
         f"(median {c['total_tokens']['median']:.0f})",
     ]
     if c.get("failed"):
-        baris += ["", f"Catatan: {c['failed']} gambar gagal diukur dan tidak "
+        row += ["", f"Catatan: {c['failed']} gambar gagal diukur dan tidak "
                       "masuk rata-rata."]
-    return "\n".join(baris)
+    return "\n".join(row)
 
 
 def write_report(c: dict, out: Path, source: str = "") -> None:

@@ -17,9 +17,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sc03_latency as sc03  # noqa: E402
 
 
-def sample(file="a.jpg", ok=True, **tahap):
+def sample(file="a.jpg", ok=True, **stage):
     s = sc03.Sample(file=file, ok=ok)
-    s.stages.update(tahap)
+    s.stages.update(stage)
     return s
 
 
@@ -52,9 +52,9 @@ def test_stored_ignores_stages_that_are_absent():
 
 def test_verdict_uses_the_mean_of_stored_not_the_max():
     """Satu gambar yang sangat lambat tidak boleh menentukan status sendiri."""
-    lambat = [sample(file=f"{i}.jpg", extract=4.0, dedupe=0.2) for i in range(9)]
-    satu = sample(file="x.jpg", extract=40.0, dedupe=0.2)
-    c = sc03.compute(lambat + [satu])
+    slowest = [sample(file=f"{i}.jpg", extract=4.0, dedupe=0.2) for i in range(9)]
+    one = sample(file="x.jpg", extract=40.0, dedupe=0.2)
+    c = sc03.compute(slowest + [one])
     # rata-rata = (9*4.2 + 40.2) / 10 = 7.8  -> di atas target
     assert c["mean_stored"] > 5.0
     assert c["stored"]["max"] == pytest.approx(40.2)
@@ -87,8 +87,8 @@ def test_no_samples_never_reports_pass():
 def test_failed_samples_do_not_enter_the_average():
     """Gambar yang gagal diukur bukan waktu 0 detik."""
     ok = [sample(extract=4.0, dedupe=1.0)]
-    gagal = [sample(file="g.jpg", ok=False)]
-    c = sc03.compute(ok + gagal)
+    failed = [sample(file="g.jpg", ok=False)]
+    c = sc03.compute(ok + failed)
     assert c["measured"] == 1
     assert c["failed"] == 1
     assert c["mean_stored"] == pytest.approx(5.0)
@@ -99,49 +99,49 @@ def test_failed_samples_do_not_enter_the_average():
 def test_report_names_the_judged_number_before_the_status():
     """Sama seperti SC-01 dan SC-02: status tanpa operand adalah teka-teki."""
     c = sc03.compute([sample(extract=6.0, dedupe=1.0)])
-    teks = sc03.report(c)
-    assert teks.index("Angka yang dinilai") < teks.index("Status")
-    assert "tersimpan" in teks
+    text = sc03.report(c)
+    assert text.index("Angka yang dinilai") < text.index("Status")
+    assert "tersimpan" in text
 
 
 def test_report_states_the_target_in_seconds():
     c = sc03.compute([sample(extract=6.0, dedupe=1.0)])
-    teks = sc03.report(c)
-    assert "5 detik" in teks
+    text = sc03.report(c)
+    assert "5 detik" in text
 
 
 def test_report_shows_the_stricter_definition_separately():
     """Definisi pengguna dilaporkan sebagai angka lain, bukan sebagai status."""
     c = sc03.compute([sample(extract=4.0, dedupe=1.0, reply=2.0)], reply_measured=True)
-    teks = sc03.report(c)
-    assert "balasan Telegram" in teks
-    assert "tidak dipakai menilai target" in teks
+    text = sc03.report(c)
+    assert "balasan Telegram" in text
+    assert "tidak dipakai menilai target" in text
 
 
 def test_report_does_not_print_zero_for_a_mocked_stage():
     """0,00 detik terbaca sebagai 'Telegram instan', padahal tidak dijalankan."""
     c = sc03.compute([sample(extract=4.0, dedupe=1.0)], reply_measured=False)
-    teks = sc03.report(c)
-    assert "tidak diukur" in teks
+    text = sc03.report(c)
+    assert "tidak diukur" in text
     # baris tahap reply tidak boleh menampilkan 0.00 detik
-    for baris in teks.splitlines():
-        if "reply" in baris:
-            assert "0.00 detik" not in baris
+    for row in text.splitlines():
+        if "reply" in row:
+            assert "0.00 detik" not in row
 
 
 def test_report_counts_samples_over_target():
     c = sc03.compute([sample(file="a.jpg", extract=2.0),
                       sample(file="b.jpg", extract=9.0)])
-    teks = sc03.report(c)
-    assert "1 dari 2" in teks
+    text = sc03.report(c)
+    assert "1 dari 2" in text
 
 
 def test_report_lists_stage_breakdown():
     """Tanpa pecahan tahap, tidak ada cara tahu waktu habis di mana."""
     c = sc03.compute([sample(extract=4.0, dedupe=1.0, append=0.2)])
-    teks = sc03.report(c)
-    for tahap in ("extract", "dedupe", "append"):
-        assert tahap in teks
+    text = sc03.report(c)
+    for stage in ("extract", "dedupe", "append"):
+        assert stage in text
 
 
 def test_write_report_creates_both_files(tmp_path):

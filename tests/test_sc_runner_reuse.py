@@ -39,29 +39,29 @@ from sc_runner import (  # noqa: E402
 # --------------------------------------------------------- pengumuman reuse
 
 def test_reuse_is_announced_loudly_when_nothing_is_left():
-    teks = describe_reuse({"a": {}, "b": {}}, [])
-    assert "HASIL LAMA DIPAKAI LAGI" in teks
-    assert "TIDAK ADA PEMANGGILAN MODEL BARU" in teks
-    assert "panggilan model  : 0" in teks
+    text = describe_reuse({"a": {}, "b": {}}, [])
+    assert "HASIL LAMA DIPAKAI LAGI" in text
+    assert "TIDAK ADA PEMANGGILAN MODEL BARU" in text
+    assert "panggilan model  : 0" in text
 
 
 def test_reuse_message_points_at_restart_and_metrics_only():
-    teks = describe_reuse({"a": {}}, [])
-    assert "--restart" in teks
-    assert "--metrics-only" in teks
+    text = describe_reuse({"a": {}}, [])
+    assert "--restart" in text
+    assert "--metrics-only" in text
 
 
 def test_partial_reuse_reports_the_split():
     """Kalau sebagian sudah ada, jumlahnya harus terbaca, bukan disamarkan."""
-    teks = describe_reuse({"a": {}, "b": {}}, [{"file": "c"}])
-    assert "sudah ada di CSV : 2 dari 3 gambar" in teks
-    assert "akan diproses    : 1 gambar" in teks
+    text = describe_reuse({"a": {}, "b": {}}, [{"file": "c"}])
+    assert "sudah ada di CSV : 2 dari 3 gambar" in text
+    assert "akan diproses    : 1 gambar" in text
 
 
 def test_partial_reuse_does_not_claim_zero_calls():
     """Saat masih ada sisa, jangan bilang tidak ada panggilan model."""
-    teks = describe_reuse({"a": {}}, [{"file": "b"}])
-    assert "TIDAK ADA PEMANGGILAN MODEL BARU" not in teks
+    text = describe_reuse({"a": {}}, [{"file": "b"}])
+    assert "TIDAK ADA PEMANGGILAN MODEL BARU" not in text
 
 
 # ------------------------------------------------------- deteksi hasil basi
@@ -99,9 +99,9 @@ def test_source_records_zero_calls_when_results_are_reused(tmp_path):
 def test_source_line_names_the_model_when_it_was_called(tmp_path):
     write_source(tmp_path, model_calls=65, model="contoh/model",
                  computed_at="2026-01-01 10:00:00 UTC")
-    teks = source_line(tmp_path)
-    assert "65 panggilan model" in teks
-    assert "contoh/model" in teks
+    text = source_line(tmp_path)
+    assert "65 panggilan model" in text
+    assert "contoh/model" in text
 
 
 def test_source_line_is_honest_when_nothing_was_recorded(tmp_path):
@@ -142,12 +142,12 @@ def test_report_names_the_number_used_to_judge_the_target(tmp_path):
                        "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
     ]
     rep = sc_runner.write_sc02_report(rows, tmp_path)
-    teks = rep["text"]
+    text = rep["text"]
 
-    assert "Angka yang dinilai" in teks
-    assert "kecocokan rata-rata" in teks
-    assert "dibandingkan dengan target" in teks
-    assert "Status" in teks
+    assert "Angka yang dinilai" in text
+    assert "kecocokan rata-rata" in text
+    assert "dibandingkan dengan target" in text
+    assert "Status" in text
 
 
 def test_report_states_the_denominator_of_the_average(tmp_path):
@@ -161,8 +161,8 @@ def test_report_states_the_denominator_of_the_average(tmp_path):
          "reference": {"date": "2026-01-01", "amount": "1000",
                        "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
     ]
-    teks = sc_runner.write_sc02_report(rows, tmp_path)["text"]
-    assert "4 field beracuan" in teks
+    text = sc_runner.write_sc02_report(rows, tmp_path)["text"]
+    assert "4 field beracuan" in text
 
 
 def test_report_shows_accuracy_without_category(tmp_path):
@@ -176,8 +176,8 @@ def test_report_shows_accuracy_without_category(tmp_path):
          "reference": {"date": "2026-01-01", "amount": "1000",
                        "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
     ]
-    teks = sc_runner.write_sc02_report(rows, tmp_path)["text"]
-    assert "kecocokan tanpa kategori" in teks
+    text = sc_runner.write_sc02_report(rows, tmp_path)["text"]
+    assert "kecocokan tanpa kategori" in text
 
 
 def test_scored_count_counts_only_fields_with_a_reference():
@@ -205,9 +205,9 @@ def test_accuracy_excluding_removes_only_the_named_field():
                        "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
     ]
     c = compute(rows)
-    tanpa = c.accuracy_excluding("category")
-    assert tanpa > c.overall_accuracy
-    assert tanpa == pytest.approx(1.0)
+    without = c.accuracy_excluding("category")
+    assert without > c.overall_accuracy
+    assert without == pytest.approx(1.0)
 
 
 def test_accuracy_excluding_returns_zero_when_nothing_left():

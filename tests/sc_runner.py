@@ -403,9 +403,9 @@ def write_sc03_report(results: list[dict], out: Path) -> dict:
     """
     import sc03_latency as sc03
 
-    berkas = out / "sc03_samples.csv"
-    if not berkas.exists():
-        teks = (
+    path = out / "sc03_samples.csv"
+    if not path.exists():
+        text = (
             "SC-03 — Waktu proses sampai tersimpan\n"
             + "=" * 60 + "\n"
             "Status             : BELUM DIUKUR\n\n"
@@ -413,29 +413,29 @@ def write_sc03_report(results: list[dict], out: Path) -> dict:
             "SC-01 dan SC-02. Jalankan pengukuran lebih dulu:\n\n"
             "  python3 tests/_sc03_run.py\n"
         )
-        (out / "sc03_report.txt").write_text(teks, encoding="utf-8")
-        return {"result": None, "text": teks}
+        (out / "sc03_report.txt").write_text(text, encoding="utf-8")
+        return {"result": None, "text": text}
 
     samples = []
-    with berkas.open(encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         for r in csv.DictReader(f):
             s = sc03.Sample(file=r["file"], ok=(r.get("ok") == "True"),
                             error=r.get("error", ""))
-            for nama in sc03.STAGES:
+            for name in sc03.STAGES:
                 try:
-                    s.stages[nama] = float(r.get(nama) or 0)
+                    s.stages[name] = float(r.get(name) or 0)
                 except ValueError:
-                    s.stages[nama] = 0.0
+                    s.stages[name] = 0.0
             samples.append(s)
 
     # Harness pengukur me-mock Telegram, jadi tahap reply tidak diukur sungguhan.
     c = sc03.compute(samples, reply_measured=False)
-    teks = sc03.report(
+    text = sc03.report(
         c, "Sumber data: diukur langsung pada rantai produksi, folder penyimpanan sandbox.")
-    (out / "sc03_report.txt").write_text(teks, encoding="utf-8")
+    (out / "sc03_report.txt").write_text(text, encoding="utf-8")
     (out / "sc03_metrics.json").write_text(
         json.dumps(c, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"result": c, "text": teks}
+    return {"result": c, "text": text}
 
 
 def write_sc05_report(results: list[dict], out: Path) -> dict:
@@ -452,23 +452,23 @@ def write_sc05_report(results: list[dict], out: Path) -> dict:
     try:
         import main as app
     except Exception as e:  # noqa: BLE001
-        teks = ("SC-05 — Bukti transaksi berulang tidak mencatat ganda\n"
+        text = ("SC-05 — Bukti transaksi berulang tidak mencatat ganda\n"
                 + "=" * 60 + "\n"
                 "Status             : BELUM DIUKUR\n\n"
                 f"Modul aplikasi tidak bisa dimuat: {type(e).__name__}: {e}\n")
-        (out / "sc05_report.txt").write_text(teks, encoding="utf-8")
-        return {"result": None, "text": teks}
+        (out / "sc05_report.txt").write_text(text, encoding="utf-8")
+        return {"result": None, "text": text}
 
-    cases = asyncio.run(sc05.ukur(app, 5))
+    cases = asyncio.run(sc05.measure(app, 5))
     c = sc05.compute(cases)
-    teks = sc05.report(
+    text = sc05.report(
         c, "Sumber data: `handle_update` dan `write_cash_report` dari main.py "
            "dipanggil apa adanya; Telegram, Google Sheets, dan ekstraksi AI "
            "diganti tiruan. Yang dinilai adalah logika dedup yang sebenarnya.")
-    (out / "sc05_report.txt").write_text(teks, encoding="utf-8")
+    (out / "sc05_report.txt").write_text(text, encoding="utf-8")
     (out / "sc05_metrics.json").write_text(
         json.dumps(c, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"result": c, "text": teks}
+    return {"result": c, "text": text}
 
 
 def write_sc04_report(results: list[dict], out: Path) -> dict:
@@ -482,9 +482,9 @@ def write_sc04_report(results: list[dict], out: Path) -> dict:
     """
     import sc04_cost as sc04
 
-    berkas = out / "sc04_samples.csv"
-    if not berkas.exists():
-        teks = (
+    path = out / "sc04_samples.csv"
+    if not path.exists():
+        text = (
             "SC-04 — Biaya per gambar\n"
             + "=" * 60 + "\n"
             "Status             : BELUM DIUKUR\n\n"
@@ -492,22 +492,22 @@ def write_sc04_report(results: list[dict], out: Path) -> dict:
             "bisa dihitung ulang dari sana. Jalankan pengukuran lebih dulu:\n\n"
             "  python3 tests/_sc04_run.py --usd-idr <kurs>\n"
         )
-        (out / "sc04_report.txt").write_text(teks, encoding="utf-8")
-        return {"result": None, "text": teks}
+        (out / "sc04_report.txt").write_text(text, encoding="utf-8")
+        return {"result": None, "text": text}
 
     # Tarif dan kurs: env/kode, bukan ditebak.
-    harga = sc04.pricing_from()
-    kurs = sc04.usd_to_idr_from()
-    if not kurs:
-        teks = ("SC-04 — Biaya per gambar\n" + "=" * 60 + "\n"
+    price = sc04.pricing_from()
+    exchange_rate = sc04.usd_to_idr_from()
+    if not exchange_rate:
+        text = ("SC-04 — Biaya per gambar\n" + "=" * 60 + "\n"
                 "Status             : BELUM DIUKUR\n\n"
                 f"Kurs belum diisi. Isi {sc04.ENV_USD_IDR} atau variabel "
                 "USD_TO_IDR di tests/sc04_cost.py.\n")
-        (out / "sc04_report.txt").write_text(teks, encoding="utf-8")
-        return {"result": None, "text": teks}
+        (out / "sc04_report.txt").write_text(text, encoding="utf-8")
+        return {"result": None, "text": text}
 
     samples = []
-    with berkas.open(encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         for r in csv.DictReader(f):
             samples.append(sc04.Sample(
                 file=r["file"], ok=(r.get("ok") == "True"),
@@ -515,15 +515,15 @@ def write_sc04_report(results: list[dict], out: Path) -> dict:
                 prompt_tokens=int(r.get("prompt_tokens") or 0),
                 completion_tokens=int(r.get("completion_tokens") or 0)))
 
-    c = sc04.compute(samples, target=sc04.target_from(), pricing=harga,
-                     usd_to_idr=kurs)
-    teks = sc04.report(c, "Sumber data: token dibaca dari respons penyedia "
+    c = sc04.compute(samples, target=sc04.target_from(), pricing=price,
+                     usd_to_idr=exchange_rate)
+    text = sc04.report(c, "Sumber data: token dibaca dari respons penyedia "
                           "saat pengukuran; biaya diturunkan dari tarif dan kurs "
                           "yang berlaku sekarang.")
-    (out / "sc04_report.txt").write_text(teks, encoding="utf-8")
+    (out / "sc04_report.txt").write_text(text, encoding="utf-8")
     (out / "sc04_metrics.json").write_text(
         json.dumps(c, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"result": c, "text": teks}
+    return {"result": c, "text": text}
 
 
 def write_sc02_report(results: list[dict], out: Path) -> dict:
@@ -532,8 +532,8 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
     c = sc02_completeness.compute(rows)
 
     target = 0.90
-    dinilai = c.overall_accuracy
-    tanpa_kat = c.accuracy_excluding("category")
+    judged = c.overall_accuracy
+    without_category = c.accuracy_excluding("category")
     lines = [
         "SC-02 — Kelengkapan field wajib",
         "=" * 60,
@@ -546,11 +546,11 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
     # harus disebut. Penyebutnya juga disebut, supaya 72,5% tidak disangka
     # rata-rata kelima field padahal hanya yang beracuan.
     lines += verdict_block(
-        f"kecocokan rata-rata ({c.scored_count} field beracuan)", dinilai, target,
+        f"kecocokan rata-rata ({c.scored_count} field beracuan)", judged, target,
         [
             ("kelengkapan rata-rata", c.overall_completeness,
              "field terbaca, belum tentu benar"),
-            ("kecocokan tanpa kategori", tanpa_kat,
+            ("kecocokan tanpa kategori", without_category,
              "kategori sudah diukur di SC-01"),
         ],
     )

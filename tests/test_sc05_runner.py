@@ -52,12 +52,12 @@ def test_bare_command_includes_sc05():
 
 def test_sc05_report_runs_without_credentials(tmp_path, monkeypatch):
     """Inti sifat SC-05: tidak butuh kunci AI, Google, dataset, atau jaringan."""
-    for nama in ("AI_API_KEY", "AI_BASE_URL", "AI_MODEL",
+    for name in ("AI_API_KEY", "AI_BASE_URL", "AI_MODEL",
                  "CASH_REPORT_FOLDER_ID", "CASH_REPORT_TEMPLATE_ID"):
-        monkeypatch.delenv(nama, raising=False)
+        monkeypatch.delenv(name, raising=False)
 
-    hasil = sc_runner.write_sc05_report([], tmp_path)
-    assert hasil["result"] is not None, "SC-05 seharusnya bisa jalan tanpa kredensial"
+    result = sc_runner.write_sc05_report([], tmp_path)
+    assert result["result"] is not None, "SC-05 seharusnya bisa jalan tanpa kredensial"
     assert (tmp_path / "sc05_report.txt").exists()
 
 
@@ -70,18 +70,18 @@ def test_sc05_result_is_written_as_json(tmp_path):
 
 
 def test_sc05_reports_every_case(tmp_path):
-    hasil = sc_runner.write_sc05_report([], tmp_path)
-    kasus = hasil["result"]["cases"]
-    assert len(kasus) == 3
-    nama = {k["name"] for k in kasus}
-    assert nama == {"kirim_ulang_berkas_sama", "isi_sama_file_id_baru",
+    result = sc_runner.write_sc05_report([], tmp_path)
+    case_item = result["result"]["cases"]
+    assert len(case_item) == 3
+    name = {k["name"] for k in case_item}
+    assert name == {"kirim_ulang_berkas_sama", "isi_sama_file_id_baru",
                     "gambar_berbeda"}
 
 
 def test_sc05_required_case_rejects_all_duplicates(tmp_path):
     """Kondisi kode saat ini: berkas sama yang dikirim ulang memang ditolak."""
-    hasil = sc_runner.write_sc05_report([], tmp_path)
-    c = hasil["result"]
+    result = sc_runner.write_sc05_report([], tmp_path)
+    c = result["result"]
     assert c["required_duplicates"] == 5
     assert c["required_rejected"] == 5
     assert c["pass"] is True
@@ -89,13 +89,13 @@ def test_sc05_required_case_rejects_all_duplicates(tmp_path):
 
 def test_sc05_reports_the_no_hash_finding(tmp_path):
     """Selisih terhadap BRD harus terlihat, bukan disembunyikan."""
-    hasil = sc_runner.write_sc05_report([], tmp_path)
-    c = hasil["result"]
+    result = sc_runner.write_sc05_report([], tmp_path)
+    c = result["result"]
     assert c["findings_duplicates"] == 5
     assert c["findings_rejected"] == 0
-    teks = (tmp_path / "sc05_report.txt").read_text(encoding="utf-8")
-    assert "Temuan terhadap BRD" in teks
-    assert "hash" in teks
+    text = (tmp_path / "sc05_report.txt").read_text(encoding="utf-8")
+    assert "Temuan terhadap BRD" in text
+    assert "hash" in text
 
 
 def test_sc05_does_not_read_extraction_results(tmp_path):
@@ -104,5 +104,5 @@ def test_sc05_does_not_read_extraction_results(tmp_path):
     Kalau ia membaca berkas itu, menjalankannya di repo bersih akan gagal
     padahal seharusnya bisa jalan tanpa apa pun.
     """
-    hasil = sc_runner.write_sc05_report([], tmp_path)
-    assert hasil["result"]["measured"] == 3
+    result = sc_runner.write_sc05_report([], tmp_path)
+    assert result["result"]["measured"] == 3

@@ -126,11 +126,11 @@ def test_all_required_fields_are_covered():
 def test_overall_completeness_averages_per_field_not_per_row():
     """Satu field yang selalu gagal tidak boleh tertutup empat field yang baik."""
     # Kantong sengaja dibuat gagal di kedua baris, field lain berhasil.
-    gagal_kantong = "Ekstraksi AI — wajib ditinjau. (kantong tidak terbaca — pakai default)"
+    pocket_failures = "Ekstraksi AI — wajib ditinjau. (kantong tidak terbaca — pakai default)"
     rows = [
-        {"file": "a", "record": dict(RECORD, remark=gagal_kantong),
+        {"file": "a", "record": dict(RECORD, remark=pocket_failures),
          "reference": REFERENCE},
-        {"file": "b", "record": dict(RECORD, remark=gagal_kantong),
+        {"file": "b", "record": dict(RECORD, remark=pocket_failures),
          "reference": REFERENCE},
     ]
     c = compute(rows)
@@ -141,7 +141,7 @@ def test_overall_completeness_averages_per_field_not_per_row():
     # Rata-rata per baris akan memberi 0.8, per field memberi angka yang sama
     # di sini — jadi diuji dengan satu field gagal di separuh baris.
     rows2 = [
-        {"file": "a", "record": dict(RECORD, remark=gagal_kantong),
+        {"file": "a", "record": dict(RECORD, remark=pocket_failures),
          "reference": REFERENCE},
         {"file": "b", "record": RECORD, "reference": REFERENCE},
     ]

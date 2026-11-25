@@ -22,21 +22,21 @@ OUT = REPO / "sc-out"
 
 # Jumlah gambar uji. Gambarnya dibuat di dalam test, bukan diambil dari dataset,
 # supaya isinya terkendali dan tidak menyentuh data perusahaan.
-JUMLAH_GAMBAR = 5
+IMAGE_COUNT = 5
 
 
 def main() -> int:
     import main as app
 
-    cases = asyncio.run(sc05.ukur(app, JUMLAH_GAMBAR))
-    hasil = sc05.compute(cases)
+    cases = asyncio.run(sc05.measure(app, IMAGE_COUNT))
+    result = sc05.compute(cases)
     sc05.write_report(
-        hasil, OUT,
+        result, OUT,
         "Sumber data: `handle_update` dan `write_cash_report` dari main.py "
         "dipanggil apa adanya; Telegram, Google Sheets, dan ekstraksi AI diganti "
         "tiruan. Yang dinilai adalah logika dedup yang sebenarnya.")
-    print(sc05.report(hasil))
-    return 0 if hasil["pass"] else 1
+    print(sc05.report(result))
+    return 0 if result["pass"] else 1
 
 
 if __name__ == "__main__":

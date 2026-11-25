@@ -21,73 +21,73 @@ sys.path.insert(0, str(REPO / "tests"))
 
 import _sc03_probe as probe  # noqa: E402
 
-probe.siapkan_env()
+probe.prepare_env()
 
 import main  # noqa: E402
 import httpx  # noqa: E402
 import sc03_latency as sc03  # noqa: E402
 
-probe.siapkan_klien(main)
+probe.prepare_client(main)
 
 OUT = REPO / "sc-out"
 OUT.mkdir(exist_ok=True)
 SAMPLES = OUT / "sc03_samples.csv"
-KOLOM = ["file", "ok", "error", "status", "row"] + list(sc03.STAGES) + ["stored", "replied"]
+COLUMNS = ["file", "ok", "error", "status", "row"] + list(sc03.STAGES) + ["stored", "replied"]
 
 
-def baca_samples() -> dict[str, dict]:
+def read_samples() -> dict[str, dict]:
     if not SAMPLES.exists():
         return {}
     with SAMPLES.open(encoding="utf-8") as f:
         return {r["file"]: r for r in csv.DictReader(f)}
 
 
-def tulis_baris(row: dict) -> None:
-    baru = not SAMPLES.exists()
+def write_row(row: dict) -> None:
+    is_new = not SAMPLES.exists()
     with SAMPLES.open("a", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=KOLOM)
-        if baru:
+        w = csv.DictWriter(f, fieldnames=COLUMNS)
+        if is_new:
             w.writeheader()
         w.writerow(row)
 
 
-async def jalankan(limit: int | None, restart: bool) -> None:
+async def run_all(limit: int | None, restart: bool) -> None:
     if restart and SAMPLES.exists():
         SAMPLES.unlink()
 
-    sudah = baca_samples()
+    existing = read_samples()
 
-    gambar_dir = REPO / "dataset/Bukti Transaksi Januari 2026"
-    semua = sorted(gambar_dir.glob("*.jpg"))
-    if not semua:
+    image_dir = REPO / "dataset/Bukti Transaksi Januari 2026"
+    everything = sorted(image_dir.glob("*.jpg"))
+    if not everything:
         print("TIDAK ADA GAMBAR — jalankan --download dulu")
         return
 
     # Hanya yang punya acuan (65 pasangan), bukan 118 foto.
     pairs = REPO / "dataset/pairs.csv"
     with pairs.open(encoding="utf-8") as f:
-        nama_acuan = [r["file"] for r in csv.DictReader(f)]
-    sasaran = [p for p in semua if p.name in set(nama_acuan)]
+        reference_names = [r["file"] for r in csv.DictReader(f)]
+    aimed = [p for p in everything if p.name in set(reference_names)]
     if limit:
-        sasaran = sasaran[:limit]
+        aimed = aimed[:limit]
 
-    tersisa = [p for p in sasaran if p.name not in sudah]
-    print(f"total sasaran     : {len(sasaran)}")
-    print(f"sudah ada         : {len(sasaran) - len(tersisa)}")
-    print(f"akan diukur       : {len(tersisa)}")
+    remaining = [p for p in aimed if p.name not in existing]
+    print(f"total sasaran     : {len(aimed)}")
+    print(f"sudah ada         : {len(aimed) - len(remaining)}")
+    print(f"akan diukur       : {len(remaining)}")
     print()
 
     # Telegram di-mock: tidak ada bot token, dan tidak boleh kirim ke orang.
-    async def tg_palsu(client, method, **kw):
+    async def fake_tg(client, method, **kw):
         return {"ok": True}
 
-    main.tg_call = tg_palsu
+    main.tg_call = fake_tg
 
     async with httpx.AsyncClient(timeout=180) as client:
-        for i, path in enumerate(tersisa, 1):
+        for i, path in enumerate(remaining, 1):
             t0 = time.perf_counter()
-            sample = await probe.ukur_satu(main, client, path.name, path.read_bytes())
-            baris = {
+            sample = await probe.measure_one(main, client, path.name, path.read_bytes())
+            row = {
                 "file": sample.file,
                 "ok": sample.ok,
                 "error": sample.error,
@@ -97,13 +97,13 @@ async def jalankan(limit: int | None, restart: bool) -> None:
                 "stored": round(sample.stored, 4),
                 "replied": round(sample.replied, 4),
             }
-            tulis_baris(baris)
+            write_row(row)
             status = "ok" if sample.ok else f"GAGAL {sample.error[:40]}"
-            print(f"  [{i:3}/{len(tersisa)}] {path.name:42} "
+            print(f"  [{i:3}/{len(remaining)}] {path.name:42} "
                   f"stored={sample.stored:6.2f}s  {status}", flush=True)
 
     # Ringkasan
-    data = baca_samples()
+    data = read_samples()
     samples = []
     for r in data.values():
         s = sc03.Sample(file=r["file"], ok=(r["ok"] == "True"),
@@ -128,4 +128,4 @@ if __name__ == "__main__":
     restart = "--restart" in sys.argv
     if "--limit" in sys.argv:
         limit = int(sys.argv[sys.argv.index("--limit") + 1])
-    asyncio.run(jalankan(limit, restart))
+    asyncio.run(run_all(limit, restart))

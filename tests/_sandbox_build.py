@@ -23,12 +23,12 @@ SANDBOX_FOLDER = "1nWbws9qVFSXUYj3r0HM253IDtIfT_GN_"
 os.environ["CASH_REPORT_FOLDER_ID"] = SANDBOX_FOLDER
 
 # Kredensial model dari .env Hermes (jangan dicetak).
-kunci = {}
-for baris in open("/workspace/hermes-agent/.env", errors="ignore"):
-    if "=" in baris and not baris.strip().startswith("#"):
-        k, _, v = baris.partition("=")
-        kunci[k.strip()] = v.strip().strip('"').strip("'")
-os.environ["AI_API_KEY"] = kunci.get("OPENROUTER_API_KEY", "")
+key = {}
+for row in open("/workspace/hermes-agent/.env", errors="ignore"):
+    if "=" in row and not row.strip().startswith("#"):
+        k, _, v = row.partition("=")
+        key[k.strip()] = v.strip().strip('"').strip("'")
+os.environ["AI_API_KEY"] = key.get("OPENROUTER_API_KEY", "")
 os.environ["AI_BASE_URL"] = "https://openrouter.ai/api/v1"
 os.environ["AI_MODEL"] = "google/gemini-3.8-flash"
 

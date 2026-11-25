@@ -68,17 +68,17 @@ def _stats(values: list[float]) -> dict:
     """Ringkasan sebaran. Persentil dipakai karena satu baris bisa sangat lambat."""
     if not values:
         return {"n": 0, "mean": 0.0, "median": 0.0, "p90": 0.0, "max": 0.0, "min": 0.0}
-    urut = sorted(values)
-    n = len(urut)
+    ordered = sorted(values)
+    n = len(ordered)
     # Persentil 90 dengan interpolasi sederhana; cukup untuk 65 sampel.
     idx = min(n - 1, int(round(0.9 * (n - 1))))
     return {
         "n": n,
-        "mean": statistics.fmean(urut),
-        "median": statistics.median(urut),
-        "p90": urut[idx],
-        "max": urut[-1],
-        "min": urut[0],
+        "mean": statistics.fmean(ordered),
+        "median": statistics.median(ordered),
+        "p90": ordered[idx],
+        "max": ordered[-1],
+        "min": ordered[0],
     }
 
 
@@ -90,27 +90,27 @@ def compute(samples: list[Sample], target: float = TARGET_SECONDS,
     detik akan terbaca sebagai "Telegram instan", padahal yang terjadi adalah
     tahap itu tidak pernah dijalankan sungguhan.
     """
-    dipakai = [s for s in samples if s.ok]
-    gagal = [s for s in samples if not s.ok]
+    used = [s for s in samples if s.ok]
+    failed = [s for s in samples if not s.ok]
 
-    stored = [s.stored for s in dipakai]
-    replied = [s.replied for s in dipakai]
+    stored = [s.stored for s in used]
+    replied = [s.replied for s in used]
 
-    lewat = [s for s in dipakai if s.stored > target]
+    over_target = [s for s in used if s.stored > target]
 
     return {
         "target_seconds": target,
         "total": len(samples),
-        "measured": len(dipakai),
-        "failed": len(gagal),
-        "failed_files": [s.file for s in gagal],
+        "measured": len(used),
+        "failed": len(failed),
+        "failed_files": [s.file for s in failed],
         "stored": _stats(stored),
         "replied": _stats(replied) if reply_measured else None,
         "reply_measured": reply_measured,
-        "over_target": len(lewat),
-        "over_target_files": [s.file for s in lewat],
-        "stages": {nama: _stats([s.stages.get(nama, 0.0) for s in dipakai])
-                   for nama in STAGES},
+        "over_target": len(over_target),
+        "over_target_files": [s.file for s in over_target],
+        "stages": {name: _stats([s.stages.get(name, 0.0) for s in used])
+                   for name in STAGES},
         # Dipakai menilai target: rata-rata `stored`, sesuai definisi dokumen.
         "mean_stored": statistics.fmean(stored) if stored else 0.0,
         "pass": bool(stored) and statistics.fmean(stored) <= target,
@@ -123,14 +123,14 @@ def verdict(c: dict) -> str:
 
 def report(c: dict, source_note: str = "") -> str:
     """Teks laporan SC-03, siap ditulis ke `sc03_report.txt`."""
-    baris = [
+    row = [
         "SC-03 — Waktu proses sampai tersimpan",
         "=" * 60,
     ]
     if source_note:
-        baris += [source_note, ""]
+        row += [source_note, ""]
 
-    baris += [
+    row += [
         f"Target BRD         : kurang dari {c['target_seconds']:.0f} detik",
         f"Angka yang dinilai : rata-rata waktu sampai tersimpan "
         f"{c['mean_stored']:.2f} detik ({c['measured']} gambar)  <- dibandingkan dengan target",
@@ -161,30 +161,30 @@ def report(c: dict, source_note: str = "") -> str:
         "Waktu per tahap (rata-rata)",
         "-" * 60,
     ]
-    for nama in STAGES:
-        s = c["stages"][nama]
-        if nama == "reply" and not c.get("reply_measured"):
-            baris.append(f"  {nama:18}: tidak diukur (Telegram di-mock)")
+    for name in STAGES:
+        s = c["stages"][name]
+        if name == "reply" and not c.get("reply_measured"):
+            row.append(f"  {name:18}: tidak diukur (Telegram di-mock)")
         else:
-            baris.append(f"  {nama:18}: {s['mean']:.2f} detik  (median {s['median']:.2f})")
+            row.append(f"  {name:18}: {s['mean']:.2f} detik  (median {s['median']:.2f})")
 
     if c["failed"]:
-        baris += [
+        row += [
             "",
             f"Gagal diukur: {c['failed']} gambar",
             "-" * 60,
         ]
-        baris += [f"  {n}" for n in c["failed_files"][:10]]
+        row += [f"  {n}" for n in c["failed_files"][:10]]
 
-    return "\n".join(baris) + "\n"
+    return "\n".join(row) + "\n"
 
 
 def write_report(c: dict, out: Path, source_note: str = "") -> dict:
     """Tulis `sc03_report.txt` dan `sc03_metrics.json`."""
     import json
 
-    teks = report(c, source_note)
-    (out / "sc03_report.txt").write_text(teks, encoding="utf-8")
+    text = report(c, source_note)
+    (out / "sc03_report.txt").write_text(text, encoding="utf-8")
     (out / "sc03_metrics.json").write_text(
         json.dumps(c, ensure_ascii=False, indent=2), encoding="utf-8")
     return c

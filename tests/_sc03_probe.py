@@ -48,7 +48,7 @@ SANDBOX_FOLDER = os.getenv("SC03_SANDBOX_FOLDER", "").strip()
 SANDBOX_TEMPLATE = os.getenv("SC03_SANDBOX_TEMPLATE", "").strip()
 
 
-def siapkan_env() -> None:
+def prepare_env() -> None:
     """Arahkan aplikasi ke sandbox dan pasang kredensial model."""
     if not SANDBOX_FOLDER or not SANDBOX_TEMPLATE:
         raise SystemExit(
@@ -68,7 +68,7 @@ def siapkan_env() -> None:
         )
 
 
-def siapkan_klien(main) -> None:
+def prepare_client(main) -> None:
     """Ganti klien Drive dan Sheets ke OAuth user.
 
     Produksi memakai service account untuk Sheets dan refresh token sendiri
@@ -91,99 +91,99 @@ def siapkan_klien(main) -> None:
     main._drive_svc = _drive_oauth()
 
 
-def pasang_pengukur(main, sample) -> dict:
+def install_probe(main, sample) -> dict:
     """Bungkus fungsi internal supaya tiap tahap terukur terpisah.
 
     Mengembalikan catatan asli agar bisa dipulihkan setelah selesai.
     """
-    catatan = {}
+    note_field = {}
 
     # --- upload Drive
-    asli_upload = main.upload_drive
-    catatan["upload_drive"] = asli_upload
+    original_upload = main.upload_drive
+    note_field["upload_drive"] = original_upload
 
-    def upload_terukur(*a, **kw):
+    def instrumented_upload(*a, **kw):
         t0 = time.perf_counter()
         try:
-            return asli_upload(*a, **kw)
+            return original_upload(*a, **kw)
         finally:
             sample.stages["upload"] = sample.stages.get("upload", 0.0) + (time.perf_counter() - t0)
 
-    main.upload_drive = upload_terukur
+    main.upload_drive = instrumented_upload
 
     # --- append Sheets: bungkus gspread worksheet.update lewat open_by_key
-    asli_open = main._open_spreadsheet
-    catatan["_open_spreadsheet"] = asli_open
+    original_open = main._open_spreadsheet
+    note_field["_open_spreadsheet"] = original_open
 
-    def open_terukur(*a, **kw):
-        sh = asli_open(*a, **kw)
-        asli_ws = sh.worksheet
+    def instrumented_open(*a, **kw):
+        sh = original_open(*a, **kw)
+        original_ws = sh.worksheet
 
-        def worksheet_terukur(title):
-            ws = asli_ws(title)
-            asli_update = ws.update
+        def instrumented_worksheet(title):
+            ws = original_ws(title)
+            original_update = ws.update
 
-            def update_terukur(*ua, **ukw):
+            def instrumented_update(*ua, **ukw):
                 t0 = time.perf_counter()
                 try:
-                    return asli_update(*ua, **ukw)
+                    return original_update(*ua, **ukw)
                 finally:
                     sample.stages["append"] = sample.stages.get("append", 0.0) + (
                         time.perf_counter() - t0)
 
-            ws.update = update_terukur
+            ws.update = instrumented_update
             return ws
 
-        sh.worksheet = worksheet_terukur
+        sh.worksheet = instrumented_worksheet
         return sh
 
-    main._open_spreadsheet = open_terukur
-    return catatan
+    main._open_spreadsheet = instrumented_open
+    return note_field
 
 
-def pulihkan(main, catatan: dict) -> None:
-    for nama, fungsi in catatan.items():
-        setattr(main, nama, fungsi)
+def restore_module(main, note_field: dict) -> None:
+    for name, function_name in note_field.items():
+        setattr(main, name, function_name)
 
 
-async def ukur_satu(main, client, nama: str, gambar: bytes):
+async def measure_one(main, client, name: str, image: bytes):
     """Ukur satu gambar melalui rantai produksi."""
     from sc03_latency import Sample
 
-    sample = Sample(file=nama)
-    catatan = pasang_pengukur(main, sample)
+    sample = Sample(file=name)
+    note_field = install_probe(main, sample)
 
     try:
-        t_awal = time.perf_counter()
+        t_start = time.perf_counter()
 
         t0 = time.perf_counter()
-        rec = await main.extract(client, nama, gambar, "")
+        rec = await main.extract(client, name, image, "")
         sample.stages["extract"] = time.perf_counter() - t0
 
-        rec = {**rec, "sumber_file": nama, "ref_id": f"sc03:{nama}"}
+        rec = {**rec, "sumber_file": name, "ref_id": f"sc03:{name}"}
 
         # write_cash_report menjalankan dedupe -> upload -> append. Waktu
         # upload dan append direkam oleh pembungkus di atas; sisanya adalah
         # dedupe (baca kolom Ref ID dan cari/buat folder serta spreadsheet).
         t0 = time.perf_counter()
-        hasil = await asyncio.to_thread(main.write_cash_report, rec, gambar, nama)
-        total_tulis = time.perf_counter() - t0
+        result = await asyncio.to_thread(main.write_cash_report, rec, image, name)
+        total_writes = time.perf_counter() - t0
 
-        terpakai = sample.stages.get("upload", 0.0) + sample.stages.get("append", 0.0)
-        sample.stages["dedupe"] = max(0.0, total_tulis - terpakai)
+        consumed = sample.stages.get("upload", 0.0) + sample.stages.get("append", 0.0)
+        sample.stages["dedupe"] = max(0.0, total_writes - consumed)
 
         # Tahap reply: waktu menyusun dan mengirim permintaan balasan.
         t0 = time.perf_counter()
-        await main.tg_send(client, 0, f"tersimpan di baris {hasil.get('row')}")
+        await main.tg_send(client, 0, f"tersimpan di baris {result.get('row')}")
         sample.stages["reply"] = time.perf_counter() - t0
 
         sample.ok = True
-        sample.status = hasil.get("status", "")
-        sample.row = hasil.get("row", 0)
+        sample.status = result.get("status", "")
+        sample.row = result.get("row", 0)
     except Exception as e:
         sample.ok = False
         sample.error = f"{type(e).__name__}: {e}"
     finally:
-        pulihkan(main, catatan)
+        restore_module(main, note_field)
 
     return sample

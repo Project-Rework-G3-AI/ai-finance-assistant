@@ -29,35 +29,35 @@ b.jpg,True,,ok,3,7.0,1.0,0.0,0.5,0.0,8.5,8.5
 """
 
 
-def tulis_sampel(out: Path, isi: str = SAMPLES) -> None:
+def write_sample(out: Path, content: str = SAMPLES) -> None:
     out.mkdir(parents=True, exist_ok=True)
-    (out / "sc03_samples.csv").write_text(isi, encoding="utf-8")
+    (out / "sc03_samples.csv").write_text(content, encoding="utf-8")
 
 
 # --------------------------------------------- tanpa sampel
 
 def test_missing_samples_reports_not_measured(tmp_path):
     """Tanpa sampel, laporan harus bilang belum diukur, bukan menebak."""
-    hasil = sc_runner.write_sc03_report([], tmp_path)
-    teks = (tmp_path / "sc03_report.txt").read_text(encoding="utf-8")
-    assert "BELUM DIUKUR" in teks
-    assert hasil["result"] is None
+    result = sc_runner.write_sc03_report([], tmp_path)
+    text = (tmp_path / "sc03_report.txt").read_text(encoding="utf-8")
+    assert "BELUM DIUKUR" in text
+    assert result["result"] is None
 
 
 def test_missing_samples_explains_why_and_how(tmp_path):
     """Pembaca harus tahu kenapa tidak bisa dihitung dan apa yang harus dilakukan."""
     sc_runner.write_sc03_report([], tmp_path)
-    teks = (tmp_path / "sc03_report.txt").read_text(encoding="utf-8")
-    assert "tidak bisa dihitung ulang" in teks
-    assert "_sc03_run.py" in teks
+    text = (tmp_path / "sc03_report.txt").read_text(encoding="utf-8")
+    assert "tidak bisa dihitung ulang" in text
+    assert "_sc03_run.py" in text
 
 
 # --------------------------------------------- dengan sampel
 
 def test_report_uses_the_samples_on_disk(tmp_path):
-    tulis_sampel(tmp_path)
-    hasil = sc_runner.write_sc03_report([], tmp_path)
-    c = hasil["result"]
+    write_sample(tmp_path)
+    result = sc_runner.write_sc03_report([], tmp_path)
+    c = result["result"]
     assert c["measured"] == 2
     # rata-rata (4.5 + 8.5) / 2 = 6.5 -> di atas target 5 detik
     assert c["mean_stored"] == pytest.approx(6.5)
@@ -65,7 +65,7 @@ def test_report_uses_the_samples_on_disk(tmp_path):
 
 
 def test_report_writes_both_output_files(tmp_path):
-    tulis_sampel(tmp_path)
+    write_sample(tmp_path)
     sc_runner.write_sc03_report([], tmp_path)
     assert (tmp_path / "sc03_report.txt").exists()
     assert (tmp_path / "sc03_metrics.json").exists()
@@ -73,7 +73,7 @@ def test_report_writes_both_output_files(tmp_path):
 
 def test_metrics_json_contains_the_judged_number(tmp_path):
     """Angka yang dipakai menilai harus bisa diperiksa ulang dari JSON."""
-    tulis_sampel(tmp_path)
+    write_sample(tmp_path)
     sc_runner.write_sc03_report([], tmp_path)
     c = json.loads((tmp_path / "sc03_metrics.json").read_text(encoding="utf-8"))
     assert "mean_stored" in c
@@ -82,10 +82,10 @@ def test_metrics_json_contains_the_judged_number(tmp_path):
 
 
 def test_failed_rows_are_excluded_from_the_average(tmp_path):
-    isi = SAMPLES + 'c.jpg,False,APIError,,0,0,0,0,0,0,0,0\n'
-    tulis_sampel(tmp_path, isi)
-    hasil = sc_runner.write_sc03_report([], tmp_path)
-    c = hasil["result"]
+    content = SAMPLES + 'c.jpg,False,APIError,,0,0,0,0,0,0,0,0\n'
+    write_sample(tmp_path, content)
+    result = sc_runner.write_sc03_report([], tmp_path)
+    c = result["result"]
     assert c["measured"] == 2
     assert c["failed"] == 1
     assert c["mean_stored"] == pytest.approx(6.5)
@@ -93,10 +93,10 @@ def test_failed_rows_are_excluded_from_the_average(tmp_path):
 
 def test_report_does_not_claim_reply_was_measured(tmp_path):
     """Harness me-mock Telegram, jadi reply tidak boleh dilaporkan sebagai angka."""
-    tulis_sampel(tmp_path)
+    write_sample(tmp_path)
     sc_runner.write_sc03_report([], tmp_path)
-    teks = (tmp_path / "sc03_report.txt").read_text(encoding="utf-8")
-    assert "tidak diukur" in teks
+    text = (tmp_path / "sc03_report.txt").read_text(encoding="utf-8")
+    assert "tidak diukur" in text
 
 
 # --------------------------------------------- pemilihan kriteria

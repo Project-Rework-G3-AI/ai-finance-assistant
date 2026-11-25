@@ -211,6 +211,25 @@ Repo ini punya dua lapis pengujian. Yang pertama gratis dan cepat, jadi bisa
 dijalankan sesering apa pun. Yang kedua memanggil model berbayar, jadi harus
 diminta secara eksplisit.
 
+### Aturan bahasa kode testing
+
+Identifier di `tests/` wajib bahasa Inggris: nama fungsi, kelas, variabel,
+argumen, dan konstanta. Docstring, komentar, dan pesan ke pengguna tetap bahasa
+Indonesia.
+
+```python
+def install_fakes(app, ws):          # benar
+    """Arahkan aplikasi ke Sheets tiruan."""   # prosa tetap Indonesia
+```
+
+Aturan ini ditegakkan `tests/test_code_language.py`, jadi melanggarnya membuat
+`pytest` gagal. Pemeriksaan hanya menyentuh direktori `tests/`; kode produksi di
+`main.py` dan `cash_report/` tidak diperiksa dan tidak boleh diubah namanya demi
+aturan ini.
+
+Kata yang sah dalam dua bahasa (`target`, `total`, `data`, `main`) tidak
+dianggap pelanggaran.
+
 ### Test cepat (gratis, sekitar 1 detik)
 
 ```bash
