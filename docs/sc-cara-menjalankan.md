@@ -12,6 +12,7 @@ Kriteria yang sudah bisa diukur:
 | SC-02 | Kelengkapan field wajib | sudah |
 | SC-03 | Waktu proses sampai tersimpan | sudah, perlu kredensial Google |
 | SC-04 | Biaya per gambar | sudah, perlu kredensial + kurs |
+| SC-05 | Bukti berulang tidak mencatat ganda | sudah, tanpa kredensial |
 | SC-05 | Duplikat ditolak | belum |
 | SC-06 | Semua kolom wajib terpetakan | belum |
 | SC-07 | Waktu satu periode vs manual | belum, tidak dapat diotomasi |
@@ -118,6 +119,7 @@ python3 tests/sc_runner.py --sc01          # SC-01 saja
 python3 tests/sc_runner.py --sc02          # SC-02 saja
 python3 tests/sc_runner.py --sc03          # SC-03 saja (melaporkan hasil ukur)
 python3 tests/sc_runner.py --sc04          # SC-04 saja (melaporkan biaya)
+python3 tests/sc_runner.py --sc05          # SC-05 saja (uji duplikat)
 python3 tests/sc_runner.py --all           # semua kriteria, eksplisit
 ```
 
@@ -155,6 +157,20 @@ PRICE_COMPLETION_USD = 0.0000006
 Biaya tidak pernah disimpan, selalu diturunkan dari token x tarif x kurs. Jadi
 mengubah tarif atau kurs langsung mengubah laporan tanpa mengukur ulang. Lihat
 `docs/sc04-hasil-evaluasi.md`.
+
+**SC-05 tidak butuh apa pun.** Gratis, tanpa kredensial, tanpa dataset, tanpa
+jaringan:
+
+```bash
+python3 tests/sc_runner.py --sc05
+```
+
+`handle_update` dan `write_cash_report` dari `main.py` dipanggil apa adanya;
+hanya Telegram, Google Sheets, dan ekstraksi AI yang diganti tiruan. Tiga
+skenario diuji: kirim ulang berkas yang sama (harus ditolak), isi sama dengan
+`file_id` berbeda (temuan terhadap BRD), dan gambar berbeda sebagai kendali
+(harus tetap tercatat). Kendali itu wajib, karena tanpa itu dedup yang menolak
+semua kiriman akan tampak lulus. Lihat `docs/sc05-hasil-evaluasi.md`.
 
 Tanpa flag berarti semua kriteria yang tersedia. Ini disengaja: kriteria
 saling setara, jadi tidak ada alasan menjadikan salah satunya bawaan. Ketiga
@@ -270,6 +286,8 @@ Hapus berkas itu, atau jalankan dengan --restart.
 | `sc-out/sc04_report.txt` | SC-04: biaya per gambar dan token |
 | `sc-out/sc04_metrics.json` | SC-04 dalam bentuk JSON |
 | `sc-out/sc04_samples.csv` | SC-04: token per gambar (tanpa biaya) |
+| `sc-out/sc05_report.txt` | SC-05: tiap skenario duplikat dan jumlah baris |
+| `sc-out/sc05_metrics.json` | SC-05 dalam bentuk JSON |
 | `sc-out/results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
 
 Folder `sc-out/` dan `dataset/` masuk `.gitignore` karena berisi data transaksi.

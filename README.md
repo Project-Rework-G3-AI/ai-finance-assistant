@@ -218,8 +218,8 @@ pytest
 ```
 
 Menjalankan test rumus metrik SC-01, aturan penilaian SC-02, perhitungan waktu
-SC-03, perhitungan biaya SC-04, tata cara runner, penamaan, serta validasi
-dataset. Tidak memanggil AI, tidak butuh jaringan, tidak butuh dataset. Ini yang
+SC-03, perhitungan biaya SC-04, penolakan duplikat SC-05, tata cara runner,
+penamaan, serta validasi dataset. Tidak memanggil AI, tidak butuh jaringan, tidak butuh dataset. Ini yang
 aman dijalankan di CI.
 
 ### Evaluasi kriteria keberhasilan
@@ -227,15 +227,17 @@ aman dijalankan di CI.
 Kriteria keberhasilan (SC) pada BRD diukur dengan satu set data dan satu runner.
 Yang berbeda hanya cara menilainya.
 
+Target di bawah dikutip dari tabel Success Criteria pada BRD bagian 6.
+
 | Kriteria | Yang diukur | Target | Status | Butuh |
 |---|---|---|---|---|
-| SC-01 | Akurasi usulan kategori | ≥85% | sudah | kunci AI |
-| SC-02 | Kelengkapan field wajib | ≥90% | sudah | kunci AI |
-| SC-03 | Waktu proses sampai tersimpan | <5 detik | sudah | kunci AI + Google Sheets |
-| SC-04 | Biaya per gambar | <Rp50 | sudah | kunci AI + kurs |
-| SC-05 | Duplikat ditolak | — | belum | — |
-| SC-06 | Semua kolom wajib terpetakan | — | belum | — |
-| SC-07 | Waktu satu periode vs manual | — | belum, tidak dapat diotomasi | — |
+| SC-01 | Akurasi usulan kategori | Minimal 85% | sudah | kunci AI |
+| SC-02 | Kelengkapan field wajib | Minimal 90% | sudah | kunci AI |
+| SC-03 | Waktu proses sampai tersimpan | Rata-rata di bawah 5 detik | sudah | kunci AI + Google Sheets |
+| SC-04 | Biaya per gambar | Di bawah Rp50 per gambar | sudah | kunci AI + kurs |
+| SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | sudah | tidak ada |
+| SC-06 | Semua kolom wajib terpetakan | Tidak ada kolom wajib yang hilang | belum | tidak ada |
+| SC-07 | Waktu satu periode vs manual | Di bawah 1 hari kerja | belum, tidak dapat diotomasi | manusia |
 
 SC-01 dan SC-02 mengukur **isi** hasil ekstraksi, jadi bisa dihitung ulang dari
 `results_per_row.csv` kapan saja tanpa biaya.
@@ -260,6 +262,7 @@ python3 tests/sc_runner.py --sc01          # SC-01 saja
 python3 tests/sc_runner.py --sc02          # SC-02 saja
 python3 tests/sc_runner.py --sc03          # SC-03 saja
 python3 tests/sc_runner.py --sc04          # SC-04 saja
+python3 tests/sc_runner.py --sc05          # SC-05 saja
 python3 tests/sc_runner.py --metrics-only  # hitung ulang tanpa biaya
 python3 tests/sc_runner.py --repeat 3      # lihat sebaran antar-run
 ```
@@ -307,6 +310,34 @@ tidak memanggil model. Kalau sampelnya belum ada, laporannya bilang
 sandbox terpisah, bukan folder Cash Report perusahaan. Jangan arahkan ke folder
 perusahaan.
 
+### SC-05 tidak butuh apa pun
+
+SC-05 menguji bahwa berkas yang dikirim berulang tidak menghasilkan dua baris.
+Kriterianya gratis dan tidak butuh kredensial, dataset, maupun jaringan:
+
+```bash
+python3 tests/sc_runner.py --sc05
+```
+
+Pengukurannya memanggil `handle_update` dan `write_cash_report` dari `main.py`
+apa adanya. Yang diganti hanya tiga hal di luar aplikasi: Telegram, Google
+Sheets, dan ekstraksi AI. Logika dedup yang dinilai tetap yang sebenarnya.
+
+Tiga skenario diuji, dan yang ketiga bukan pelengkap:
+
+| Skenario | Harapan |
+|---|---|
+| Kirim ulang berkas yang sama | ditolak |
+| Isi sama, `file_id` berbeda | ditolak menurut BRD, dilaporkan sebagai temuan |
+| Gambar berbeda | tetap dicatat |
+
+Skenario ketiga adalah **kendali**. Tanpa itu, dedup yang menolak semua kiriman
+akan tampak lulus sempurna padahal merusak aplikasi.
+
+Skenario kedua dilaporkan sebagai **temuan**, bukan dipakai menghukum. BRD
+menyebut pengenalan duplikat lewat hash berkas, sedangkan kode memakai identitas
+berkas dari Telegram. Selisih itu dicatat apa adanya.
+
 **SC-04 menghitung uang.** Tarif model dan kurs adalah masukannya, dan keduanya
 bisa disesuaikan:
 
@@ -342,6 +373,8 @@ Hasil ada di `sc-out/`:
 | `sc03_metrics.json` | SC-03 dalam bentuk JSON |
 | `sc04_report.txt` | SC-04: biaya per gambar dan token |
 | `sc04_metrics.json` | SC-04 dalam bentuk JSON |
+| `sc05_report.txt` | SC-05: tiap skenario duplikat dan jumlah baris tersimpan |
+| `sc05_metrics.json` | SC-05 dalam bentuk JSON |
 | `results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
 | `sc03_samples.csv` | SC-03: waktu per gambar dan pecahan tahap (bahan laporan SC-03) |
 | `sc04_samples.csv` | SC-04: token per gambar (bahan laporan SC-04) |
@@ -369,6 +402,7 @@ Hasil pengukuran tiap kriteria:
 | SC-02 | [`docs/sc02-hasil-evaluasi.md`](docs/sc02-hasil-evaluasi.md) |
 | SC-03 | [`docs/sc03-hasil-evaluasi.md`](docs/sc03-hasil-evaluasi.md) |
 | SC-04 | [`docs/sc04-hasil-evaluasi.md`](docs/sc04-hasil-evaluasi.md) |
+| SC-05 | [`docs/sc05-hasil-evaluasi.md`](docs/sc05-hasil-evaluasi.md) |
 
 ## Batasan (milestone 1)
 

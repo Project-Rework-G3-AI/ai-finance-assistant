@@ -438,6 +438,39 @@ def write_sc03_report(results: list[dict], out: Path) -> dict:
     return {"result": c, "text": teks}
 
 
+def write_sc05_report(results: list[dict], out: Path) -> dict:
+    """Jalankan SC-05 dan tulis laporannya.
+
+    Berbeda dari SC-01 sampai SC-04, kriteria ini **tidak butuh apa pun** dari
+    luar: tanpa kunci AI, tanpa Google, tanpa dataset, tanpa jaringan. Karena itu
+    ia dijalankan langsung di sini, bukan menunggu sampel dari harness terpisah.
+    """
+    import asyncio
+
+    import sc05_dedupe as sc05
+
+    try:
+        import main as app
+    except Exception as e:  # noqa: BLE001
+        teks = ("SC-05 — Bukti transaksi berulang tidak mencatat ganda\n"
+                + "=" * 60 + "\n"
+                "Status             : BELUM DIUKUR\n\n"
+                f"Modul aplikasi tidak bisa dimuat: {type(e).__name__}: {e}\n")
+        (out / "sc05_report.txt").write_text(teks, encoding="utf-8")
+        return {"result": None, "text": teks}
+
+    cases = asyncio.run(sc05.ukur(app, 5))
+    c = sc05.compute(cases)
+    teks = sc05.report(
+        c, "Sumber data: `handle_update` dan `write_cash_report` dari main.py "
+           "dipanggil apa adanya; Telegram, Google Sheets, dan ekstraksi AI "
+           "diganti tiruan. Yang dinilai adalah logika dedup yang sebenarnya.")
+    (out / "sc05_report.txt").write_text(teks, encoding="utf-8")
+    (out / "sc05_metrics.json").write_text(
+        json.dumps(c, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"result": c, "text": teks}
+
+
 def write_sc04_report(results: list[dict], out: Path) -> dict:
     """Laporkan SC-04 dari token yang sudah direkam.
 
@@ -547,7 +580,7 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
     return {"result": c, "text": text}
 
 
-AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03", "sc04")
+AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03", "sc04", "sc05")
 
 
 def selected_criteria(args) -> list[str]:
@@ -580,6 +613,7 @@ def run_reports(results: list[dict], out: Path, criteria: list[str]) -> dict[str
         "sc02": write_sc02_report,
         "sc03": write_sc03_report,
         "sc04": write_sc04_report,
+        "sc05": write_sc05_report,
     }
     return {name: builders[name](results, out) for name in criteria}
 
@@ -639,6 +673,8 @@ def main_cli() -> int:
                       help="ukur waktu proses sampai tersimpan (SC-03) saja")
     pick.add_argument("--sc04", action="store_true",
                       help="ukur biaya per gambar (SC-04) saja")
+    pick.add_argument("--sc05", action="store_true",
+                      help="uji penolakan duplikat (SC-05) saja")
     pick.add_argument("--all", action="store_true",
                       help="ukur semua kriteria yang tersedia (sama dengan tanpa flag)")
     a = ap.parse_args()
@@ -672,7 +708,7 @@ def main_cli() -> int:
         # SC-03 tidak punya hasil ekstraksi untuk dibaca ulang: waktu tidak
         # tersimpan di CSV hasil. Kalau hanya SC-03 yang diminta, cukup
         # rangkum sampel waktunya tanpa menyentuh `results_per_row.csv`.
-        if criteria in (["sc03"], ["sc04"]):
+        if criteria in (["sc03"], ["sc04"], ["sc05"]):
             reports = run_reports([], out, criteria)
             print(join_reports(reports))
             return 0
@@ -686,7 +722,7 @@ def main_cli() -> int:
     # SC-03 mengukur waktu, bukan isi. Waktunya sudah direkam harness pengukur,
     # jadi meminta SC-03 saja tidak boleh menuntut kunci model: laporan SC-03
     # hanya merangkum sampel yang sudah ada.
-    if criteria in (["sc03"], ["sc04"]):
+    if criteria in (["sc03"], ["sc04"], ["sc05"]):
         # Keduanya mengukur hal yang tidak tersimpan di hasil ekstraksi: waktu
         # dan token. Laporannya hanya merangkum sampel yang sudah ada, jadi
         # tidak perlu memanggil model dan tidak boleh mencetak banner "hasil

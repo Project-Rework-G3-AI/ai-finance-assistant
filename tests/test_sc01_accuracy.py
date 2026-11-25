@@ -135,13 +135,24 @@ def test_empty_input_is_rejected():
 
 # ------------------------------------------------- batas ruang lingkup SC-01
 
-def test_runner_does_not_write_to_sheets_or_drive():
+def test_runner_does_not_write_to_sheets_or_drive(monkeypatch):
     """SC-01 hanya mengukur akurasi, jadi jalur tulis Google tidak boleh dipanggil.
 
     Bila suatu saat runner ikut memanggil write_cash_report, test ini gagal dan
     mencegah spreadsheet perusahaan tercemar saat evaluasi.
+
+    Dua hal yang dulu salah di sini dan sekarang diperbaiki:
+
+    1. Jebakannya dipasang dengan `setattr` tanpa dipulihkan, sehingga modul
+       `main` tetap membawa jebakan itu untuk test berikutnya. Akibatnya test
+       lain yang memang perlu memanggil `write_cash_report` (SC-05) gagal.
+       Sekarang memakai `monkeypatch`, yang memulihkan otomatis.
+    2. Assertion-nya diperiksa tepat setelah jebakan dipasang, tanpa pernah
+       memanggil apa pun, jadi selalu lulus dan tidak membuktikan apa pun.
+       Sekarang `run_pairs` benar-benar dijalankan.
     """
     import main  # noqa: E402
+    import sc_runner  # noqa: E402
 
     called: list[str] = []
     for name in ("write_cash_report", "upload_drive", "push_pending", "flush_pending"):
@@ -149,12 +160,16 @@ def test_runner_does_not_write_to_sheets_or_drive():
             def _trap(*a, _n=name, **kw):
                 called.append(_n)
                 raise AssertionError(f"{_n} dipanggil saat evaluasi SC-01")
-            setattr(main, name, _trap)
+            monkeypatch.setattr(main, name, _trap)
 
-    import sc_runner  # noqa: E402
+    # Jalankan dengan daftar pasangan kosong: tidak ada gambar yang diproses,
+    # tetapi jalur `run_pairs` benar-benar dieksekusi sehingga jebakan aktif.
+    import asyncio
+
+    asyncio.run(sc_runner.run_pairs([], Path("."), Path("/tmp/tidak-dipakai"),
+                                    restart=True))
 
     assert not called, f"fungsi tulis terpanggil: {called}"
-    assert hasattr(sc_runner, "run_pairs")
 
 
 # ------------------------------------------------------- eksekusi model asli
