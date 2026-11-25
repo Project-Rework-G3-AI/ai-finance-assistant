@@ -161,3 +161,27 @@ def test_bare_command_includes_sc04():
         sc04 = False
 
     assert "sc04" in sc_runner.selected_criteria(A())
+
+# --------------------- prompt cadangan harus sama dengan produksi
+
+
+def test_fallback_prompt_matches_production_prompt():
+    """Prompt cadangan di `_sc04_run.py` harus sama dengan prompt produksi.
+
+    SC-04 mengukur jumlah token, dan jumlah token ditentukan prompt. Bila
+    produksi mengubah prompt tetapi salinan cadangan tidak ikut diperbarui,
+    angka biaya yang dilaporkan bukan lagi biaya produksi.
+
+    Prompt diambil langsung dari `main.py` bila bisa diimpor, jadi test ini
+    membandingkan hasil jalur utama dengan salinan cadangannya.
+    """
+    import _sc04_run as sc04_run
+
+    produksi = sc04_run.production_prompt()
+
+    # Susun ulang prompt cadangan tanpa menyentuh main.py
+    cadangan = sc04_run.fallback_prompt()
+    assert cadangan == produksi, (
+        "Prompt cadangan di _sc04_run.py berbeda dari prompt di main.py. "
+        "Perbarui salinannya supaya token yang diukur tetap mewakili produksi.")
+

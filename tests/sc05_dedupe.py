@@ -78,6 +78,7 @@ class FakeWorksheet:
                  rows: list[list[str]] | None = None):
         self.title = title
         self.grid: list[list[str]] = [list(header or HEADER)]
+        self.formatted: list[tuple[str, dict]] = []
         for r in rows or []:
             self.grid.append(list(r))
 
@@ -102,6 +103,18 @@ class FakeWorksheet:
                 while len(target) <= j:
                     target.append("")
                 target[j] = v
+
+    def format(self, range_name: str = "", fmt: dict | None = None) -> None:
+        """Penyeragaman format kolom Tanggal. Tidak mengubah isi sel.
+
+        `write_cash_report` memanggil ini setelah append supaya kolom Tanggal
+        tidak tercampur format. Tiruan ini mencatat panggilannya saja, karena
+        yang diukur SC-05 adalah jumlah baris, bukan tampilan.
+
+        Sengaja tidak memakai nama `format` yang membayangi bawaan Python:
+        metode ini meniru gspread, jadi namanya harus sama.
+        """
+        self.formatted.append((range_name, fmt or {}))
 
     # --- pembantu untuk pemeriksaan ---
 
@@ -152,6 +165,11 @@ def restore_module(main, original: dict) -> None:
     """
     for name, value in original.items():
         setattr(main, name, value)
+
+
+def pending_path(main) -> Path:
+    """Lokasi antrean gagal milik aplikasi, dibaca sebelum modul diubah."""
+    return Path(getattr(main, "PENDING"))
 
 
 def install_fakes(main, ws: FakeWorksheet, image: bytes) -> dict:
@@ -243,10 +261,22 @@ async def run_case(main, case: Case) -> Case:
     """Kirim seluruh berkas pada satu skenario, hitung baris yang tersimpan."""
     ws = FakeWorksheet()
     original = install_fakes(main, ws, b"")
+    queue = pending_path(main)
+    before = queue.read_text(encoding="utf-8") if queue.exists() else ""
     try:
         await _send_all(main, case, ws)
     finally:
         restore_module(main, original)
+
+    # Tulisan yang gagal tidak melempar exception: `handle_update` menangkapnya
+    # dan menaruh transaksi di antrean gagal. Tanpa pemeriksaan ini, harness
+    # melaporkan "0 baris tersimpan" seolah duplikatnya ditolak, padahal
+    # penyebabnya kegagalan tulis. Pernah terjadi saat `ws.format` ditambahkan
+    # di produksi dan tiruan di sini belum punya metodenya.
+    after = queue.read_text(encoding="utf-8") if queue.exists() else ""
+    baru = [ln for ln in after.splitlines() if ln not in before.splitlines()]
+    if baru:
+        case.error = f"{len(baru)} transaksi gagal ditulis dan masuk antrean gagal"
     return case
 
 
@@ -357,9 +387,19 @@ def compute(cases: list[Case]) -> dict:
     control = [c for c in cases if c.requirement == "control"]
     findings = [c for c in cases if c.requirement == "finding"]
 
-    required_duplicates = sum(c.duplicates_expected for c in required)
-    required_rejected = sum(c.duplicate for c in required)
-    control_passes = sum(1 for c in control if c.matches_expectation)
+    # Kasus yang gagal diukur tidak boleh menyumbang angka apa pun. Kalau
+    # dihitung, kegagalan tulis akan tampak seperti duplikat yang berhasil
+    # ditolak, dan laporan bisa berbunyi TERCAPAI padahal tidak ada yang
+    # tersimpan sama sekali.
+    measured = [c for c in cases if not c.error]
+    required_ok = [c for c in required if not c.error]
+    control_ok = [c for c in control if not c.error]
+
+    required_duplicates = sum(c.duplicates_expected for c in required_ok)
+    required_rejected = sum(c.duplicate for c in required_ok)
+    control_passes = sum(1 for c in control_ok if c.matches_expectation)
+
+    failed_cases = [c.name for c in cases if c.error]
 
     result = {
         "cases": [
@@ -378,17 +418,26 @@ def compute(cases: list[Case]) -> dict:
         "control_passed": control_passes,
         "findings_rejected": sum(c.duplicate for c in findings),
         "findings_duplicates": sum(c.duplicates_expected for c in findings),
-        "measured": len(cases),
+        "measured": len(measured),
+        "failed_cases": failed_cases,
     }
     # Lulus hanya bila seluruh duplikat wajib ditolak DAN kendali tidak ikut
     # tertolak. Tanpa syarat kedua, dedup yang menolak segalanya akan lulus.
-    result["pass"] = bool(required) and bool(required_duplicates) \
+    # Syarat ketiga: tidak boleh ada kasus yang gagal diukur. Tanpa itu,
+    # kegagalan tulis menyamar sebagai keberhasilan menolak duplikat.
+    result["pass"] = (not failed_cases) and bool(required) \
+        and bool(required_duplicates) \
         and required_rejected == required_duplicates \
         and control_passes == len(control)
     return result
 
 
 def verdict(c: dict) -> str:
+    # Kegagalan pengukuran diperiksa lebih dulu: kalau seluruh kasus gagal,
+    # `measured` juga nol, dan urutan sebaliknya akan melaporkan "BELUM DIUKUR"
+    # seolah belum pernah dijalankan, padahal sudah dan gagal.
+    if c.get("failed_cases"):
+        return "GAGAL DIUKUR"
     if not c.get("measured"):
         return "BELUM DIUKUR"
     return "TERCAPAI" if c.get("pass") else "BELUM TERCAPAI"

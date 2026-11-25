@@ -125,3 +125,34 @@ def test_bare_command_includes_sc03():
         sc03 = False
 
     assert "sc03" in sc_runner.selected_criteria(A())
+
+# ------------------------- probe harus membungkus semua panggilan Sheets
+
+
+def test_probe_wraps_every_sheets_call_made_by_write_cash_report():
+    """Setiap panggilan Sheets di `write_cash_report` harus terukur.
+
+    Tahap `dedupe` dihitung sebagai sisa: total dikurangi `upload` dan `append`.
+    Kalau ada panggilan Sheets yang tidak dibungkus, durasinya masuk ke `dedupe`
+    dan laporan menyalahkan tahap yang salah. Ini pernah terjadi ketika produksi
+    menambahkan `ws.format(...)` untuk menyeragamkan format kolom Tanggal.
+    """
+    import re as _re
+
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "main.py").read_text(encoding="utf-8")
+    awal = source.index("def write_cash_report(")
+    akhir = source.index("\ndef push_pending(", awal)
+    badan = source[awal:akhir]
+
+    dipanggil = set(_re.findall(r"\bws\.([a-z_][a-z0-9_]*)\(", badan))
+    # `col_values` dipakai untuk pemeriksaan duplikat, dan memang bagian dedupe.
+    diukur = dipanggil - {"col_values"}
+
+    probe = (root / "tests" / "_sc03_probe.py").read_text(encoding="utf-8")
+    for metode in sorted(diukur):
+        assert f'"{metode}"' in probe or f'ws.{metode}' in probe or \
+            f"original_{metode}" in probe, (
+            f"`ws.{metode}()` dipanggil write_cash_report tetapi tidak dibungkus "
+            f"di _sc03_probe.py; durasinya akan salah masuk ke tahap dedupe.")
+

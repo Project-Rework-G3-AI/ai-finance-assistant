@@ -102,18 +102,28 @@ def production_prompt() -> str:
         exec(segment, {"KAT": main.KAT}, ns)  # noqa: S102
         return ns["prompt"]
     except Exception:
-        from cash_report import categories as KAT
+        return fallback_prompt()
 
-        return (
-            "Ekstrak data transaksi dari bukti ini. Balas HANYA JSON tanpa teks lain: "
-            '{"tanggal":"YYYY-MM-DD","keterangan":"...","nominal":number,'
-            '"arah":"masuk|keluar|transfer",'
-            f'"kategori":"satu dari: {KAT.PROMPT_KATEGORI}",'
-            '"bank":"kantong asal dana — salah satu dari: BRI, BNI, Jago, TUNAI; '
-            'kosong bila tidak terbaca",'
-            '"kantong_tujuan":"hanya bila arah=transfer — kantong tujuan: '
-            'BRI, BNI, Jago, TUNAI; kosong bila bukan transfer"}'
-        )
+
+def fallback_prompt() -> str:
+    """Salinan prompt produksi, dipakai bila `main.py` tidak bisa diimpor.
+
+    Dipisah menjadi fungsi sendiri supaya bisa dibandingkan langsung dengan
+    prompt produksi di test. Kalau `main.py` mengubah prompt, salinan ini harus
+    ikut diperbarui; test akan gagal bila tertinggal.
+    """
+    from cash_report import categories as KAT
+
+    return (
+        "Ekstrak data transaksi dari bukti ini. Balas HANYA JSON tanpa teks lain: "
+        '{"tanggal":"YYYY-MM-DD HH:MM:SS","keterangan":"...","nominal":number,'
+        '"arah":"masuk|keluar|transfer",'
+        f'"kategori":"satu dari: {KAT.PROMPT_KATEGORI}",'
+        '"bank":"kantong asal dana — salah satu dari: BRI, BNI, Jago, TUNAI; '
+        'kosong bila tidak terbaca",'
+        '"kantong_tujuan":"hanya bila arah=transfer — kantong tujuan: '
+        'BRI, BNI, Jago, TUNAI; kosong bila bukan transfer"}'
+    )
 
 
 async def measure_one(client, key: str, base: str, model: str, prompt: str,

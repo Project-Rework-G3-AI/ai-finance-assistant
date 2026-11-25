@@ -132,6 +132,23 @@ def install_probe(main, sample) -> dict:
                         time.perf_counter() - t0)
 
             ws.update = instrumented_update
+
+            # `write_cash_report` menyeragamkan format kolom Tanggal setelah
+            # append. Itu panggilan Sheets tersendiri, jadi waktunya dihitung
+            # sebagai bagian dari menulis baris. Sebelum ini dibungkus, durasinya
+            # jatuh ke tahap `dedupe` karena dihitung sebagai sisa, sehingga
+            # laporan menyalahkan dedupe atas waktu tulis.
+            original_format = getattr(ws, "format", None)
+            if original_format is not None:
+                def instrumented_format(*fa, **fkw):
+                    t0 = time.perf_counter()
+                    try:
+                        return original_format(*fa, **fkw)
+                    finally:
+                        sample.stages["append"] = sample.stages.get("append", 0.0) + (
+                            time.perf_counter() - t0)
+
+                ws.format = instrumented_format
             return ws
 
         sh.worksheet = instrumented_worksheet

@@ -245,3 +245,55 @@ def test_only_one_row_per_image_is_stored(app_with_sheet):
     ref = ws.ref_ids()
     assert len(ref) == 1
     assert ref[0] == "tg:idA"
+
+# ------------------------------------- tiruan harus cukup untuk produksi
+
+
+def test_fake_worksheet_supports_every_method_production_calls():
+    """Tiruan harus punya semua metode yang dipanggil `write_cash_report`.
+
+    Pernah gagal di sini: produksi menambahkan `ws.format(...)` untuk menyeragamkan
+    format kolom Tanggal, tiruan belum punya metodenya, dan seluruh penulisan
+    gagal dengan AttributeError. Seluruh test tetap hijau karena test menghitung
+    rumus, sementara harness yang memanggil jalur asli tidak dijalankan.
+
+    Test ini membandingkan metode yang benar-benar dipanggil produksi dengan yang
+    disediakan tiruan, supaya penambahan metode di produksi tidak lolos diam-diam.
+    """
+    import inspect
+    import re as _re
+
+    source = (ROOT / "main.py").read_text(encoding="utf-8")
+    awal = source.index("def write_cash_report(")
+    akhir = source.index("\ndef push_pending(", awal)
+    badan = source[awal:akhir]
+
+    # Metode worksheet yang dipanggil lewat variabel `ws`
+    dipanggil = set(_re.findall(r"\bws\.([a-z_][a-z0-9_]*)\(", badan))
+
+    ws = sc05.FakeWorksheet()
+    hilang = sorted(m for m in dipanggil if not hasattr(ws, m))
+    assert not hilang, (
+        f"FakeWorksheet belum punya metode yang dipanggil write_cash_report: "
+        f"{hilang}. Tambahkan tiruannya, kalau tidak seluruh penulisan gagal "
+        f"dan SC-05 melaporkan angka palsu.")
+
+
+def test_write_failure_is_not_counted_as_a_rejected_duplicate():
+    """Kegagalan tulis tidak boleh menyamar jadi duplikat yang berhasil ditolak.
+
+    `handle_update` menangkap kegagalan tulis dan menaruh transaksinya di
+    antrean gagal, bukan melempar exception. Kalau harness tidak memeriksa
+    antrean itu, nol baris tersimpan akan terbaca sebagai "duplikat ditolak".
+    """
+    kasus = sc05.Case(
+        name="rusak", label="gagal tulis", requirement="required",
+        expected_rows=1, upload_item=[])
+    kasus.row = 0
+    kasus.error = "3 transaksi gagal ditulis dan masuk antrean gagal"
+
+    hasil = sc05.compute([kasus])
+    assert hasil["failed_cases"] == ["rusak"]
+    assert hasil["pass"] is False
+    assert sc05.verdict(hasil) == "GAGAL DIUKUR"
+

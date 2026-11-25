@@ -13,7 +13,6 @@ Kriteria yang sudah bisa diukur:
 | SC-03 | Waktu proses sampai tersimpan | sudah, perlu kredensial Google |
 | SC-04 | Biaya per gambar | sudah, perlu kredensial + kurs |
 | SC-05 | Bukti berulang tidak mencatat ganda | sudah, tanpa kredensial |
-| SC-05 | Duplikat ditolak | belum |
 | SC-06 | Semua kolom wajib terpetakan | belum |
 | SC-07 | Waktu satu periode vs manual | belum, tidak dapat diotomasi |
 

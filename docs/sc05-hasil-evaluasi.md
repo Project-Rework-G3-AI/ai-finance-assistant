@@ -30,6 +30,27 @@ tercatat.
 Angka yang dinilai adalah **5 dari 5**, bukan "satu dari satu". Lima gambar
 berbeda masing-masing dikirim dua kali, sehingga penyebutnya punya arti.
 
+## Tiruan harus mengikuti produksi
+
+Harness ini memanggil `handle_update` dan `write_cash_report` yang asli, jadi
+tiruan worksheet-nya harus punya **semua** metode yang dipanggil produksi.
+
+Pernah gagal di sini. Produksi menambahkan `ws.format(...)` untuk menyeragamkan
+format kolom Tanggal. Tiruan belum punya metodenya, sehingga seluruh penulisan
+gagal dengan `AttributeError`. Yang terjadi kemudian justru lebih berbahaya:
+`handle_update` menangkap kegagalan itu dan menaruh transaksinya di antrean
+gagal, bukan melempar exception. Harness melihat nol baris tersimpan dan
+membacanya sebagai "duplikat ditolak" — laporan berbunyi **TERCAPAI** padahal
+tidak ada satu pun baris yang tersimpan.
+
+Dua penjaga sekarang ada di tempatnya:
+
+1. `test_fake_worksheet_supports_every_method_production_calls` membandingkan
+   metode yang dipanggil `write_cash_report` dengan yang disediakan tiruan.
+2. Harness memeriksa antrean gagal sebelum dan sesudah tiap skenario. Bila ada
+   transaksi masuk antrean, kasus itu ditandai gagal diukur, angkanya tidak
+   dihitung, dan statusnya **GAGAL DIUKUR** — bukan TERCAPAI.
+
 ## Kendali, dan kenapa itu wajib
 
 Skenario ketiga mengirim lima gambar **berbeda**, masing-masing sekali. Semuanya

@@ -8,35 +8,48 @@ Deploy aktif: https://ai-finance-assistant-z473.onrender.com/health — detail d
 
 ```mermaid
 flowchart LR
-    U["Pengguna<br/>(Finance/Admin)"] -->|"kirim foto + caption"| TG["Telegram API<br/>(cloud)"]
-    TG -->|"getUpdates<br/>long polling, koneksi keluar"| BOT["Bot — main.py<br/>FastAPI + asyncio<br/>(berjalan di lokal)"]
+    U["Pengguna<br/>(Finance/Admin)"] -->|"foto · teks · PDF"| TG["Telegram API<br/>(cloud)"]
+    TG -->|"getUpdates<br/>long polling"| BOT["Bot — main.py<br/>FastAPI + asyncio<br/>(Render; lokal = fallback uji)"]
+    BOT -.->|"error / log"| SEN["Sentry<br/>(observability)"]
+    BOT --> ROUT{"jenis<br/>pesan?"}
 
-    BOT -->|"baca gambar"| EXT{"Ekstraksi"}
+    ROUT -->|"gambar"| EXT{"Ekstraksi"}
     EXT -->|"AI_API_KEY terisi"| VIS["Vision LLM<br/>(chat/completions)"]
     EXT -->|"tanpa AI / AI gagal"| MOCK["Mock<br/>nama file + caption"]
     VIS -.->|"gagal → fallback"| MOCK
 
-    BOT -->|"Ref ID (kolom I) duplikat?"| DUP{"sudah<br/>ada?"}
+    EXT -->|"Ref ID (kolom I) duplikat?"| DUP{"sudah<br/>ada?"}
     DUP -->|"ya"| SKIP["balasan: dilewati"]
     DUP -->|"tidak"| CR[("Cash Report {tahun}<br/>sheet TRANSAKSI<br/>(cloud, SA)")]
 
+    ROUT -->|"PDF mutasi bank"| REC["Rekonsiliasi (reconciliation/)<br/>render → vision → validasi saldo<br/>→ matching tgl + kantong + nominal"]
+    REC -->|"baca periode"| CR
+    REC --> RC[("tab RECONCILIATION<br/>replace per bank+rekening+periode")]
+    REC -->|"balasan + link tab"| U
+
+    ROUT -->|"teks"| QA["Tanya-jawab (qa.py)<br/>/total · /rekap · /help deterministik<br/>bahasa bebas → satu tool-calling"]
+    QA -->|"baca saja (read-only)"| CR
+    QA -->|"balasan"| U
+
     CR -->|"cari/copy template"| YR["Folder tahun +<br/>file Cash Report {tahun}<br/>(Drive OAuth)"]
     CR -->|"upload foto baru<br/>(opsional)"| DRIVE["Google Drive<br/>Receipts · kolom Link Bukti"]
-    CR -->|"gagal"| PEND["pending.jsonl<br/>(lokal)"]
+    CR -->|"gagal"| PEND["pending.jsonl<br/>(disk bot)"]
     PEND -->|"retry tiap siklus"| CR
 
     CR -->|"review manual:<br/>draft → verified"| U
-    W["Browser lokal<br/>GET /health<br/>POST /api/extract"] --> BOT
+    W["Browser lokal<br/>GET /health<br/>POST /api/extract<br/>POST /api/reconcile"] --> BOT
 
     classDef cloud fill:#1e3a5f,stroke:#3b82f6,color:#fff
     classDef local fill:#14532d,stroke:#22c55e,color:#fff
-    class TG,CR,VIS,DRIVE,YR cloud
+    class TG,CR,VIS,DRIVE,YR,RC,SEN cloud
     class BOT,MOCK,PEND,W local
 ```
 
-- Satu proses di lokal: polling Telegram + endpoint API berjalan bersamaan; semua koneksi **keluar** (internet), tanpa server publik.
+- **Routing pesan**: foto → ekstraksi (milestone 1); PDF mutasi → rekonsiliasi (milestone 2); teks → tanya-jawab `/total` `/rekap` `/help` + bahasa bebas via tool-calling (milestone 3). Semua dalam satu proses `main.py` — polling Telegram + endpoint API bersamaan, koneksi **keluar** semua, tanpa server publik.
 - Mode vision (AI) dipakai bila `AI_API_KEY` ada; selalu fallback ke mock agar alur tidak pernah putus.
 - **Split kredensial**: Drive (cari folder, copy template, upload foto) = OAuth user; sel/tab Cash Report = service account. `pending.jsonl` = penahan gagal, bukan penyimpanan utama.
+- Tanya-jawab **hanya membaca** TRANSAKSI; rekonsiliasi hanya menulis tab RECONCILIATION — tidak pernah mengubah baris transaksi. Error apa pun dilaporkan ke Sentry.
+- Warna: biru = layanan cloud (Telegram/Google/Sentry); hijau = milik bot (proses & file — di Render, atau lokal saat uji).
 
 ## Setup
 
@@ -154,17 +167,17 @@ python oauth_init.py
 
 Verifikasi: `/health` → `"drive": true`; kirim foto → balasan ada tautan "Bukti transfer" dan baris Cash Report punya isi kolom Link Bukti.
 
-Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan hanya bila tulis Cash Report sukses. Gagal unggah Drive tidak mematikan proses — kolom dibiarkan kosong, error muncul di log. Refresh token tidak kedaluwarsa selama tidak dicabut (atau password Gmail diganti).
+Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan hanya bila tulis Cash Report sukses. Gagal unggah Drive tidak mematikan proses — kolom dibiarkan kosong, error muncul di log. **Refresh token OAuth aplikasi status Testing di Google Cloud kedaluwarsa7 hari** (terbukti25Nov2026: Sentry `invalid_grant: Token has been expired or revoked`). Pemulihan: `python oauth_init.py` lokal → salin refresh token baru → update `GOOGLE_OAUTH_REFRESH_TOKEN` di Environment Render → restart; antrean `pending.jsonl` di-flush otomatis. Supaya tidak berulang tiap minggu: pindahkan aplikasi ke status Production (tanpa review; butuh URL privacy policy/ToS) atau ganti jalur Drive ke Apps Script (Opsi2).
 
 ## Alur
 
 - Kirim **foto ke bot dalam satu pesan**, dengan caption (opsional, mis. `Rp195.000 penjualan satvika`). Caption dipakai sebagai konteks ekstraksi **dan digabung ke Keterangan** (`hasil LLM — caption`, bila keduanya berbeda).
   - Caption yang dikirim sebagai pesan terpisah **tidak** terbaca bot — selalu satu paket foto + caption.
-- Mode vision (AI): gambar + caption dikirim bersama ke AI → field diisi AI (`bank` = **kantong asal** BRI/BNI/Jago/TUNAI; transfer menghasilkan `arah=transfer` + `kantong_tujuan`; kosong → `CR_DEFAULT_BANK`).
+- Mode vision (AI): gambar + caption dikirim bersama ke AI → field diisi AI (`bank` = **kantong asal** BRI/BNI/Jago/TUNAI; transfer menghasilkan `arah=transfer` + `kantong_tujuan`; kosong → `CR_DEFAULT_BANK` — balasan draft menambah peringatan ⚠️ supaya reviewer sadar).
 - Mode mock (tanpa AI): gambar tidak dibaca; tanggal dari nama file, nominal/arah dari caption, keterangan = caption.
 - Bot ekstrak → **pipeline Cash Report**: folder tahun (buat bila perlu) → file `Cash Report <tahun>` (copy template bila baru + tulis sel periode) → sheet `TRANSAKSI` → cek duplikat (Ref ID, kolom I) → upload foto ke Receipts → tulis baris A–K (transfer = 2 baris berpasangan, Ref ID sama) → balasan status + tautan bukti.
 - Sheet `TRANSAKSI` tidak ada (template salah) atau tulis gagal → antre `pending.jsonl`, retry otomatis tiap siklus polling.
-- Review: ubah kolom `Status` (G) `draft` → `verified` setelah dicek. **Angka AI belum dipakai sebelum verified.**
+- Review: ubah kolom `Status` (G) `draft` → `verified` setelah dicek. **Angka AI belum dipakai sebelum verified.** Saat mengoreksi kantong (mis. dari `TUNAI` default ke `BRI`), **rapikan juga kolom Catatan** — catatan lama `(kantong tidak terbaca — pakai default)` tetap tertinggal dan membingungkan.
 
 ## Skema kolom sheet TRANSAKSI (A–K)
 
@@ -180,7 +193,7 @@ Flat ledger — baris 1 header, data mulai baris 2, append di baris pertama kolo
 | F Keterangan | hasil ekstraksi LLM, caption digabung dengan ` — ` bila berbeda | reviewer boleh rapikan |
 | G Status | `draft` saat tulis; reviewer → `verified` | |
 | H Catatan | catatan sistem (bukan LLM): "wajib ditinjau", nilai tidak terbaca, anomali | |
-| I Ref ID | dedupe (`tg:…` / `manual:…`) | pasangan transfer memakai Ref ID sama |
+| I Ref ID | dedupe (`tg:<file_id>` / `manual:…`) — identitas = **konten file**: rename diabaikan, kompres ulang dianggap bukti baru (jaring review `draft`; rencana `doc:` di Pengembangan Berikutnya) | pasangan transfer memakai Ref ID sama |
 | J Sumber File | nama file foto asli dari Telegram | |
 | K Link Bukti | tautan foto di Drive (kosong bila fitur off/gagal) | |
 
@@ -192,6 +205,7 @@ Flat ledger — baris 1 header, data mulai baris 2, append di baris pertama kolo
 
 - `GET /health` — status telegram/sheets/ai/drive + antrean.
 - `POST /api/extract` `{filename, image_base64?, caption?}` — ekstraksi + tulis Cash Report tanpa bot (untuk uji cepat/web nanti).
+- `POST /api/reconcile` `{filename?, pdf_base64}` — rekonsiliasi PDF mutasi bank tanpa Telegram (lihat **Rekonsiliasi Mutasi**).
 
 ## Antrean Gagal (`pending.jsonl`)
 
@@ -275,6 +289,24 @@ kedua: hasil per gambar disimpan di `sc-out/` dan dilanjutkan dari situ. Runner
 mengumumkannya dengan jelas, dan mencatat asal angkanya di `sc-out/source.json`.
 Pakai `--restart` untuk benar-benar mengukur ulang dari nol.
 
+### Yang perlu diperiksa saat `main` berubah
+
+Test SC memanggil kode produksi apa adanya, jadi perubahan di `main.py` bisa
+membuat pengukuran salah tanpa ada test yang gagal. Tiga hal yang perlu dicek
+setiap kali `main` berubah:
+
+1. **Metode worksheet baru.** `write_cash_report` yang memanggil metode baru
+   (mis. `ws.format(...)`) akan gagal di worksheet tiruan SC-05. Harness
+   menandainya GAGAL DIUKUR, dan
+   `test_fake_worksheet_supports_every_method_production_calls` menangkapnya
+   lebih dulu.
+2. **Panggilan Sheets baru.** Panggilan tambahan di `write_cash_report` harus
+   dibungkus di `tests/_sc03_probe.py`, kalau tidak durasinya jatuh ke tahap
+   `dedupe` dan laporan SC-03 menyalahkan tahap yang salah.
+3. **Prompt ekstraksi.** `tests/_sc04_run.py` menyalin prompt produksi sebagai
+   cadangan. Salinan itu harus ikut diperbarui, kalau tidak jumlah token yang
+   diukur bukan lagi token produksi.
+
 ### SC-03 dan SC-04 perlu pengukuran sendiri
 
 SC-01 dan SC-02 membaca keluaran ekstraksi, jadi menambah kriteria itu tidak
@@ -322,6 +354,12 @@ python3 tests/sc_runner.py --sc05
 Pengukurannya memanggil `handle_update` dan `write_cash_report` dari `main.py`
 apa adanya. Yang diganti hanya tiga hal di luar aplikasi: Telegram, Google
 Sheets, dan ekstraksi AI. Logika dedup yang dinilai tetap yang sebenarnya.
+
+Karena jalur asli yang dipanggil, tiruan worksheet harus punya **semua** metode
+yang dipakai produksi. Bila produksi memakai metode baru, harness menandainya
+**GAGAL DIUKUR**, bukan TERCAPAI: kegagalan tulis tidak boleh terbaca sebagai
+duplikat yang berhasil ditolak. `test_fake_worksheet_supports_every_method_production_calls`
+menjaga hal ini.
 
 Tiga skenario diuji, dan yang ketiga bukan pelengkap:
 
@@ -403,22 +441,41 @@ Hasil pengukuran tiap kriteria:
 | SC-03 | [`docs/sc03-hasil-evaluasi.md`](docs/sc03-hasil-evaluasi.md) |
 | SC-04 | [`docs/sc04-hasil-evaluasi.md`](docs/sc04-hasil-evaluasi.md) |
 | SC-05 | [`docs/sc05-hasil-evaluasi.md`](docs/sc05-hasil-evaluasi.md) |
+## Tanya-jawab (milestone 3)
+
+Routing: foto/dokumen → jalur ekstraksi (tidak pernah lewat LLM); teks → command `/` dulu (deterministik, gratis), lalu bahasa bebas lewat **satu panggilan LLM tool-calling** (modul `cash_report/qa.py`).
+
+- `/total [bulan]` — total masuk/keluar, **default bulan berjalan** (contoh: `/total Nov`, `/total 2026-11`)
+- `/rekap [bulan]` — rincian per kategori (default bulan ini)
+- `/help` — bantuan; pertanyaan bebas, mis. `"berapa pengeluaran November kategori Listrik?"`
+
+Aturan main: tool **baca-saja** (`aggregate`, `list_rows`, `get_receipt`); angka dihitung kode, LLM hanya merangkai kalimat dan wajib menyebut sumber (periode + TRANSAKSI). Angka **verified dan draft disebut terpisah**, termasuk rincian transfer; transfer antar kantong dikecualikan dari total (konsisten dengan RECAP). Tanpa `AI_API_KEY` atau AI gagal → balasan bantuan; **tidak ada env baru, tidak ada database**.
+
+## Rekonsiliasi Mutasi (milestone 2)
+
+Kirim **file PDF mutasi bank** (BNI/BRI/Jago) ke bot, atau `POST /api/reconcile` (`{"pdf_base64": ...}`):
+
+1. PDF dirender per halaman → dibaca vision AI (JSON ketat, retry5xx) → divalidasi keras (total debit/kredit, saldo jalan, saldo akhir).
+2. Baris Cash Report periode itu dibaca (UNFORMATTED), cocok dengan kunci **(tanggal, kantong, debit, credit)** → status `matched` / `bank_only` / `sheet_only` / `needs_review`.
+3. Hasil ditulis ke tab **RECONCILIATION** — periode/bank sama → **diganti** (idempotent), tab TRANSAKSI tidak disentuh.
+
+Butuh env `BNI_ACCOUNT_NUMBER` / `BRI_ACCOUNT_NUMBER` / `JAGO_ACCOUNT_NUMBER` (lihat `.env.example`); butuh `AI_API_KEY`. Catatan: berjalan inline di polling loop — PDF tebal menunda balasan bot lain selama pemrosesan.
 
 ## Batasan (milestone 1)
 
 - Ekstraksi mock tanpa AI = nominal hanya dari caption (gambar tidak dibaca); tanpa caption, kolom `Nominal` kosong.
 - Klasifikasi awal kosong (kolom Kategori diisi AI bila vision aktif, sisanya manual).
-- Belum ada balancing (milestone 2) dan tanya-jawab (milestone 3).
+- Belum ada hal lain di luar balancing yang tertunda; tanya-jawab (milestone 3) dan rekonsiliasi mutasi (milestone 2) sudah aktif — lihat bagian **Tanya-jawab** dan **Rekonsiliasi Mutasi**.
 
 ## Pengembangan Berikutnya
 
 Urutkan berdasarkan nilai buat brief (3 pilihan kelompok) dan usaha:
 
-1. **Balancing (inti Pilihan 1)** — baca mutasi bank (PDF/XLSX) → cocokkan baris Sheet via Ref ID/tanggal+nominal → status `cocok` / `belum cocok` / `tercatat di kas tapi tidak di mutasi` + laporan selisih per periode.
+1. **Balancing (inti Pilihan 1)** — ✅ sebagian (rekonsiliasi, milestone 2): PDF mutasi bank → matching (tanggal, kantong, nominal) → tab RECONCILIATION, lihat **Rekonsiliasi Mutasi**. Sisa: dukungan **mutasi XLSX**, kolom `Status Reconcile` langsung di TRANSAKSI, kunci via nomor referensi dokumen.
 2. **Web app baru (rekap/PnL)** — bangun dari awal, membaca Sheet yang sama via service account → rekap harian + draf PnL dari data bot.
-3. **Tanya-jawab & ringkasan (Pilihan 3)** — command bot (`/total Januari`) → query kode → angka dari kode, LLM hanya merangkai kalimat, jawaban wajib menunjuk baris sumber. Rancangan lengkapnya di bagian **Rancangan Tanya-Jawab & Data**.
+3. **Tanya-jawab & ringkasan** — ✅ sudah (milestone 3): command `/total`, `/rekap` + pertanyaan bebas via tool-calling, lihat bagian **Tanya-jawab**.
 4. **Kualitas** — pytest (extract/dedupe/pending), eval 10 foto sampel → bahan EV-xx Testing Report.
-5. **Integrasi lanjutan bila waktu cukup** — klasifikasi kategori otomatis (rule/Jev), command `/rekap`, ekstraksi invoice PDF, multi-kas, deploy always-on.
+5. **Integrasi lanjutan bila waktu cukup** — klasifikasi kategori otomatis (rule/Jev), ekstraksi invoice PDF, multi-kas, deploy always-on.
 
 Yang tidak perlu dibangun: database, login, dashboard analytics, n8n.
 
