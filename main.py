@@ -781,11 +781,19 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
     tujuan = rec.get("kantong_tujuan") or ""
     arah_teks = f"transfer {kantong}→{tujuan}" if rec["arah"] == "transfer" and tujuan else rec["arah"]
     baris_bukti = f'\n<a href="{hasil["link"]}">Bukti transfer</a>' if hasil["link"] else ""
+    baris_kantong = ""
+    if not str(rec.get("bank") or "").strip():
+        # Bukti: kantong default mengotori TUNAI/Kas Operasional (Q&A stakeholder:
+        # kas operasional direkonsiliasikan ke buku kas fisik) — sorot di balasan.
+        baris_kantong = (
+            f"\n⚠️ Kantong asal tidak terbaca — ditulis sebagai <b>{kantong} (default)</b>;"
+            " koreksi di Sheet bila bukan tunai."
+        )
     await tg_send(
         client, chat_id,
         f"✅ Draft tercatat — {hasil['worksheet']} baris {hasil['row']}\n"
         f"{rec['tanggal']} · {nominal} · {arah_teks}\n"
-        f"Keterangan: {rec['keterangan']}{baris_bukti}\n"
+        f"Keterangan: {rec['keterangan']}{baris_kantong}{baris_bukti}\n"
         f"Status: <b>draft</b> — periksa & ubah ke verified di Sheet.",
     )
 
