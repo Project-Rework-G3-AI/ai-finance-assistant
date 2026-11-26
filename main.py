@@ -186,10 +186,12 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
         raise RuntimeError(
             f"AI HTTP {e.response.status_code} dari {AI_BASE}: {body or '(respons kosong)'}"
         ) from e
-    text = r.json()["choices"][0]["message"]["content"]
+    text = r.json()["choices"][0]["message"]["content"] or ""
     m = re.search(r"\{.*\}", text, re.S)
     if not m:
-        raise ValueError("balasan AI bukan JSON")
+        raise ValueError(
+            "balasan AI bukan JSON" + (" (content kosong)" if not text else "")
+        )
     data = json.loads(m.group(0))
     arah = str(data.get("arah", "")).lower()
     keterangan = _gabung_keterangan(str(data.get("keterangan") or ""), caption, filename)
