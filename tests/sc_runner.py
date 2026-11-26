@@ -447,46 +447,45 @@ def write_sc03_report(results: list[dict], out: Path) -> dict:
 def write_sc06_report(results: list[dict], out: Path) -> dict:
     """Jalankan SC-06 dan tulis laporannya.
 
-    Kriteria ini mengukur apakah seluruh field wajib benar-benar terbaca dari
-    gambar, jadi ia **butuh model**: penilaian dilakukan pada balasan mentah
-    model, bukan pada hasil `main.extract()` yang sudah menutupi field kosong
-    dengan nilai bawaan.
+    Kriteria ini memeriksa dua hal sesuai kalimat BRD: susunan kolom keluaran
+    terhadap kolom wajib template perusahaan, dan kelengkapan kolom wajib pada
+    setiap baris hasil pencatatan.
 
-    Sampel diambil dari `sc-out/sc06_samples.csv` yang diisi `_sc06_run.py`.
-    Bila sampel belum ada, laporan menyatakan BELUM DIUKUR beserta perintahnya,
-    bukan menjalankan model diam-diam tanpa persetujuan.
+    Bagian susunan kolom hanya butuh berkas template. Bagian per baris butuh
+    balasan model, yang diambil `_sc06_run.py` dan disimpan di
+    `sc06_samples.csv`. Bila sampel belum ada, bagian itu dilaporkan BELUM
+    DIUKUR, bukan menjalankan model diam-diam tanpa persetujuan.
     """
-    import sc06_extraction as sc06
+    import sc06_mapping as sc06
 
-    # Dibaca dari folder keluaran yang diminta, bukan path tetap, supaya
-    # fungsi ini bisa diuji dan konsisten dengan kriteria lain.
     samples = out / "sc06_samples.csv"
-    if not samples.is_file():
-        text = ("SC-06 — Kelengkapan field yang diekstrak dari gambar\n"
-                + "=" * 60 + "\n"
-                "Status             : BELUM DIUKUR\n\n"
-                "Kriteria ini membaca balasan model untuk setiap gambar, jadi\n"
-                "butuh kunci model dan berbiaya satu panggilan per gambar.\n"
-                "Jalankan lebih dulu:\n"
-                "  python3 tests/_sc06_run.py\n")
-        (out / "sc06_report.txt").write_text(text, encoding="utf-8")
-        return {"result": None, "text": text}
-
     rows = []
-    with open(samples, encoding="utf-8", newline="") as f:
+    if samples.is_file():
         import csv as _csv
         import json as _json
 
-        for row in _csv.DictReader(f):
-            mentah = row.get("raw") or ""
-            try:
-                raw = _json.loads(mentah) if mentah.strip() else {}
-            except ValueError:
-                raw = {}
-            rows.append({"file": row.get("file") or "", "raw": raw,
-                         "error": row.get("error") or ""})
+        with open(samples, encoding="utf-8", newline="") as f:
+            for row in _csv.DictReader(f):
+                mentah = row.get("raw") or ""
+                try:
+                    raw = _json.loads(mentah) if mentah.strip() else {}
+                except ValueError:
+                    raw = {}
+                rows.append({"file": row.get("file") or "", "raw": raw,
+                             "error": row.get("error") or ""})
 
-    report = sc06.compute(rows)
+    try:
+        report = sc06.compute(rows, template_dir=ROOT / sc06.TEMPLATE_DIR)
+    except FileNotFoundError as e:
+        text = ("SC-06 — Hasil pencatatan memetakan seluruh kolom wajib\n"
+                + "=" * 60 + "\n"
+                "Status             : BELUM DIUKUR\n\n"
+                f"{e}\n\n"
+                "Unduh templatenya lebih dulu:\n"
+                "  python3 tests/sc_runner.py --download-templates\n")
+        (out / "sc06_report.txt").write_text(text, encoding="utf-8")
+        return {"result": None, "text": text}
+
     txt, _ = sc06.write_report(report, out)
     return {"result": report, "text": txt.read_text(encoding="utf-8")}
 
@@ -737,7 +736,9 @@ def main_cli() -> int:
     pick.add_argument("--sc05", action="store_true",
                       help="uji penolakan duplikat (SC-05) saja")
     pick.add_argument("--sc06", action="store_true",
-                      help="ukur kelengkapan field hasil ekstraksi (SC-06) saja")
+                      help="periksa pemetaan kolom wajib cash report (SC-06) saja")
+    pick.add_argument("--download-templates", action="store_true",
+                      help="unduh template cash report perusahaan untuk SC-06")
     pick.add_argument("--all", action="store_true",
                       help="ukur semua kriteria yang tersedia (sama dengan tanpa flag)")
     a = ap.parse_args()
@@ -749,6 +750,17 @@ def main_cli() -> int:
         os.environ["SC_PAIRS"] = a.pairs
     if a.images:
         os.environ["SC_IMAGES"] = a.images
+
+    if a.download_templates:
+        import sc06_mapping as sc06
+
+        target = ROOT / sc06.TEMPLATE_DIR
+        print(f"mengunduh template perusahaan ke: {target}")
+        berkas = sc06.download_templates(target)
+        for b in berkas:
+            print(f"  {b.name} ({b.stat().st_size} byte)")
+        print(f"selesai: {len(berkas)} berkas")
+        return 0
 
     if a.download:
         # Daftar pasangan diunduh dulu: tanpa itu tidak diketahui gambar mana

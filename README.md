@@ -250,7 +250,7 @@ Target di bawah dikutip dari tabel Success Criteria pada BRD bagian 6.
 | SC-03 | Waktu proses sampai tersimpan | Rata-rata di bawah 5 detik | sudah | kunci AI + Google Sheets |
 | SC-04 | Biaya per gambar | Di bawah Rp50 per gambar | sudah | kunci AI + kurs |
 | SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | sudah | tidak ada |
-| SC-06 | Kelengkapan field hasil ekstraksi | Tidak ada field wajib yang hilang | sudah | kunci AI |
+| SC-06 | Pemetaan kolom wajib cash report | Tidak ada kolom wajib yang hilang | sudah | template + kunci AI |
 | SC-07 | Waktu satu periode vs manual | Di bawah 1 hari kerja | belum, tidak dapat diotomasi | manusia |
 
 SC-01 dan SC-02 mengukur **isi** hasil ekstraksi, jadi bisa dihitung ulang dari
@@ -277,6 +277,7 @@ python3 tests/sc_runner.py --sc02          # SC-02 saja
 python3 tests/sc_runner.py --sc03          # SC-03 saja
 python3 tests/sc_runner.py --sc04          # SC-04 saja
 python3 tests/sc_runner.py --sc05          # SC-05 saja
+python3 tests/sc_runner.py --download-templates  # sekali saja, untuk SC-06
 python3 tests/_sc06_run.py                 # SC-06: panggil model sekali per gambar
 python3 tests/sc_runner.py --sc06          # SC-06 saja (merangkum sampel)
 python3 tests/sc_runner.py --metrics-only  # hitung ulang tanpa biaya
@@ -291,64 +292,75 @@ kedua: hasil per gambar disimpan di `sc-out/` dan dilanjutkan dari situ. Runner
 mengumumkannya dengan jelas, dan mencatat asal angkanya di `sc-out/source.json`.
 Pakai `--restart` untuk benar-benar mengukur ulang dari nol.
 
-### SC-06 mengukur kelengkapan field hasil ekstraksi, bukan susunan kolom
+### SC-06 memeriksa dua hal: susunan kolom dan hasil pencatatan
 
-SC-06 bertanya satu hal: ketika pengguna mengunggah gambar bukti transaksi,
-apakah **seluruh field wajib benar-benar terbaca dari gambar itu**.
+Kalimat BRD menentukan cara periksanya:
 
-Yang **tidak** diukur di sini adalah kebenaran isinya. Nominal 20.000 yang
-terbaca 50.000 tetap dihitung terisi; kecocokan nilai adalah urusan SC-01 dan
-SC-02.
+> Membandingkan **susunan kolom** keluaran dengan kolom wajib pada template cash
+> report perusahaan.
+
+Jadi ada dua bagian, dan keduanya diukur:
+
+| Bagian | Yang diperiksa | Butuh |
+|---|---|---|
+| 1. Susunan kolom | setiap kolom wajib template punya tempat di keluaran | berkas template |
+| 2. Hasil pencatatan | setiap baris yang ditulis punya kolom wajib terisi | balasan model |
+
+Bagian 1 saja tidak cukup: susunan kolom bisa lengkap sementara isinya kosong.
+Bagian 2 saja juga tidak cukup: satu baris bisa lengkap sementara ada kolom
+perusahaan yang tidak punya tempat sama sekali.
 
 ```bash
-python3 tests/_sc06_run.py            # sekali per dataset, berbiaya
-python3 tests/sc_runner.py --sc06     # merangkum sampel, gratis
+python3 tests/sc_runner.py --download-templates   # sekali saja
+python3 tests/_sc06_run.py                        # ambil balasan model
+python3 tests/sc_runner.py --sc06                 # laporan, gratis
 ```
 
-#### Kenapa dibaca dari balasan model, bukan dari `main.extract()`
+#### Bagian 1: susunan kolom
 
-`main.extract()` **tidak pernah** mengembalikan field kosong:
+Kolom wajib dibaca dari **tiga berkas template perusahaan** di repo dataset
+(`Cash Report dan Mutasi Rekening/`), bukan daftar yang ditulis ulang di kode
+test. Ketiga berkas dibaca semuanya, dan header dicari lewat isinya
+(`TANGGAL TRANSAKSI`), bukan nomor baris, karena berkas Operasional menaruhnya
+di baris 4 sementara yang lain di baris 5.
 
-| Field kosong | Diisi produksi dengan |
-|---|---|
-| `tanggal` | `datetime.now()` |
-| `arah` | `"keluar"` |
-| `keterangan` | nama berkas |
-| `bank` | `CR_DEFAULT_BANK` |
-| `kategori` | `PERLU_DITINJAU` |
+Setiap kolom punya keputusan tertulis: `langsung`, `diturunkan`, `terbagi`,
+`bukan data bot`, atau `HILANG`. Keputusan itu ditulis eksplisit di `MAPPING`
+supaya bisa diperiksa orang lain, bukan hasil tebakan pencocokan nama.
 
-Kalau penilaian memakai hasil fungsi itu, semuanya akan selalu tampak lengkap
-dan kriteria ini tidak mengukur apa pun. Karena itu harness menyimpan **balasan
-mentah model**, dan penilaian dilakukan pada balasan itu.
+`TANGGAL INPUT DAN NAMA ADMIN` diisi manusia di template: bot menerima gambar
+bukti transaksi, bukan identitas admin. Kolom itu tetap ditampilkan beserta
+alasannya tetapi dikeluarkan dari penyebut, sehingga yang dinilai **9 dari 9**
+kolom relevan bot.
 
-Field yang kosong di balasan tetapi terisi setelah lewat produksi dilaporkan
-terpisah sebagai "ditutupi nilai bawaan produksi", supaya kegagalan ekstraksi
-tidak hilang diam-diam.
+#### Bagian 2: kelengkapan hasil pencatatan
 
-#### Aturan penilaian
+Setiap baris yang ditulis diperiksa kolom wajibnya. Tiga aturan yang perlu
+diketahui:
 
-Daftar field dibaca dari **prompt produksi** di `main.py`, bukan disalin di test,
-supaya field yang ditambahkan produksi tidak lolos tanpa diperhatikan.
+- **`DEBET`/`KREDIT` berpasangan.** Satu baris hanya mengisi salah satunya, jadi
+  menuntut keduanya terisi akan membuat setiap baris dianggap kurang. Aturan ini
+  dikunci test.
+- **`SALDO` dihitung formula** di sheet `ACCOUNT`, tidak ditulis per baris.
+- **`LAMPIRAN NOTA` tidak diukur** di harness ini karena isinya URL hasil unggah
+  Drive. Kolom itu dikeluarkan dari penyebut, bukan dianggap gagal.
 
-Enam field wajib pada setiap transaksi: `tanggal`, `keterangan`, `nominal`,
-`arah`, `kategori`, `bank`. Satu field bersyarat: `kantong_tujuan`, yang hanya
-wajib ketika `arah` bernilai `transfer`. Pada transaksi masuk atau keluar biasa
-field itu memang tidak punya nilai, jadi tidak dihitung sebagai kekurangan.
+Pengukuran bagian 2 memakai tiruan penulisan baris yang **dijaga test**
+membandingkannya dengan `main.write_cash_report`. Kalau produksi berubah, test
+itu gagal, sehingga angka ini tidak bisa diam-diam mengukur tiruan.
 
-Sebuah field dinilai terisi bila memenuhi cara produksi membacanya:
+#### Yang sengaja tidak diukur SC-06
 
-| Field | Dinilai terisi bila |
-|---|---|
-| `tanggal` | bisa diurai jadi tanggal |
-| `nominal` | angka dan bukan nol |
-| `arah` | salah satu dari masuk, keluar, transfer |
-| `kategori` | dikenali daftar kategori, bukan `PERLU_DITINJAU` |
-| `keterangan` | ada isinya |
-| `bank` | ada isinya |
+**Kebenaran nilai.** Nominal 20.000 yang terbaca 50.000 tetap dihitung terisi.
+Kecocokan nilai adalah SC-01 dan SC-02.
 
-Angka yang dinilai adalah **jumlah gambar yang lengkap seluruh field wajibnya**,
-bukan jumlah field. Satu gambar kehilangan satu field berarti target belum
-tercapai.
+**Kebenaran kantong asal.** Produksi mengisi kolom Kantong dengan
+`CR_DEFAULT_BANK` (`TUNAI`) ketika model gagal membaca kantong asal, sehingga
+kolomnya selalu terlihat terisi. Pada dataset ini 12 dari 65 gambar adalah
+transfer yang tercatat "keluar dari TUNAI" padahal dananya bukan kas tunai.
+Cacat itu dilaporkan terpisah di
+[`docs/bug-kantong-tunai.md`](docs/bug-kantong-tunai.md), bukan dijadikan angka
+kriteria ini, karena BRD memeriksa keberadaan kolom, bukan kebenaran isinya.
 
 ### Yang perlu diperiksa saat `main` berubah
 
@@ -474,8 +486,8 @@ Hasil ada di `sc-out/`:
 | `sc04_metrics.json` | SC-04 dalam bentuk JSON |
 | `sc05_report.txt` | SC-05: tiap skenario duplikat dan jumlah baris tersimpan |
 | `sc05_metrics.json` | SC-05 dalam bentuk JSON |
-| `sc06_report.txt` | SC-06: kelengkapan per field dan gambar yang kurang |
-| `sc06_images.csv` | SC-06: rincian per gambar |
+| `sc06_report.txt` | SC-06: susunan kolom dan baris yang kurang |
+| `sc06_rows.csv` | SC-06: rincian per baris hasil pencatatan |
 | `sc06_samples.csv` | SC-06: balasan mentah model per gambar |
 | `results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
 | `sc03_samples.csv` | SC-03: waktu per gambar dan pecahan tahap (bahan laporan SC-03) |
