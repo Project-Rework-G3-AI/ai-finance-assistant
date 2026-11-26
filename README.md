@@ -10,7 +10,8 @@ Deploy aktif: https://ai-finance-assistant-z473.onrender.com/health — detail d
 flowchart LR
     U["Pengguna<br/>(Finance/Admin)"] -->|"foto · teks · PDF"| TG["Telegram API<br/>(cloud)"]
     TG -->|"getUpdates<br/>long polling"| BOT["Bot — main.py<br/>FastAPI + asyncio<br/>(Render; lokal = fallback uji)"]
-    BOT -.->|"error / log"| SEN["Sentry<br/>(observability)"]
+    BOT -.->|"error / log"| SEN["Sentry<br/>(error tracking)"]
+    BOT -.->|"trace panggilan AI"| LF["Langfuse<br/>(jejak LLM: prompt · token · biaya)"]
     BOT --> ROUT{"jenis<br/>pesan?"}
 
     ROUT -->|"gambar"| EXT{"Ekstraksi"}
@@ -43,7 +44,7 @@ flowchart LR
 
     classDef cloud fill:#1e3a5f,stroke:#3b82f6,color:#fff
     classDef local fill:#14532d,stroke:#22c55e,color:#fff
-    class TG,CR,VIS,DRIVE,YR,AS,RC,SEN cloud
+    class TG,CR,VIS,DRIVE,YR,AS,RC,SEN,LF cloud
     class BOT,MOCK,PEND,W local
 ```
 
@@ -51,7 +52,8 @@ flowchart LR
 - Mode vision (AI) dipakai bila `AI_API_KEY` ada; selalu fallback ke mock agar alur tidak pernah putus.
 - **Split kredensial**: pembuatan file Drive (folder, copy template, upload foto) = Apps Script Web App; sel/tab Cash Report **dan** baca Drive = service account. `pending.jsonl` = penahan gagal, bukan penyimpanan utama.
 - Tanya-jawab **hanya membaca** TRANSAKSI; rekonsiliasi hanya menulis tab RECONCILIATION — tidak pernah mengubah baris transaksi. Error apa pun dilaporkan ke Sentry.
-- Warna: biru = layanan cloud (Telegram/Google/Sentry); hijau = milik bot (proses & file — di Render, atau lokal saat uji).
+- **Observability ganda**: **Sentry** = error aplikasi; **Langfuse** = jejak tiap panggilan AI (prompt, output JSON, token, biaya, latensi — `vision-extract`, `qa-tool-calling`, `recon-vision`). Langfuse opsional: aktif bila env `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` terisi (SDK v5, endpoint ingestion v4); mati saat pytest. Yang dikirim hanya teks — gambar tidak pernah dikirim.
+- Warna: biru = layanan cloud (Telegram/Google/Sentry/Langfuse); hijau = milik bot (proses & file — di Render, atau lokal saat uji).
 
 ## Setup
 
