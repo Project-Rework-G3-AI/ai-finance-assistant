@@ -250,7 +250,7 @@ Target di bawah dikutip dari tabel Success Criteria pada BRD bagian 6.
 | SC-03 | Waktu proses sampai tersimpan | Rata-rata di bawah 5 detik | sudah | kunci AI + Google Sheets |
 | SC-04 | Biaya per gambar | Di bawah Rp50 per gambar | sudah | kunci AI + kurs |
 | SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | sudah | tidak ada |
-| SC-06 | Semua kolom wajib terpetakan | Tidak ada kolom wajib yang hilang | sudah | tidak ada |
+| SC-06 | Kelengkapan field hasil ekstraksi | Tidak ada field wajib yang hilang | sudah | kunci AI |
 | SC-07 | Waktu satu periode vs manual | Di bawah 1 hari kerja | belum, tidak dapat diotomasi | manusia |
 
 SC-01 dan SC-02 mengukur **isi** hasil ekstraksi, jadi bisa dihitung ulang dari
@@ -277,8 +277,8 @@ python3 tests/sc_runner.py --sc02          # SC-02 saja
 python3 tests/sc_runner.py --sc03          # SC-03 saja
 python3 tests/sc_runner.py --sc04          # SC-04 saja
 python3 tests/sc_runner.py --sc05          # SC-05 saja
-python3 tests/sc_runner.py --sc06          # SC-06 saja
-python3 tests/sc_runner.py --download-templates  # unduh template SC-06
+python3 tests/_sc06_run.py                 # SC-06: panggil model sekali per gambar
+python3 tests/sc_runner.py --sc06          # SC-06 saja (merangkum sampel)
 python3 tests/sc_runner.py --metrics-only  # hitung ulang tanpa biaya
 python3 tests/sc_runner.py --repeat 3      # lihat sebaran antar-run
 ```
@@ -291,38 +291,64 @@ kedua: hasil per gambar disimpan di `sc-out/` dan dilanjutkan dari situ. Runner
 mengumumkannya dengan jelas, dan mencatat asal angkanya di `sc-out/source.json`.
 Pakai `--restart` untuk benar-benar mengukur ulang dari nol.
 
-### SC-06 membandingkan dengan template perusahaan, bukan daftar salinan
+### SC-06 mengukur kelengkapan field hasil ekstraksi, bukan susunan kolom
 
-SC-06 memeriksa apakah setiap kolom wajib cash report punya tempat di keluaran
-aplikasi. Yang dibandingkan adalah **berkas template perusahaan** di repo
-dataset (`Cash Report dan Mutasi Rekening/`), bukan daftar kolom yang ditulis
-ulang di kode test.
+SC-06 bertanya satu hal: ketika pengguna mengunggah gambar bukti transaksi,
+apakah **seluruh field wajib benar-benar terbaca dari gambar itu**.
+
+Yang **tidak** diukur di sini adalah kebenaran isinya. Nominal 20.000 yang
+terbaca 50.000 tetap dihitung terisi; kecocokan nilai adalah urusan SC-01 dan
+SC-02.
 
 ```bash
-python3 tests/sc_runner.py --download-templates   # sekali saja
-python3 tests/sc_runner.py --sc06
+python3 tests/_sc06_run.py            # sekali per dataset, berbiaya
+python3 tests/sc_runner.py --sc06     # merangkum sampel, gratis
 ```
 
-Ketiga berkas template dibaca semuanya, dan header dicari lewat isinya
-(`TANGGAL TRANSAKSI`), bukan nomor baris, karena berkas Operasional menaruhnya
-di baris 4 sementara yang lain di baris 5.
+#### Kenapa dibaca dari balasan model, bukan dari `main.extract()`
 
-Setiap kolom wajib punya keputusan tertulis: `langsung` (satu kolom aplikasi),
-`diturunkan` (dihitung formula di sheet lain), `terbagi` (diwakili kolom yang
-sama lewat pemecahan baris), `bukan data bot` (diisi manusia di template), atau
-`HILANG`. Keputusan itu ditulis eksplisit di `MAPPING` supaya bisa diperiksa
-orang lain, bukan hasil tebakan pencocokan nama.
+`main.extract()` **tidak pernah** mengembalikan field kosong:
 
-Kolom `TANGGAL INPUT DAN NAMA ADMIN` diisi manusia di template: bot menerima
-gambar bukti transaksi, bukan identitas admin yang mengunggahnya. Kolom itu
-tetap ditampilkan di laporan beserta alasannya, tetapi dikeluarkan dari penyebut
-supaya angkanya jujur. Yang dinilai adalah **9 dari 9** kolom yang relevan untuk
-bot.
+| Field kosong | Diisi produksi dengan |
+|---|---|
+| `tanggal` | `datetime.now()` |
+| `arah` | `"keluar"` |
+| `keterangan` | nama berkas |
+| `bank` | `CR_DEFAULT_BANK` |
+| `kategori` | `PERLU_DITINJAU` |
 
-Satu kolom aplikasi tidak boleh mewakili dua kolom wajib berbeda. Kolom A
-aplikasi berisi tanggal transaksi, yang sudah menjadi wakil kolom B perusahaan;
-memakainya lagi untuk kolom A perusahaan akan membuat kolom wajib tampak
-terpetakan padahal isinya bukan.
+Kalau penilaian memakai hasil fungsi itu, semuanya akan selalu tampak lengkap
+dan kriteria ini tidak mengukur apa pun. Karena itu harness menyimpan **balasan
+mentah model**, dan penilaian dilakukan pada balasan itu.
+
+Field yang kosong di balasan tetapi terisi setelah lewat produksi dilaporkan
+terpisah sebagai "ditutupi nilai bawaan produksi", supaya kegagalan ekstraksi
+tidak hilang diam-diam.
+
+#### Aturan penilaian
+
+Daftar field dibaca dari **prompt produksi** di `main.py`, bukan disalin di test,
+supaya field yang ditambahkan produksi tidak lolos tanpa diperhatikan.
+
+Enam field wajib pada setiap transaksi: `tanggal`, `keterangan`, `nominal`,
+`arah`, `kategori`, `bank`. Satu field bersyarat: `kantong_tujuan`, yang hanya
+wajib ketika `arah` bernilai `transfer`. Pada transaksi masuk atau keluar biasa
+field itu memang tidak punya nilai, jadi tidak dihitung sebagai kekurangan.
+
+Sebuah field dinilai terisi bila memenuhi cara produksi membacanya:
+
+| Field | Dinilai terisi bila |
+|---|---|
+| `tanggal` | bisa diurai jadi tanggal |
+| `nominal` | angka dan bukan nol |
+| `arah` | salah satu dari masuk, keluar, transfer |
+| `kategori` | dikenali daftar kategori, bukan `PERLU_DITINJAU` |
+| `keterangan` | ada isinya |
+| `bank` | ada isinya |
+
+Angka yang dinilai adalah **jumlah gambar yang lengkap seluruh field wajibnya**,
+bukan jumlah field. Satu gambar kehilangan satu field berarti target belum
+tercapai.
 
 ### Yang perlu diperiksa saat `main` berubah
 
@@ -448,8 +474,9 @@ Hasil ada di `sc-out/`:
 | `sc04_metrics.json` | SC-04 dalam bentuk JSON |
 | `sc05_report.txt` | SC-05: tiap skenario duplikat dan jumlah baris tersimpan |
 | `sc05_metrics.json` | SC-05 dalam bentuk JSON |
-| `sc06_report.txt` | SC-06: tiap kolom wajib dan nasibnya |
-| `sc06_columns.csv` | SC-06: rincian pemetaan per kolom |
+| `sc06_report.txt` | SC-06: kelengkapan per field dan gambar yang kurang |
+| `sc06_images.csv` | SC-06: rincian per gambar |
+| `sc06_samples.csv` | SC-06: balasan mentah model per gambar |
 | `results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
 | `sc03_samples.csv` | SC-03: waktu per gambar dan pecahan tahap (bahan laporan SC-03) |
 | `sc04_samples.csv` | SC-04: token per gambar (bahan laporan SC-04) |

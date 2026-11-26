@@ -447,24 +447,44 @@ def write_sc03_report(results: list[dict], out: Path) -> dict:
 def write_sc06_report(results: list[dict], out: Path) -> dict:
     """Jalankan SC-06 dan tulis laporannya.
 
-    Seperti SC-05, kriteria ini tidak butuh kunci AI, Google, maupun jaringan:
-    yang dibandingkan adalah kolom wajib template perusahaan dengan kolom yang
-    ditulis aplikasi. Tidak ada model yang dipanggil.
-    """
-    import sc06_columns as sc06
+    Kriteria ini mengukur apakah seluruh field wajib benar-benar terbaca dari
+    gambar, jadi ia **butuh model**: penilaian dilakukan pada balasan mentah
+    model, bukan pada hasil `main.extract()` yang sudah menutupi field kosong
+    dengan nilai bawaan.
 
-    try:
-        report = sc06.compute()
-    except FileNotFoundError as e:
-        text = ("SC-06 — Kolom wajib cash report terpetakan\n"
+    Sampel diambil dari `sc-out/sc06_samples.csv` yang diisi `_sc06_run.py`.
+    Bila sampel belum ada, laporan menyatakan BELUM DIUKUR beserta perintahnya,
+    bukan menjalankan model diam-diam tanpa persetujuan.
+    """
+    import sc06_extraction as sc06
+
+    samples = ROOT / "sc-out" / "sc06_samples.csv"
+    if not samples.is_file():
+        text = ("SC-06 — Kelengkapan field yang diekstrak dari gambar\n"
                 + "=" * 60 + "\n"
                 "Status             : BELUM DIUKUR\n\n"
-                f"{e}\n\n"
-                "Unduh templatenya lebih dulu:\n"
-                "  python3 tests/sc_runner.py --sc06 --download-templates\n")
+                "Kriteria ini membaca balasan model untuk setiap gambar, jadi\n"
+                "butuh kunci model dan berbiaya satu panggilan per gambar.\n"
+                "Jalankan lebih dulu:\n"
+                "  python3 tests/_sc06_run.py\n")
         (out / "sc06_report.txt").write_text(text, encoding="utf-8")
         return {"result": None, "text": text}
 
+    rows = []
+    with open(samples, encoding="utf-8", newline="") as f:
+        import csv as _csv
+        import json as _json
+
+        for row in _csv.DictReader(f):
+            mentah = row.get("raw") or ""
+            try:
+                raw = _json.loads(mentah) if mentah.strip() else {}
+            except ValueError:
+                raw = {}
+            rows.append({"file": row.get("file") or "", "raw": raw,
+                         "error": row.get("error") or ""})
+
+    report = sc06.compute(rows)
     txt, _ = sc06.write_report(report, out)
     return {"result": report, "text": txt.read_text(encoding="utf-8")}
 
@@ -616,7 +636,7 @@ AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03", "sc04", "sc05", "sc06")
 # Kriteria yang tidak butuh kunci model, dataset gambar, maupun jaringan.
 # Daftar ini dipakai untuk memutuskan apakah runner boleh berhenti tanpa
 # memanggil model sama sekali.
-FREE_CRITERIA = {"sc03", "sc04", "sc05", "sc06"}
+FREE_CRITERIA = {"sc03", "sc04", "sc05"}
 
 
 def selected_criteria(args) -> list[str]:
@@ -713,9 +733,7 @@ def main_cli() -> int:
     pick.add_argument("--sc05", action="store_true",
                       help="uji penolakan duplikat (SC-05) saja")
     pick.add_argument("--sc06", action="store_true",
-                      help="periksa kolom wajib cash report (SC-06) saja")
-    pick.add_argument("--download-templates", action="store_true",
-                      help="unduh template cash report perusahaan untuk SC-06")
+                      help="ukur kelengkapan field hasil ekstraksi (SC-06) saja")
     pick.add_argument("--all", action="store_true",
                       help="ukur semua kriteria yang tersedia (sama dengan tanpa flag)")
     a = ap.parse_args()
@@ -727,17 +745,6 @@ def main_cli() -> int:
         os.environ["SC_PAIRS"] = a.pairs
     if a.images:
         os.environ["SC_IMAGES"] = a.images
-
-    if a.download_templates:
-        import sc06_columns as sc06
-
-        target = ROOT / sc06.TEMPLATE_DIR
-        print(f"mengunduh template perusahaan ke: {target}")
-        berkas = sc06.download_templates(target)
-        for b in berkas:
-            print(f"  {b.name} ({b.stat().st_size} byte)")
-        print(f"selesai: {len(berkas)} berkas")
-        return 0
 
     if a.download:
         # Daftar pasangan diunduh dulu: tanpa itu tidak diketahui gambar mana

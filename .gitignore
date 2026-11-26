@@ -24,7 +24,7 @@ sc04_samples.csv
 sc05_report.txt
 sc05_metrics.json
 sc06_report.txt
-sc06_columns.csv
+sc06_images.csv
 
 # Dataset lokal untuk evaluasi (gambar bukti + daftar pasangan).
 # Berisi transaksi perusahaan; sumber aslinya ada di repo dataset terpisah.
