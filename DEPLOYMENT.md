@@ -32,8 +32,8 @@ UptimeRobot → GET /health tiap 5 menit → free tier tetap terjaga
 | `TELEGRAM_ALLOWED_CHAT_IDS` | daftar chat_id, pisah koma |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | **isi penuh file** `service_account.json` (JSON mentah) |
 | `CASH_REPORT_FOLDER_ID`, `CASH_REPORT_TEMPLATE_ID` | folder Cash Report (di-share Editor ke SA) + ID template |
-| `CR_DEFAULT_BANK` | opsional (default `TUNAI`) |
-| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN` | OAuth user (scope `drive`) — cari folder/copy template/upload foto |
+| `CR_DEFAULT_BANK` | opsional (default `UANG KAS`) |
+| `APPS_SCRIPT_URL`, `APPS_SCRIPT_SECRET` | Apps Script Web App (Drive) — cari/buat folder, copy template, upload foto, bootstrap TEMPLATE. Detail setup: README bagian Drive |
 | `GOOGLE_DRIVE_FOLDER_ID` | (opsional) ID folder `Receipts` — arsip foto bukti |
 | `AI_API_KEY` | kunci vision (kosongkan = mode mock) |
 | `AI_BASE_URL`, `AI_MODEL` | opsional (default OpenAI) |
@@ -137,7 +137,7 @@ Sebelum perubahan ini, jalur-jalur tersebut hanya menulis ke stdout atau tidak m
 | Bot diam total | Render tidur (pinger mati) / service crashed | Cek UptimeRobot & tab Logs; buka `/health` |
 | `401 unauthorized` di log Telegram | Token salah/ganti | Update `TELEGRAM_BOT_TOKEN` |
 | Append Sheets `invalid_grant` / permission | JSON salah tempel atau SA belum di-share Editor | Cek isi `GOOGLE_SERVICE_ACCOUNT_JSON` penuh; cek share Sheet |
-| Drive `invalid_grant: Token has been expired or revoked` (Sentry) | Refresh token OAuth status Testing kedaluwarsa7 hari | `python oauth_init.py` → update `GOOGLE_OAUTH_REFRESH_TOKEN` di Environment → restart (README bagian Drive) |
+| Drive gagal: `Apps Script ... secret salah` / `HTTP 403/404` | `APPS_SCRIPT_SECRET` tidak cocok dengan Script Properties, atau Web App dideploy dengan akses terbatas | Cocokkan secret di Script Properties; deploy ulang dengan *Who has access: Anyone* (README bagian Drive). Gagal upload tidak mematikan bot — kolom Link Bukti kosong, error di log |
 | Balasan dobel | Dua bot berjalan (lokal + cloud) | Matikan salah satu |
 | `sheets: false` padahal env sudah diisi | JSON invalid (kepotong) | Validasi: `python3 -c "import json,sys;json.loads(sys.stdin.read())" < service_account.json` |
 

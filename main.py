@@ -241,47 +241,63 @@ async def extract(client: httpx.AsyncClient, filename: str, image_bytes: bytes, 
     return _mock_extract(filename, caption)
 
 
-# ---------- Google Drive (OAuth user) ----------
-# Drive = OAuth akun user (SA tidak bisa membuat file: kuota SA = 0, error
-# storageQuotaExceeded). Sel/struktur Cash Report = service account (folder
-# sudah di-share ke SA). Scope penuh diperlukan: cari folder & copy template
-# milik user — token lama ber-scopes drive.file harus dibuat ulang (README).
+# ---------- Google Drive ----------
+# Split: baca (cari id spreadsheet utk rekonsiliasi) = service account (scope
+# drive penuh, tidak pernah kedaluwarsa). Operasi yang MEMBUAT file (folder,
+# copy template, upload foto) = Apps Script Web App — SA tidak bisa membuat
+# file (kuota 0, storageQuotaExceeded), dan OAuth user Testing kedaluwarsa
+# tiap7 hari (invalid_grant, lihat README bagian Drive).
 
-DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
-OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
-OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
-OAUTH_REFRESH_TOKEN = os.getenv("GOOGLE_OAUTH_REFRESH_TOKEN", "").strip()
+APPS_SCRIPT_URL = os.getenv("APPS_SCRIPT_URL", "").strip()
+APPS_SCRIPT_SECRET = os.getenv("APPS_SCRIPT_SECRET", "").strip()
 
 
 def _drive_ready() -> bool:
-    return bool(DRIVE_FOLDER_ID and OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET and OAUTH_REFRESH_TOKEN)
+    return bool(DRIVE_FOLDER_ID and APPS_SCRIPT_URL and APPS_SCRIPT_SECRET)
 
 
-def _oauth_creds():
-    from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials
+def apps_script_call(action: str, payload: dict) -> dict:
+    """Panggil Web App Apps Script. Return body['data'] atau raise RuntimeError.
 
-    creds = Credentials.from_authorized_user_info(
-        {
-            "refresh_token": OAUTH_REFRESH_TOKEN,
-            "client_id": OAUTH_CLIENT_ID,
-            "client_secret": OAUTH_CLIENT_SECRET,
-        },
-        scopes=[DRIVE_SCOPE],
-    )
-    creds.refresh(Request())
-    return creds
+    Sinkron — googleapiclient lama juga blocking, dan dipakai script utilitas
+    (build_template, migrasi) di luar event loop. follow_redirects wajib:
+    Web App bisa menjawab 302 sebelum /exec final.
+    """
+    if not (APPS_SCRIPT_URL and APPS_SCRIPT_SECRET):
+        raise RuntimeError("APPS_SCRIPT_URL / APPS_SCRIPT_SECRET belum diisi")
+    body = {"secret": APPS_SCRIPT_SECRET, "action": action, **payload}
+    with httpx.Client(follow_redirects=True, timeout=30) as cli:
+        r = cli.post(APPS_SCRIPT_URL, json=body)
+    if r.status_code != 200:
+        raise RuntimeError(f"Apps Script HTTP {r.status_code}: {r.text[:200]}")
+    out = r.json()
+    if not out.get("ok"):
+        raise RuntimeError(f"Apps Script {action} gagal: {out.get('error')}")
+    return out.get("data") or {}
 
 
-_drive_svc = None
+_sa_drive = None
 
 
 def _drive():
-    global _drive_svc
-    if _drive_svc is None:
+    """Drive API client (service account) — hanya untuk BACA (files.list)."""
+    global _sa_drive
+    if _sa_drive is None:
+        from google.oauth2 import service_account as sa_credentials
         from googleapiclient.discovery import build
-        _drive_svc = build("drive", "v3", credentials=_oauth_creds(), cache_discovery=False)
-    return _drive_svc
+
+        sa_raw = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+        creds = (
+            sa_credentials.Credentials.from_service_account_info(
+                json.loads(sa_raw), scopes=GOOGLE_SCOPES
+            )
+            if sa_raw
+            else sa_credentials.Credentials.from_service_account_file(
+                SA_FILE, scopes=GOOGLE_SCOPES
+            )
+        )
+        _sa_drive = build("drive", "v3", credentials=creds, cache_discovery=False)
+    return _sa_drive
 
 
 _sheet_cli = None
@@ -301,68 +317,44 @@ def _sheets():
 
 
 def upload_drive(image_bytes: bytes, filename: str) -> str:
-    """Upload foto ke folder Drive (akun user via OAuth). Return webViewLink."""
-    import io
+    """Upload foto ke folder Receipts via Apps Script. Return webViewLink."""
+    import base64
 
-    from googleapiclient.http import MediaIoBaseUpload
-
-    drive = _drive()
     mime = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
-    f = drive.files().create(
-        body={"name": filename, "parents": [DRIVE_FOLDER_ID]},
-        media_body=MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype=mime),
-        fields="id, webViewLink",
-    ).execute()
-    return f.get("webViewLink", "")
-
-
-def _escape_drive_query(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("'", "\\'")
+    data = apps_script_call(
+        "upload",
+        {
+            "filename": filename,
+            "folder_id": DRIVE_FOLDER_ID,
+            "content_base64": base64.b64encode(image_bytes).decode(),
+            "mime": mime,
+        },
+    )
+    return data.get("link", "")
 
 
 def _find_or_create_folder(folder_name: str, parent_id: str) -> str:
-    """Folder di Drive (OAuth): cari, kalau tidak ada buat. Gagal jika >1."""
-    q = (
-        f"name = '{_escape_drive_query(folder_name)}' "
-        f"and '{parent_id}' in parents "
-        "and mimeType = 'application/vnd.google-apps.folder' "
-        "and trashed = false"
-    )
-    files = _drive().files().list(q=q, fields="files(id, name)", pageSize=100).execute().get("files", [])
-    if len(files) > 1:
-        raise RuntimeError(f"Folder ganda ditemukan: {folder_name}")
-    if files:
-        return files[0]["id"]
-    f = _drive().files().create(
-        body={"name": folder_name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent_id]},
-        fields="id",
-    ).execute()
-    return f["id"]
+    """Folder di Drive (via Apps Script): cari, kalau tidak ada buat."""
+    data = apps_script_call("folder", {"name": folder_name, "parent_id": parent_id})
+    return data["id"]
 
 
 def _find_or_create_spreadsheet(year: str, year_folder_id: str) -> dict:
-    """Spreadsheet gabungan 'Cash Report {tahun}': cari, kalau tidak ada copy template."""
-    name = f"Cash Report {year}"
-    q = (
-        f"name = '{_escape_drive_query(name)}' "
-        f"and '{year_folder_id}' in parents "
-        "and mimeType = 'application/vnd.google-apps.spreadsheet' "
-        "and trashed = false"
-    )
-    files = _drive().files().list(q=q, fields="files(id, name, webViewLink)", pageSize=100).execute().get("files", [])
-    if len(files) > 1:
-        raise RuntimeError(f"Cash Report ganda ditemukan: {name}")
-    if files:
-        return files[0]
+    """Spreadsheet gabungan 'Cash Report {tahun}': cari, kalau tidak ada copy template (via Apps Script)."""
     if not CR_TEMPLATE_ID:
         raise RuntimeError("CASH_REPORT_TEMPLATE_ID kosong")
-    f = _drive().files().copy(
-        fileId=CR_TEMPLATE_ID,
-        body={"name": name, "parents": [year_folder_id]},
-        fields="id, name, webViewLink",
-    ).execute()
-    _init_year_dates(f["id"], year)
-    return f
+    data = apps_script_call(
+        "copy_template",
+        {
+            "name": f"Cash Report {year}",
+            "parent_id": year_folder_id,
+            "template_id": CR_TEMPLATE_ID,
+        },
+    )
+    out = {"id": data["id"], "name": data["name"], "webViewLink": data.get("link", "")}
+    if data.get("created"):
+        _init_year_dates(out["id"], year)
+    return out
 
 
 def _init_year_dates(spreadsheet_id: str, year: str) -> None:

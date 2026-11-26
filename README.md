@@ -31,7 +31,7 @@ flowchart LR
     QA -->|"baca saja (read-only)"| CR
     QA -->|"balasan"| U
 
-    CR -->|"cari/copy template"| YR["Folder tahun +<br/>file Cash Report {tahun}<br/>(Drive OAuth)"]
+    CR -->|"cari/copy template"| YR["Folder tahun +<br/>file Cash Report {tahun}<br/>(Drive via Apps Script)"]
     CR -->|"upload foto baru<br/>(opsional)"| DRIVE["Google Drive<br/>Receipts · kolom Link Bukti"]
     CR -->|"gagal"| PEND["pending.jsonl<br/>(disk bot)"]
     PEND -->|"retry tiap siklus"| CR
@@ -47,7 +47,7 @@ flowchart LR
 
 - **Routing pesan**: foto → ekstraksi (milestone 1); PDF mutasi → rekonsiliasi (milestone 2); teks → tanya-jawab `/total` `/rekap` `/help` + bahasa bebas via tool-calling (milestone 3). Semua dalam satu proses `main.py` — polling Telegram + endpoint API bersamaan, koneksi **keluar** semua, tanpa server publik.
 - Mode vision (AI) dipakai bila `AI_API_KEY` ada; selalu fallback ke mock agar alur tidak pernah putus.
-- **Split kredensial**: Drive (cari folder, copy template, upload foto) = OAuth user; sel/tab Cash Report = service account. `pending.jsonl` = penahan gagal, bukan penyimpanan utama.
+- **Split kredensial**: pembuatan file Drive (folder, copy template, upload foto) = Apps Script Web App; sel/tab Cash Report **dan** baca Drive = service account. `pending.jsonl` = penahan gagal, bukan penyimpanan utama.
 - Tanya-jawab **hanya membaca** TRANSAKSI; rekonsiliasi hanya menulis tab RECONCILIATION — tidak pernah mengubah baris transaksi. Error apa pun dilaporkan ke Sentry.
 - Warna: biru = layanan cloud (Telegram/Google/Sentry); hijau = milik bot (proses & file — di Render, atau lokal saat uji).
 
@@ -141,31 +141,30 @@ Aturan penting:
 
 Foto yang diterima juga diunggah ke Google Drive (folder `Receipts`); tautannya ditulis ke kolom **Link Bukti (K)** supaya bisa dibuka langsung dari Cash Report (memenuhi UC-02). Fitur ini **opsional** — tanpa konfigurasi, bot tetap jalan normal.
 
-Upload & manajemen file memakai **OAuth akun user** (bukan service account): Google memblokir service account membuat file sendiri (error `storageQuotaExceeded`). Scope yang dipakai **`https://www.googleapis.com/auth/drive`** (penuh) — diperlukan untuk mencari folder tahun dan menyalin template milik user. **Token lama ber-scopes `drive.file` tidak berlaku untuk fitur ini — buat ulang refresh token (langkah 4).**
+**Kenapa Apps Script?** Service account tidak bisa membuat file (kuota 0, `storageQuotaExceeded`), dan OAuth user status Testing kedaluwarsa tiap 7 hari (`invalid_grant`, terbukti 25 Nov 2026 di Sentry). Apps Script Web App berjalan sebagai akun pemilik **tanpa token yang kedaluwarsa** — sekali deploy, selesai. Pembagian kerja:
 
-1. **Aktifkan Drive API** — Google Cloud Console → **APIs & Services** → **Library** → cari "Google Drive API" → **Enable**.
-2. **OAuth consent screen** — **APIs & Services** → **OAuth consent screen** → User Type **External** → isi app name/email → **Save** → tab **Audience/Testing** → **+ Add users** → tambahkan Gmail yang akan jadi pemilik foto (mode Testing cukup, tidak perlu verifikasi Google).
-3. **Buat OAuth client** — **Credentials** → **Create Credentials** → **OAuth client ID** → Application type **Desktop app** → Create → **Download JSON** → simpan sebagai `credentials.json` di folder `bot/` (sudah masuk `.gitignore`).
-4. **Ambil refresh token (sekali saja)** — jalankan:
+- **Apps Script** (`apps_script/Code.gs`) — hanya 4 aksi pembuat file: `folder` (cari/buat folder tahun), `copy_template` (copy template tahunan, `LockService` anti ganda), `upload` (foto bukti), `create_sheet` (bootstrap TEMPLATE).
+- **Service account** — semua operasi sel/tab (baca tulis TRANSAKSI, RECAP, dll) **dan** baca Drive (cari id spreadsheet untuk rekonsiliasi; scope `drive` penuh, tidak pernah kedaluwarsa).
 
-```bash
-python oauth_init.py
-```
-
-   Browser terbuka → login Gmail tujuan → izinkan → salin baris `GOOGLE_OAUTH_REFRESH_TOKEN=...` dari terminal.
-5. **Buat folder tujuan** — di Drive akun yang sama, mis. `Receipts 2026` → salin **Folder ID** dari URL `drive.google.com/drive/folders/`**`ID`**. *(Tidak perlu share — file nanti milik akun ini.)*
-6. **Isi `.env`**:
+1. **Buat Web App** — buka [script.google.com](https://script.google.com) → **New project** → tempel seluruh isi `apps_script/Code.gs`.
+2. **Set secret** — Project Settings ⚙️ → **Script Properties** → add → `SECRET` = nilai rahasia buatan sendiri (contoh: `openssl rand -hex 24`).
+3. **Deploy** — **Deploy → New deployment → Web app** → *Execute as*: **Me** · *Who has access*: **Anyone** → Deploy → salin **Web app URL** (berakhiran `/exec`).
+4. **Buat folder tujuan** — di Drive akun pemilik, mis. `Receipts 2026` → salin **Folder ID** dari URL `drive.google.com/drive/folders/`**`ID`**.
+5. **Isi `.env`**:
    ```
-   GOOGLE_OAUTH_CLIENT_ID=<client id dari langkah 3>
-   GOOGLE_OAUTH_CLIENT_SECRET=<client secret>
-   GOOGLE_OAUTH_REFRESH_TOKEN=<nilai langkah 4>
-   GOOGLE_DRIVE_FOLDER_ID=<folder id langkah 5>
+   APPS_SCRIPT_URL=<web app URL langkah 3>
+   APPS_SCRIPT_SECRET=<nilai SECRET langkah 2>
+   GOOGLE_DRIVE_FOLDER_ID=<folder id langkah 4>
    ```
-   Di Render: sama di Dashboard Environment.
+   Di Render: sama di Dashboard Environment → restart. Hapus env lama `GOOGLE_OAUTH_*` bila masih ada.
+6. **Test cepat** (lokal):
+   ```bash
+   python -c "import main; print(main._find_or_create_folder('2026', main.CR_FOLDER_ID))"
+   ```
 
 Verifikasi: `/health` → `"drive": true`; kirim foto → balasan ada tautan "Bukti transfer" dan baris Cash Report punya isi kolom Link Bukti.
 
-Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan hanya bila tulis Cash Report sukses. Gagal unggah Drive tidak mematikan proses — kolom dibiarkan kosong, error muncul di log. **Refresh token OAuth aplikasi status Testing di Google Cloud kedaluwarsa7 hari** (terbukti25Nov2026: Sentry `invalid_grant: Token has been expired or revoked`). Pemulihan: `python oauth_init.py` lokal → salin refresh token baru → update `GOOGLE_OAUTH_REFRESH_TOKEN` di Environment Render → restart; antrean `pending.jsonl` di-flush otomatis. Supaya tidak berulang tiap minggu: pindahkan aplikasi ke status Production (tanpa review; butuh URL privacy policy/ToS) atau ganti jalur Drive ke Apps Script (Opsi2).
+Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan hanya bila tulis Cash Report sukses. Gagal unggah Drive tidak mematikan proses — kolom dibiarkan kosong, error muncul di log, dan `pending.jsonl` tetap menjadi jaring pengaman. Kalau Apps Script menolak (`secret salah`), cek kecocokan `APPS_SCRIPT_SECRET` dengan Script Properties; kalau `HTTP 403/404`, deploy ulang dengan akses **Anyone**.
 
 ## Alur
 
