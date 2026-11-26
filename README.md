@@ -31,8 +31,10 @@ flowchart LR
     QA -->|"baca saja (read-only)"| CR
     QA -->|"balasan"| U
 
-    CR -->|"cari/copy template"| YR["Folder tahun +<br/>file Cash Report {tahun}<br/>(Drive via Apps Script)"]
-    CR -->|"upload foto baru<br/>(opsional)"| DRIVE["Google Drive<br/>Receipts · kolom Link Bukti"]
+    CR -->|"folder · copy template · upload"| AS["Apps Script Web App<br/>(Execute as Me · secret)"]
+    AS --> YR["Folder tahun +<br/>file Cash Report {tahun}"]
+    AS -->|"foto"| DRIVE["Google Drive<br/>Receipts · kolom Link Bukti"]
+    CR -.->|"baca: cari id utk rekonsiliasi (SA)"| YR
     CR -->|"gagal"| PEND["pending.jsonl<br/>(disk bot)"]
     PEND -->|"retry tiap siklus"| CR
 
@@ -41,7 +43,7 @@ flowchart LR
 
     classDef cloud fill:#1e3a5f,stroke:#3b82f6,color:#fff
     classDef local fill:#14532d,stroke:#22c55e,color:#fff
-    class TG,CR,VIS,DRIVE,YR,RC,SEN cloud
+    class TG,CR,VIS,DRIVE,YR,AS,RC,SEN cloud
     class BOT,MOCK,PEND,W local
 ```
 
