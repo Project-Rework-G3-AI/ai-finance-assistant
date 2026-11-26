@@ -139,6 +139,7 @@ Sebelum perubahan ini, jalur-jalur tersebut hanya menulis ke stdout atau tidak m
 | `401 unauthorized` di log Telegram | Token salah/ganti | Update `TELEGRAM_BOT_TOKEN` |
 | Append Sheets `invalid_grant` / permission | JSON salah tempel atau SA belum di-share Editor | Cek isi `GOOGLE_SERVICE_ACCOUNT_JSON` penuh; cek share Sheet |
 | Drive gagal: `Apps Script ... secret salah` / `HTTP 403/404` | `APPS_SCRIPT_SECRET` tidak cocok dengan Script Properties, atau Web App dideploy dengan akses terbatas | Cocokkan secret di Script Properties; deploy ulang dengan *Who has access: Anyone* (README bagian Drive). Gagal upload tidak mematikan bot — kolom Link Bukti kosong, error di log |
+| Trace Langfuse tidak muncul | Key salah/region tidak cocok/SDK v2 (ingestion legacy ditolak Cloud sejak 16 Nov 2026) | Pastikan `LANGFUSE_PUBLIC_KEY`/`SECRET_KEY` terisi + SDK v5 (requirements); cek log "Langfuse catat gagal"; verifikasi region vs `LANGFUSE_BASE_URL` (EU default `cloud.langfuse.com`) |
 | Balasan dobel | Dua bot berjalan (lokal + cloud) | Matikan salah satu |
 | Notif "⚠️ Percobaan ulang transaksi tertunda gagal" | Tulis Cash Report gagal berulang saat retry (SA kehilangan akses, Sheets down, env rusak) | Cek log & `/health`; pastikan SA masih Editor di folder & Sheet. Notifikasi muncul sekali per kegagalan beruntun (anti-spam) |
 | `sheets: false` padahal env sudah diisi | JSON invalid (kepotong) | Validasi: `python3 -c "import json,sys;json.loads(sys.stdin.read())" < service_account.json` |

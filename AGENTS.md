@@ -30,6 +30,7 @@ Tidak ada test framework — verifikasi via `/health` dan `/api/extract` sebelum
 - Kredensial: Telegram & AI via env; **pembuatan file Drive = Apps Script Web App** (`APPS_SCRIPT_URL`/`APPS_SCRIPT_SECRET`, kode di `apps_script/Code.gs`); **sel Cash Report & baca Drive = service account** (`GOOGLE_SERVICE_ACCOUNT_JSON`/`_FILE`, folder Cash Report di-share Editor ke SA); **rekonsiliasi mutasi = nomor rekening** (`BNI/BRI/JAGO_ACCOUNT_NUMBER`, opsional). **Tidak pernah di kode/repo** — `.env`, `service_account.json`, `credentials.json`, `pending.jsonl` sudah di `.gitignore`.
 - Tulis ke **Cash Report**: folder tahun → file `Cash Report <tahun>` (copy template Bizschool, sel periode ditulis) → sheet `TRANSAKSI` (flat ledger A–K) → dedupe Ref ID (kolom I) → upload foto ke Receipts (kolom K) → append baris (transfer = 2 baris berpasangan dengan Ref ID sama di kolom I). Gagal → antre `pending.jsonl`, retry tiap siklus polling dengan notifikasi ke chat asal (sukses; gagal sekali saja).
 - Semua angka dihitung kode; AI (vision) hanya mengisi field (`bank`, kategori, dll). Status baris selalu `draft` (kolom G) — konversi `verified` = review manual; query nanti hanya hitung `verified`.
+- Observability LLM: `ai_trace.py` (Langfuse SDK v5, opsional) mencatat tiap panggilan AI — prompt, output, token, biaya, latensi (`vision-extract`, `qa-tool-calling`, `recon-vision`). Mati bila env `LANGFUSE_*` kosong atau saat pytest; gambar/kredensial tidak pernah dikirim.
 
 ## Code Style Guidelines
 

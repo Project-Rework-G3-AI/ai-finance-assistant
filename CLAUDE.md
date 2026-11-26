@@ -74,6 +74,10 @@ Routing di `handle_update`: foto/document → ekstraksi, PDF → rekonsiliasi, t
 
 PDF mutasi (Telegram atau `/api/reconcile`) → render halaman (`pymupdf`) → vision AI per halaman → validasi keras (`statement_validator`: total, saldo jalan, saldo akhir) → normalisasi → cocok TRANSAKSI periode itu dengan kunci **(tanggal, kantong, debit, credit)** → tulis tab **RECONCILIATION** (bank+rekening+periode sama → **replace**, idempotent; TRANSAKSI tak disentuh; kolom uang Debit/Credit/Bank Balance/Sheet Debit/Sheet Credit diformat `"Rp"#,##0` ulang tiap tulis). Butuh env `BNI/BRI/JAGO_ACCOUNT_NUMBER`. Contoh file uji di `samples/`.
 
+### LLM observability (`ai_trace.py`, Langfuse v5)
+
+Optional Langfuse Cloud tracing of every AI call: `vision-extract` (main.py), `qa-tool-calling` (qa.py, usage accumulated across tool rounds), `recon-vision` (vision_extractor.py, per page). Helper `ai_trace.lacak()` context manager records success/failure; `ai_trace.diagnosa()` verifies credentials. Active only when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are set (env `LANGFUSE_BASE_URL` for non-EU regions) and never under pytest. Only text is sent — images/credentials never leave. SDK must be **v5+**: v2 used the legacy `/api/public/ingestion` endpoint that Langfuse Cloud stopped accepting on 2026-11-16.
+
 ## Key Config
 
 | Var | Required | Purpose |
