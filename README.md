@@ -174,8 +174,9 @@ Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan ha
   - Caption yang dikirim sebagai pesan terpisah **tidak** terbaca bot — selalu satu paket foto + caption.
 - Mode vision (AI): gambar + caption dikirim bersama ke AI → field diisi AI (`bank` = **kantong asal** BRI/BNI/Jago/UANG KAS; transfer menghasilkan `arah=transfer` + `kantong_tujuan`; kosong → `CR_DEFAULT_BANK` — balasan draft menambah peringatan ⚠️ supaya reviewer sadar).
 - Mode mock (tanpa AI): gambar tidak dibaca; tanggal dari nama file, nominal/arah dari caption, keterangan = caption.
+- Ack instan sesuai latensi: foto → **"⏳ Membaca bukti transaksi…"**, PDF mutasi → **"⏳ Memproses mutasi bank…"**; teks cukup indikator typing (command membalas <2 detik, tanpa teks ack).
 - Bot ekstrak → **pipeline Cash Report**: folder tahun (buat bila perlu) → file `Cash Report <tahun>` (copy template bila baru + tulis sel periode) → sheet `TRANSAKSI` → cek duplikat (Ref ID, kolom I) → upload foto ke Receipts → tulis baris A–K (transfer = 2 baris berpasangan, Ref ID sama) → balasan status + tautan bukti.
-- Sheet `TRANSAKSI` tidak ada (template salah) atau tulis gagal → antre `pending.jsonl`, retry otomatis tiap siklus polling.
+- Sheet `TRANSAKSI` tidak ada (template salah) atau tulis gagal → antre `pending.jsonl`, retry otomatis tiap siklus polling — sukses retry dinotifikasikan ke chat asal; gagal diberi tahu sekali (anti-spam).
 - Review: ubah kolom `Status` (G) `draft` → `verified` setelah dicek. **Angka AI belum dipakai sebelum verified.** Saat mengoreksi kantong (mis. dari `TUNAI` default ke `BRI`), **rapikan juga kolom Catatan** — catatan lama `(kantong tidak terbaca — pakai default)` tetap tertinggal dan membingungkan.
 
 ## Skema kolom sheet TRANSAKSI (A–K)
@@ -184,13 +185,13 @@ Flat ledger — baris 1 header, data mulai baris 2, append di baris pertama kolo
 
 | Kolom | Isi | Aturan |
 |---|---|---|
-| A Tanggal | tanggal transaksi | format tampilan `d-mmm-yy` (format bawaan sel) |
-| B Kantong | BRI / BNI / Jago / UANG KAS | dari ekstraksi (`bank`), fallback `CR_DEFAULT_BANK` |
+| A Tanggal | tanggal transaksi | format tampilan `d-mmm-yy` (format bawaan sel); validasi tanggal |
+| B Kantong | BRI / BNI / Jago / UANG KAS | dari ekstraksi (`bank`), fallback `CR_DEFAULT_BANK`; dropdown dari SETUP |
 | C Masuk | nominal | terisi bila arah = masuk (atau sisi tujuan transfer) |
 | D Keluar | nominal | terisi bila arah = keluar (atau sisi asal transfer) |
 | E Kategori | daftar di sheet SETUP (sumber: `cash_report/categories.py`) | dari ekstraksi, dinormalkan ke nama baku; reviewer boleh koreksi |
 | F Keterangan | hasil ekstraksi LLM, caption digabung dengan ` — ` bila berbeda | reviewer boleh rapikan |
-| G Status | `draft` saat tulis; reviewer → `verified` | |
+| G Status | `draft` saat tulis; reviewer → `verified` | dropdown draft/verified |
 | H Catatan | catatan sistem (bukan LLM): "wajib ditinjau", nilai tidak terbaca, anomali | |
 | I Ref ID | dedupe (`tg:<file_id>` / `manual:…`) — identitas = **konten file**: rename diabaikan, kompres ulang dianggap bukti baru (jaring review `draft`; rencana `doc:` di Pengembangan Berikutnya) | pasangan transfer memakai Ref ID sama |
 | J Sumber File | nama file foto asli dari Telegram | |
@@ -251,7 +252,7 @@ Urutkan berdasarkan nilai buat brief (3 pilihan kelompok) dan usaha:
 1. **Balancing (inti Pilihan 1)** — ✅ sebagian (rekonsiliasi, milestone 2): PDF mutasi bank → matching (tanggal, kantong, nominal) → tab RECONCILIATION, lihat **Rekonsiliasi Mutasi**. Sisa: dukungan **mutasi XLSX**, kolom `Status Reconcile` langsung di TRANSAKSI, kunci via nomor referensi dokumen.
 2. **Web app baru (rekap/PnL)** — bangun dari awal, membaca Sheet yang sama via service account → rekap harian + draf PnL dari data bot.
 3. **Tanya-jawab & ringkasan** — ✅ sudah (milestone 3): command `/total`, `/rekap` + pertanyaan bebas via tool-calling, lihat bagian **Tanya-jawab**.
-4. **Kualitas** — pytest (extract/dedupe/pending), eval 10 foto sampel → bahan EV-xx Testing Report.
+4. **Kualitas** — pytest: ✅ antrean pending (5 test); sisa extract/dedupe; eval 10 foto sampel → bahan EV-xx Testing Report.
 5. **Integrasi lanjutan bila waktu cukup** — klasifikasi kategori otomatis (rule/Jev), ekstraksi invoice PDF, multi-kas, deploy always-on.
 
 Yang tidak perlu dibangun: database, login, dashboard analytics, n8n.

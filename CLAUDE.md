@@ -40,8 +40,10 @@ Photo/caption → Telegram → poll_loop() → handle_update()
   │                        #   (SA); dedupe by Ref ID (col I); upload photo → col K;
   │                        #   append row A–K at first empty row; transfer = 2 paired
   │                        #   rows sharing the same Ref ID in col I
-  → on failure: push_pending() → pending.jsonl
-  → flush_pending()        # retried each polling cycle (no image → col K empty)
+  → on failure: push_pending(chat_id) → pending.jsonl
+  → flush_pending()        # retried each polling cycle; notifies origin chat
+                           #   on success & on first failure only (_notif flag);
+                           #   no image → col K empty
   → tg_send()              # reply: worksheet + row + receipt link
 ```
 
@@ -62,7 +64,7 @@ Photo/caption → Telegram → poll_loop() → handle_update()
 
 ### Failure Queue
 
-`pending.jsonl` — JSONL file, one record per line. Retried before each polling cycle. **Not persistent across Render redeploys.**
+`pending.jsonl` — JSONL file, one record per line. Retried before each polling cycle; records store `chat_id` so retry outcomes are notified (success, or first failure only via `_notif` flag). **Not persistent across Render redeploys.**
 
 ### Tanya-jawab (milestone 3, `cash_report/qa.py`)
 
