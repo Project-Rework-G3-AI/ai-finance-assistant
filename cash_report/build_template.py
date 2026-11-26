@@ -108,14 +108,10 @@ def build() -> str:
     if ada:
         raise SystemExit(f"'Cash Report TEMPLATE' sudah ada ({ada[0]['id']}) — hapus dulu bila ingin membangun ulang.")
 
-    f = main._drive().files().create(
-        body={
-            "name": "Cash Report TEMPLATE",
-            "mimeType": "application/vnd.google-apps.spreadsheet",
-            "parents": [year_folder],
-        },
-        fields="id, webViewLink",
-    ).execute()
+    # SA tidak bisa membuat file (kuota 0) — bootstrap lewat Apps Script.
+    f = main.apps_script_call(
+        "create_sheet", {"name": "Cash Report TEMPLATE", "parent_id": year_folder}
+    )
     sid = f["id"]
     sh = main._sheets().open_by_key(sid)
 

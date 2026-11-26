@@ -80,10 +80,10 @@ PDF mutasi (Telegram atau `/api/reconcile`) → render halaman (`pymupdf`) → v
 | `TELEGRAM_ALLOWED_CHAT_IDS` | Yes | Whitelist (comma-sep) |
 | `CASH_REPORT_FOLDER_ID` | Yes | Drive folder `Cash Report` (shared to SA) |
 | `CASH_REPORT_TEMPLATE_ID` | Yes | Template spreadsheet to copy (from `build_template.py`) |
-| `CR_DEFAULT_BANK` | No | Kantong fallback when extraction finds none (default TUNAI) |
+| `CR_DEFAULT_BANK` | No | Kantong fallback when extraction finds none (default UANG KAS) |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Cloud | Full SA JSON as string |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | Local | Path to SA JSON file |
-| `GOOGLE_OAUTH_CLIENT_ID/SECRET/REFRESH_TOKEN` | Drive | User OAuth, scope `drive` |
+| `APPS_SCRIPT_URL/SECRET` | Drive | Web App Apps Script (pembuat file: folder, copy template, upload, create_sheet) — setup di README bagian Drive |
 | `GOOGLE_DRIVE_FOLDER_ID` | No | Receipts folder (photo archive, col K) |
 | `AI_API_KEY` | No | Enables vision extraction |
 | `AI_BASE_URL` | No | Default: OpenAI |
