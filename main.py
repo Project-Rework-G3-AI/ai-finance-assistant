@@ -150,7 +150,9 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
     prompt = (
         "Ekstrak data transaksi dari bukti ini. Balas HANYA JSON tanpa teks lain: "
         '{"tanggal":"YYYY-MM-DD HH:MM:SS","keterangan":"...","nominal":number,'
-        '"arah":"masuk|keluar|transfer",'
+        '"arah":"masuk|keluar|transfer — bukti dari sisi pembayar '
+        '(Pembayaran QRIS ke [merchant], Transfer ke [penerima]) berarti keluar; '
+        'masuk hanya bila bukti menunjukkan dana diterima (mutasi masuk, pembayaran dari pembeli)",'
         f'"kategori":"satu dari: {KAT.PROMPT_KATEGORI}",'
         '"bank":"kantong asal dana — salah satu dari: BRI, BNI, Jago, UANG KAS; '
         'kosong bila tidak terbaca",'
