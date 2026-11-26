@@ -458,7 +458,9 @@ def write_sc06_report(results: list[dict], out: Path) -> dict:
     """
     import sc06_extraction as sc06
 
-    samples = ROOT / "sc-out" / "sc06_samples.csv"
+    # Dibaca dari folder keluaran yang diminta, bukan path tetap, supaya
+    # fungsi ini bisa diuji dan konsisten dengan kriteria lain.
+    samples = out / "sc06_samples.csv"
     if not samples.is_file():
         text = ("SC-06 — Kelengkapan field yang diekstrak dari gambar\n"
                 + "=" * 60 + "\n"
@@ -634,9 +636,11 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
 AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03", "sc04", "sc05", "sc06")
 
 # Kriteria yang tidak butuh kunci model, dataset gambar, maupun jaringan.
+# SC-06 termasuk di sini karena runner hanya merangkum `sc06_samples.csv` yang
+# sudah ada; pemanggilan modelnya dilakukan `_sc06_run.py`, bukan runner.
 # Daftar ini dipakai untuk memutuskan apakah runner boleh berhenti tanpa
 # memanggil model sama sekali.
-FREE_CRITERIA = {"sc03", "sc04", "sc05"}
+FREE_CRITERIA = {"sc03", "sc04", "sc05", "sc06"}
 
 
 def selected_criteria(args) -> list[str]:
