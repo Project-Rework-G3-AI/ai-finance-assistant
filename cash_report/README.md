@@ -1,5 +1,10 @@
 # Cash Report Automation
 
+> **[DEPRECATED]** Dokumen ini menjelaskan prototipe awal (`cr.py`) yang memakai
+> OAuth user — jalur tersebut sudah diganti Apps Script Web App (lihat
+> `apps_script/Code.gs` dan README utama bagian Drive). Kredensial `OAUTH_*`
+> di bawah tidak berlaku lagi. Referensi aktif: README utama di root `bot/`.
+
 Dokumentasi singkat mengenai struktur folder Google Drive, alur input
 data ke fungsi spreadsheet, dan kredensial Google API yang dibutuhkan.
 

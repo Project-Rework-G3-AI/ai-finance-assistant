@@ -52,7 +52,7 @@ Photo/caption → Telegram → poll_loop() → handle_update()
 
 ### Cash Report writer (Drive + Sheets split)
 
-- **Drive (OAuth user, scope `drive`)**: find/create year folder, find/copy template spreadsheet, upload receipt photo. SA cannot own files (`storageQuotaExceeded`).
+- **Drive — Apps Script Web App** (`APPS_SCRIPT_URL`/`SECRET`, kode `apps_script/Code.gs`): year folder, copy template, receipt photo upload, blank-sheet bootstrap. SA cannot own files (`storageQuotaExceeded`); OAuth user (Testing) expired every 7 days — Web App runs as the owner account, no expiring token. Drive **reads** (find spreadsheet id for reconciliation) stay on SA (scope `drive`).
 - **Sheets (service account)**: all cell writes. Folder `Cash Report` is shared to `client_email` as Editor — files created inside inherit access.
 - Target: file `Cash Report <tahun>` inside year folder → sheet `TRANSAKSI` (flat ledger, Bizschool style). Period cell `RECAP OVERVIEW!B3` = `=DATE(<tahun>,1,1)` written once on copy; RECAP/YEARLY/EXPENSE/INCOME are all derived via SUMIFS.
 - Template built by `cash_report/build_template.py` (7 sheets, year-agnostic); verified by `cash_report/verify_template.py`.

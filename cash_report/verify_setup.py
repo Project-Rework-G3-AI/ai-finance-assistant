@@ -1,4 +1,4 @@
-"""Verifikasi setup Drive & template Cash Report untuk cr.py/main.py.
+"""Verifikasi setup Drive & template Cash Report untuk main.py.
 
 Jalankan: .venv/bin/python cash_report/verify_setup.py
 Butuh CASH_REPORT_FOLDER_ID & CASH_REPORT_TEMPLATE_ID di .env.
