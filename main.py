@@ -722,11 +722,20 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
     doc = msg.get("document")
     photo = msg.get("photo")
 
-    # PDF diperlakukan sebagai mutasi bank, bukan receipt transaksi.
-    if doc and (
+    # Ack sesuai ekspektasi latensi: foto/PDF = proses panjang (vision +
+    # tulis sheet) -> teks "mohon tunggu"; teks = cepat -> cukup indikator
+    # typing (command <2 detik, bahasa bebas lewat LLM beberapa detik).
+    is_pdf = bool(doc and (
         doc.get("mime_type") == "application/pdf"
         or str(doc.get("file_name", "")).lower().endswith(".pdf")
-    ):
+    ))
+    if is_pdf:
+        await tg_send(client, chat_id, "⏳ Memproses mutasi bank — mohon tunggu…")
+    elif doc or photo:
+        await tg_send(client, chat_id, "⏳ Membaca bukti transaksi — mohon tunggu…")
+
+    # PDF diperlakukan sebagai mutasi bank, bukan receipt transaksi.
+    if is_pdf:
         await handle_bank_statement_pdf(
             client=client,
             chat_id=chat_id,
@@ -739,6 +748,8 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
         # Routing: foto/dokumen ke ekstraksi; teks ke tanya-jawab (lihat qa.py).
         text = str(msg.get("text") or "").strip()
         if text:
+            with suppress(Exception):
+                await tg_call(client, "sendChatAction", chat_id=chat_id, action="typing")
             await handle_text(client, chat_id, text)
         else:
             await tg_send(
