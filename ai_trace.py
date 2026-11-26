@@ -1,9 +1,13 @@
-"""Pelacakan panggilan LLM ke Langfuse Cloud (opsional).
+"""Pelacakan panggilan LLM ke Langfuse Cloud (opsional) — Python SDK v5.
 
-Dua env wajib: LANGFUSE_PUBLIC_KEY & LANGFUSE_SECRET_KEY (LANGFUSE_HOST
-opsional, default cloud). Kosong = tidak aktif, nol dampak runtime.
-Di bawah pytest juga tidak aktif — exception test sengaja dibuat dan
-tidak boleh mengirim event (prinsip sama dengan guard Sentry).
+Dua env wajib: LANGFUSE_PUBLIC_KEY & LANGFUSE_SECRET_KEY. LANGFUSE_BASE_URL
+hanya perlu bila region bukan EU default. Kosong = tidak aktif, nol dampak
+runtime. Di bawah pytest juga tidak aktif — exception test sengaja dibuat
+dan tidak boleh mengirim event (prinsip sama dengan guard Sentry).
+
+SDK v5 berbasis OpenTelemetry dan memakai endpoint ingestion v4 — SDK v2
+lama memakai /api/public/ingestion yang sudah tidak diterima Langfuse Cloud
+(berhenti 16 Nov 2026), itulah sebabnya trace tak pernah muncul.
 
 Yang dikirim HANYA teks: prompt, output JSON, usage, metadata ringkas
 (nama file, nomor halaman). Gambar/kredensial tidak pernah dikirim.
@@ -30,13 +34,30 @@ def aktif() -> bool:
 
 
 def _pasang():
-    """Singleton klien Langfuse (membaca env LANGFUSE_* sendiri)."""
+    """Singleton klien (get_client membaca env LANGFUSE_* otomatis)."""
     global _client
     if _client is None:
-        from langfuse import Langfuse
+        from langfuse import get_client
 
-        _client = Langfuse()
+        _client = get_client()
     return _client
+
+
+def diagnosa() -> str:
+    """Cek koneksi & kredensial — untuk verifikasi cepat di lokal/Render.
+
+    Jalankan: python -c "import ai_trace; print(ai_trace.diagnosa())"
+    """
+    if not aktif():
+        return (
+            "off — LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY kosong "
+            "(atau sedang di bawah pytest)"
+        )
+    try:
+        ok = _pasang().auth_check()
+        return "ok — kredensial valid" if ok else "gagal — kredensial ditolak"
+    except Exception as e:  # noqa: BLE001
+        return f"gagal — {type(e).__name__}: {e}"
 
 
 def usage_dari(data: dict) -> dict | None:
@@ -74,16 +95,15 @@ def catat(
         meta = dict(metadata or {})
         if latensi_ms is not None:
             meta["latensi_ms"] = latensi_ms
-        trace = lf.trace(name=nama, metadata=meta)
-        kwargs = {"name": nama, "model": model, "input": input, "metadata": meta}
-        if output is not None:
-            kwargs["output"] = output
-        if usage:
-            kwargs["usage"] = usage
         if error:
-            kwargs["level"] = "ERROR"
-            kwargs["status_message"] = error[:500]
-        trace.generation(**kwargs)
+            meta["error"] = True
+        with lf.start_as_current_observation(
+            as_type="generation", name=nama, model=model
+        ) as gen:
+            gen.update(input=input, output=(output if output is not None else None),
+                       metadata=meta, usage=usage)
+            if error:
+                gen.update(output={"error": error[:500]})
         lf.flush()
     except Exception as e:  # noqa: BLE001 — observability gagal = diam
         log.warning("Langfuse catat gagal: %s: %s", type(e).__name__, e)
@@ -98,8 +118,7 @@ def lacak(nama: str, *, model: str | None = None, input=None, metadata: dict | N
             data = r.json()
             rekam(output=..., usage=ai_trace.usage_dari(data))
 
-    Sukses maupun gagal tercatat (gagal: level ERROR); exception tetap
-    diteruskan setelah dicatat.
+    Sukses maupun gagal tercatat; exception tetap diteruskan setelah dicatat.
     """
     t0 = time.perf_counter()
     wadah = {"output": None, "usage": None, "error": None}

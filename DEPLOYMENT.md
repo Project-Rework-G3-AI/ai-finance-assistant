@@ -34,7 +34,7 @@ UptimeRobot → GET /health tiap 5 menit → free tier tetap terjaga
 | `CASH_REPORT_FOLDER_ID`, `CASH_REPORT_TEMPLATE_ID` | folder Cash Report (di-share Editor ke SA) + ID template |
 | `CR_DEFAULT_BANK` | opsional (default `UANG KAS`) |
 | `APPS_SCRIPT_URL`, `APPS_SCRIPT_SECRET` | Apps Script Web App (Drive) — cari/buat folder, copy template, upload foto, bootstrap TEMPLATE. Detail setup: README bagian Drive |
-| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` | opsional — pelacakan LLM (prompt/output/token/biaya per panggilan vision & QA). Kosong = mati. Key dari cloud.langfuse.com → Settings → API Keys |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` | opsional — pelacakan LLM (prompt/output/token/biaya per panggilan vision & QA). Kosong = mati. SDK v5 (endpoint ingestion v4); `LANGFUSE_BASE_URL` hanya untuk region non-EU. Verifikasi: `python -c "import ai_trace; print(ai_trace.diagnosa())"` |
 | `GOOGLE_DRIVE_FOLDER_ID` | (opsional) ID folder `Receipts` — arsip foto bukti |
 | `AI_API_KEY` | kunci vision (kosongkan = mode mock) |
 | `AI_BASE_URL`, `AI_MODEL` | opsional (default OpenAI) |
