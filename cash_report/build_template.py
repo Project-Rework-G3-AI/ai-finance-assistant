@@ -148,35 +148,93 @@ def _col_letter(idx: int) -> str:
     return chr(ord("A") + idx) if idx < 26 else f"A{chr(ord('A') + idx - 26)}"
 
 
-def _validasi_dropdown(sheet_id: int) -> dict:
-    """Request setDataValidation untuk kolom Kategori di TRANSAKSI.
+def _validasi_dropdown(sheet_id: int) -> list:
+    """Request setDataValidation untuk kolom ber-daftar di TRANSAKSI.
+
+    Return LIST of requests: A Tanggal (harus tanggal), B Kantong (SETUP),
+    E Kategori (SETUP), G Status (draft/verified).
 
     Nilai dropdown diambil dari rentang SETUP, bukan ditulis sebagai daftar
     inline: batas panjang daftar inline sekitar 256 karakter, sedangkan 31
     kategori sudah lebih panjang. Rentang juga membuat perubahan daftar di
     SETUP langsung berlaku tanpa menyentuh validasinya.
     """
-    return {"setDataValidation": {
-        "range": {
-            "sheetId": sheet_id,
-            "startRowIndex": 1,              # baris 2 (baris 1 = header)
-            "endRowIndex": BARIS_VALIDASI,
-            "startColumnIndex": 4,           # kolom E (indeks 0-based)
-            "endColumnIndex": 5,
-        },
-        "rule": {
-            "condition": {
-                "type": "ONE_OF_RANGE",
-                "values": [{"userEnteredValue": "=SETUP!${kol}${awal}:${kol}${akhir}".format(
-                    kol=_col_letter(KOL_DROPDOWN),
-                    awal=BARIS_AWAL_DROPDOWN,
-                    akhir=BARIS_AWAL_DROPDOWN + len(KAT_DROPDOWN) - 1,
-                )}],
+    rentang_setup = lambda kol, awal, akhir: (   # noqa: E731
+        "=SETUP!{}{}:{}{}".format(kol, awal, kol, akhir)
+    )
+    return [
+        {"setDataValidation": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": 1,              # baris 2 (baris 1 = header)
+                "endRowIndex": BARIS_VALIDASI,
+                "startColumnIndex": 0,           # kolom A Tanggal
+                "endColumnIndex": 1,
             },
-            "strict": False,   # nilai lama di luar daftar tidak dianggap galat
-            "showCustomUi": True,
-        },
-    }}
+            "rule": {
+                "condition": {"type": "DATE_IS_VALID"},
+                "strict": False,
+                "showCustomUi": True,
+            },
+        }},
+        {"setDataValidation": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": 1,
+                "endRowIndex": BARIS_VALIDASI,
+                "startColumnIndex": 1,           # kolom B Kantong
+                "endColumnIndex": 2,
+            },
+            "rule": {
+                "condition": {
+                    "type": "ONE_OF_RANGE",
+                    "values": [{"userEnteredValue": rentang_setup(
+                        "A", BARIS_AWAL_DROPDOWN, BARIS_AWAL_DROPDOWN + len(KANTONG) - 1,
+                    )}],
+                },
+                "strict": False,
+                "showCustomUi": True,
+            },
+        }},
+        {"setDataValidation": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": 1,              # baris 2 (baris 1 = header)
+                "endRowIndex": BARIS_VALIDASI,
+                "startColumnIndex": 4,           # kolom E (indeks 0-based)
+                "endColumnIndex": 5,
+            },
+            "rule": {
+                "condition": {
+                    "type": "ONE_OF_RANGE",
+                    "values": [{"userEnteredValue": rentang_setup(
+                        _col_letter(KOL_DROPDOWN),
+                        BARIS_AWAL_DROPDOWN,
+                        BARIS_AWAL_DROPDOWN + len(KAT_DROPDOWN) - 1,
+                    )}],
+                },
+                "strict": False,   # nilai lama di luar daftar tidak dianggap galat
+                "showCustomUi": True,
+            },
+        }},
+        {"setDataValidation": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": 1,
+                "endRowIndex": BARIS_VALIDASI,
+                "startColumnIndex": 6,           # kolom G Status
+                "endColumnIndex": 7,
+            },
+            "rule": {
+                "condition": {
+                    "type": "ONE_OF_LIST",
+                    "values": [{"userEnteredValue": v} for v in ("draft", "verified")],
+                },
+                "strict": False,
+                "showCustomUi": True,
+            },
+        }},
+    ]
 
 
 def _setup(ws) -> None:
@@ -390,8 +448,9 @@ def _format(sh, sheets: dict) -> None:
         req("INCOME STATEMENT", 11, 12, 0, 14, bold, "userEnteredFormat.textFormat.bold"),  # LABA BERSIH
         req("INCOME STATEMENT", 6, 7, 0, 1, bold, "userEnteredFormat.textFormat.bold"),      # LABA KOTOR
         req("INCOME STATEMENT", 8, 9, 0, 1, bold, "userEnteredFormat.textFormat.bold"),      # LABA SEBELUM PAJAK
-        # Dropdown kolom Kategori di TRANSAKSI, sumbernya daftar di SETUP.
-        _validasi_dropdown(sheets["TRANSAKSI"].id),
+        # Dropdown A Tanggal / B Kantong / E Kategori / G Status di TRANSAKSI
+        # (kategori & kantong bersumber daftar di SETUP).
+        *_validasi_dropdown(sheets["TRANSAKSI"].id),
     ]
     widths = [100, 90, 110, 110, 200, 260, 80, 240, 150, 170, 200]
     for i, w in enumerate(widths):
