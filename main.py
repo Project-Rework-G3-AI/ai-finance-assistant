@@ -482,20 +482,25 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
     return {"status": "ok", "worksheet": ws.title, "row": row, "link": link}
 
 
-def push_pending(rec: dict, error: str) -> None:
+def push_pending(rec: dict, error: str, chat_id: int | None = None) -> None:
     with PENDING.open("a", encoding="utf-8") as f:
         # default=str: rec["tanggal"] kini bisa datetime — tanpa ini
         # json.dumps TypeError dan transaksi hilang saat tulis gagal.
-        f.write(json.dumps({**rec, "_error": error, "_ts": int(time.time())},
+        # chat_id: agar flush_pending bisa memberi tahu user hasil retry.
+        f.write(json.dumps({**rec, "chat_id": chat_id, "_error": error, "_ts": int(time.time())},
                            ensure_ascii=False, default=str) + "\n")
 
 
-def flush_pending(client: httpx.AsyncClient) -> int:
+async def flush_pending(client: httpx.AsyncClient) -> int:
     """Kirim ulang antrean. Return jumlah yang masih tersisa.
 
     Baris dibaca satu per satu dan dikumpulkan dulu, baru file ditulis ulang.
     Versi sebelumnya menghapus file sebelum memproses, sehingga satu baris JSON
     rusak membuat seluruh antrean transaksi hilang tanpa bisa dipulihkan.
+
+    Notifikasi: sukses retry selalu diberi tahu ke chat asal (chat_id tersimpan
+    di record); kegagalan hanya sekali (flag _notif) agar polling tiap siklus
+    tidak jadi spam. Record lama tanpa chat_id lewat tanpa notifikasi.
     """
     if not PENDING.exists():
         return 0
@@ -514,18 +519,33 @@ def flush_pending(client: httpx.AsyncClient) -> int:
             sentry_setup.capture_exception(e)
             sisa.append(ln)
             continue
+        chat_id = rec.get("chat_id")
         rec.pop("_error", None)
         rec.pop("_ts", None)
         try:
-            write_cash_report(rec)  # tanpa gambar: retry hanya barisnya, link kosong
+            hasil = await asyncio.to_thread(write_cash_report, rec)  # tanpa gambar: link kosong
         except Exception as e:
             # Retry gagal berarti transaksi belum tercatat; ini perlu terlihat.
             log.warning("Retry antrean gagal, dikembalikan ke pending: %s: %s", type(e).__name__, e)
             sentry_setup.capture_exception(e)
-            # Simpan dengan anotasi error; ditulis sekali di akhir, bukan
-            # append per baris, agar isi file tidak tercampur dua sumber.
             sisa.append(json.dumps({**rec, "_error": f"retry gagal: {e}", "_ts": int(time.time())},
                                    ensure_ascii=False, default=str))
+            if chat_id and not rec.get("_notif"):
+                # Beri tahu sekali; siklus berikutnya diam (lihat flag _notif).
+                await tg_send(
+                    client, chat_id,
+                    f"⚠️ Percobaan ulang transaksi tertunda gagal lagi ({type(e).__name__})."
+                    " Akan dicoba otomatis tiap siklus.",
+                )
+                sisa[-1] = json.dumps({**rec, "_notif": True, "_error": f"retry gagal: {e}",
+                                       "_ts": int(time.time())}, ensure_ascii=False, default=str)
+            continue
+        if chat_id:
+            await tg_send(
+                client, chat_id,
+                f"✅ Transaksi tertunda tadi berhasil tercatat — {hasil.get('worksheet', '?')} "
+                f"baris {hasil.get('row', '?')}.",
+            )
 
     # Tulis ulang hanya bila masih ada sisa; file kosong dihapus agar /health
     # melaporkan pending=false dengan benar.
@@ -784,7 +804,7 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
         # log.exception() level ERROR sudah dikirim sebagai event oleh
         # LoggingIntegration, jadi tidak perlu capture_exception() lagi.
         log.exception("Tulis Cash Report gagal, masuk antrean")
-        push_pending(rec, str(e))
+        push_pending(rec, str(e), chat_id=chat_id)
         await tg_send(client, chat_id, f"⚠️ Ekstraksi OK, tapi tulis ke Cash Report gagal ({type(e).__name__}). Masuk antrean, dikirim ulang otomatis.")
         return
     if hasil["status"] == "dup":
@@ -819,7 +839,7 @@ async def poll_loop() -> None:
             try:
                 # retry antrean lokal setiap siklus
                 if PENDING.exists():
-                    flush_pending(client)
+                    await flush_pending(client)
                 updates = await tg_call(client, "getUpdates", offset=offset, timeout=25, allowed_updates=["message", "channel_post"])
                 for upd in updates:
                     offset = upd["update_id"] + 1
@@ -834,10 +854,17 @@ async def poll_loop() -> None:
                         chat = (upd.get("message") or {}).get("chat", {}).get("id")
                         if chat:
                             await tg_send(client, chat, f"❌ Gagal memproses: {type(e).__name__}: {e}")
-            except Exception:
+            except Exception as e:
                 # Loop terluar: menelan semua error agar bot tetap hidup. Tanpa
                 # laporan di sini, bot bisa diam berjam-jam tanpa jejak apa pun.
-                log.exception("poll_loop gagal, ulang dalam 3 detik")
+                if "error_code=409" in str(e):
+                    # Deploy overlap Render: instance lama & baru polling
+                    # bersamaan beberapa detik. Wajar, pulih sendiri lewat
+                    # retry — warning tanpa traceback & tanpa event Sentry
+                    # (menghindari noise per deploy; pola: burst lalu diam).
+                    log.warning("getUpdates 409 (deploy overlap) — ulang 3 detik")
+                else:
+                    log.exception("poll_loop gagal, ulang dalam 3 detik")
                 await asyncio.sleep(3)
 
 
