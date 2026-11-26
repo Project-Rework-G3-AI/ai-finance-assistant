@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sys
 
 import sentry_sdk
 
@@ -111,6 +112,14 @@ def init_sentry() -> bool:
     dsn = os.getenv("SENTRY_DSN", "").strip()
     if not dsn:
         log.info("SENTRY_DSN kosong — Sentry tidak aktif (bot tetap berjalan)")
+        return False
+
+    if "pytest" in sys.modules:
+        # Run pytest sengaja memunculkan exception (fixture jalur gagal
+        # pending, dll.) — mengirimnya ke Sentry hanya menghasilkan noise
+        # yang membuka-ulang issue yang sudah di-resolve. capture_exception
+        # tanpa init aman jadi no-op.
+        log.info("Sentry dilewati — berjalan di bawah pytest")
         return False
 
     from sentry_sdk.integrations.fastapi import FastApiIntegration

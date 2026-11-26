@@ -72,7 +72,7 @@ Routing di `handle_update`: foto/document → ekstraksi, PDF → rekonsiliasi, t
 
 ### Rekonsiliasi mutasi bank (milestone 2, `reconciliation/`)
 
-PDF mutasi (Telegram atau `/api/reconcile`) → render halaman (`pymupdf`) → vision AI per halaman → validasi keras (`statement_validator`: total, saldo jalan, saldo akhir) → normalisasi → cocok TRANSAKSI periode itu dengan kunci **(tanggal, kantong, debit, credit)** → tulis tab **RECONCILIATION** (bank+rekening+periode sama → **replace**, idempotent; TRANSAKSI tak disentuh). Butuh env `BNI/BRI/JAGO_ACCOUNT_NUMBER`. Contoh file uji di `samples/`.
+PDF mutasi (Telegram atau `/api/reconcile`) → render halaman (`pymupdf`) → vision AI per halaman → validasi keras (`statement_validator`: total, saldo jalan, saldo akhir) → normalisasi → cocok TRANSAKSI periode itu dengan kunci **(tanggal, kantong, debit, credit)** → tulis tab **RECONCILIATION** (bank+rekening+periode sama → **replace**, idempotent; TRANSAKSI tak disentuh; kolom uang Debit/Credit/Bank Balance/Sheet Debit/Sheet Credit diformat `"Rp"#,##0` ulang tiap tulis). Butuh env `BNI/BRI/JAGO_ACCOUNT_NUMBER`. Contoh file uji di `samples/`.
 
 ## Key Config
 
