@@ -59,7 +59,7 @@ SA_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "service_account.json").strip
 DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip()  # folder Receipts (upload foto)
 CR_FOLDER_ID = os.getenv("CASH_REPORT_FOLDER_ID", "").strip()
 CR_TEMPLATE_ID = os.getenv("CASH_REPORT_TEMPLATE_ID", "").strip()
-CR_DEFAULT_BANK = os.getenv("CR_DEFAULT_BANK", "TUNAI").strip().upper()
+CR_DEFAULT_BANK = os.getenv("CR_DEFAULT_BANK", "UANG KAS").strip().upper()
 AI_KEY = os.getenv("AI_API_KEY", "").strip()
 AI_BASE = os.getenv("AI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
 AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini").strip()
@@ -152,10 +152,10 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
         '{"tanggal":"YYYY-MM-DD HH:MM:SS","keterangan":"...","nominal":number,'
         '"arah":"masuk|keluar|transfer",'
         f'"kategori":"satu dari: {KAT.PROMPT_KATEGORI}",'
-        '"bank":"kantong asal dana — salah satu dari: BRI, BNI, Jago, TUNAI; '
+        '"bank":"kantong asal dana — salah satu dari: BRI, BNI, Jago, UANG KAS; '
         'kosong bila tidak terbaca",'
         '"kantong_tujuan":"hanya bila arah=transfer — kantong tujuan: '
-        'BRI, BNI, Jago, TUNAI; kosong bila bukan transfer"}'
+        'BRI, BNI, Jago, UANG KAS; kosong bila bukan transfer"}'
     )
     if caption:
         prompt += f"\nCaption Telegram: {caption}"
@@ -790,11 +790,11 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
     baris_bukti = f'\n<a href="{hasil["link"]}">Bukti transfer</a>' if hasil["link"] else ""
     baris_kantong = ""
     if not str(rec.get("bank") or "").strip():
-        # Bukti: kantong default mengotori TUNAI/Kas Operasional (Q&A stakeholder:
-        # kas operasional direkonsiliasikan ke buku kas fisik) — sorot di balasan.
+        # Bukti: kantong default mengotori saldo UANG KAS (kas operasional) di tab
+        # ACCOUNT — direkonsiliasikan stakeholder ke buku kas fisik. Sorot di balasan.
         baris_kantong = (
             f"\n⚠️ Kantong asal tidak terbaca — ditulis sebagai <b>{kantong} (default)</b>;"
-            " koreksi di Sheet bila bukan tunai."
+            " koreksi di Sheet bila bukan kas."
         )
     await tg_send(
         client, chat_id,
