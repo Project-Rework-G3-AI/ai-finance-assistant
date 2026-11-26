@@ -27,6 +27,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+import ai_trace
 import sentry_setup
 from cash_report import categories as KAT
 from cash_report import qa
@@ -161,32 +162,40 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
     )
     if caption:
         prompt += f"\nCaption Telegram: {caption}"
-    r = await client.post(
-        f"{AI_BASE}/chat/completions",
-        headers={"Authorization": f"Bearer {AI_KEY}"},
-        json={
-            "model": AI_MODEL,
-            "messages": [{"role": "user", "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
-            ]}],
-            "temperature": 0,
-        },
-        timeout=90,
-    )
-    try:
-        r.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        # raise_for_status() hanya membawa kode status. Isi respons dari provider
-        # (mis. {"error":{"message":...}}) menjelaskan penyebab sebenarnya, jadi
-        # dilampirkan sebelum diteruskan.
-        body = ""
-        with suppress(Exception):
-            body = e.response.text[:800]
-        raise RuntimeError(
-            f"AI HTTP {e.response.status_code} dari {AI_BASE}: {body or '(respons kosong)'}"
-        ) from e
-    text = r.json()["choices"][0]["message"]["content"] or ""
+    with ai_trace.lacak(
+        "vision-extract",
+        model=AI_MODEL,
+        input=prompt,
+        metadata={"filename": filename, "caption": bool(caption)},
+    ) as rekam:
+        r = await client.post(
+            f"{AI_BASE}/chat/completions",
+            headers={"Authorization": f"Bearer {AI_KEY}"},
+            json={
+                "model": AI_MODEL,
+                "messages": [{"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                ]}],
+                "temperature": 0,
+            },
+            timeout=90,
+        )
+        try:
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            # raise_for_status() hanya membawa kode status. Isi respons dari provider
+            # (mis. {"error":{"message":...}}) menjelaskan penyebab sebenarnya, jadi
+            # dilampirkan sebelum diteruskan.
+            body = ""
+            with suppress(Exception):
+                body = e.response.text[:800]
+            raise RuntimeError(
+                f"AI HTTP {e.response.status_code} dari {AI_BASE}: {body or '(respons kosong)'}"
+            ) from e
+        data = r.json()
+        rekam(output=data["choices"][0]["message"]["content"], usage=ai_trace.usage_dari(data))
+    text = data["choices"][0]["message"]["content"] or ""
     m = re.search(r"\{.*\}", text, re.S)
     if not m:
         raise ValueError(

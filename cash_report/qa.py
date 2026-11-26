@@ -19,6 +19,7 @@ from datetime import date, datetime
 
 import httpx
 
+import ai_trace
 from cash_report import categories as KAT
 
 log = logging.getLogger(__name__)
@@ -415,40 +416,55 @@ async def answer_question(client: httpx.AsyncClient, text: str, load_rows) -> st
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": text},
     ]
-    for putaran in range(3):
+    total = {"input": 0, "output": 0, "total": 0}
+    with ai_trace.lacak("qa-tool-calling", model=model, input=text) as rekam:
+        for putaran in range(3):
+            r = await client.post(
+                f"{base}/chat/completions",
+                headers={"Authorization": f"Bearer {key}"},
+                json={"model": model, "messages": messages, "tools": TOOLS, "temperature": 0},
+                timeout=60,
+            )
+            r.raise_for_status()
+            data = r.json()
+            u = ai_trace.usage_dari(data)
+            if u:
+                total = {k: total[k] + u[k] for k in total}
+            rekam(usage=total)
+            msg = data["choices"][0]["message"]
+            if msg.get("tool_calls"):
+                messages.append(msg)
+                for tc in msg["tool_calls"]:
+                    try:
+                        args = json.loads(tc["function"].get("arguments") or "{}")
+                    except json.JSONDecodeError:
+                        args = {}
+                    hasil = await _jalankan(tc["function"]["name"], args, load_rows)
+                    log.info("QA putaran %d: %s(%s) -> %s",
+                             putaran + 1, tc["function"]["name"], args, hasil[:300])
+                    messages.append({"role": "tool", "tool_call_id": tc["id"], "content": hasil})
+                continue
+            jawaban = (msg.get("content") or "").strip() or FALLBACK
+            rekam(output=jawaban, usage=total)
+            return jawaban
+        # Putaran tool habis: paksa rangkasan TANPA tool supaya user tetap
+        # mendapat jawaban, bukan pesan "terlalu rumit".
+        messages.append({
+            "role": "user",
+            "content": "Jawab sekarang berdasarkan hasil tool di atas, tanpa memanggil tool lagi.",
+        })
+        log.warning("QA: putaran tool habis, paksa rangkasan")
         r = await client.post(
             f"{base}/chat/completions",
             headers={"Authorization": f"Bearer {key}"},
-            json={"model": model, "messages": messages, "tools": TOOLS, "temperature": 0},
+            json={"model": model, "messages": messages, "temperature": 0},
             timeout=60,
         )
         r.raise_for_status()
-        msg = r.json()["choices"][0]["message"]
-        if msg.get("tool_calls"):
-            messages.append(msg)
-            for tc in msg["tool_calls"]:
-                try:
-                    args = json.loads(tc["function"].get("arguments") or "{}")
-                except json.JSONDecodeError:
-                    args = {}
-                hasil = await _jalankan(tc["function"]["name"], args, load_rows)
-                log.info("QA putaran %d: %s(%s) -> %s",
-                         putaran + 1, tc["function"]["name"], args, hasil[:300])
-                messages.append({"role": "tool", "tool_call_id": tc["id"], "content": hasil})
-            continue
-        return (msg.get("content") or "").strip() or FALLBACK
-    # Putaran tool habis: paksa rangkasan TANPA tool supaya user tetap
-    # mendapat jawaban, bukan pesan "terlalu rumit".
-    messages.append({
-        "role": "user",
-        "content": "Jawab sekarang berdasarkan hasil tool di atas, tanpa memanggil tool lagi.",
-    })
-    log.warning("QA: putaran tool habis, paksa rangkasan")
-    r = await client.post(
-        f"{base}/chat/completions",
-        headers={"Authorization": f"Bearer {key}"},
-        json={"model": model, "messages": messages, "temperature": 0},
-        timeout=60,
-    )
-    r.raise_for_status()
-    return (r.json()["choices"][0]["message"].get("content") or "").strip() or FALLBACK
+        data = r.json()
+        u = ai_trace.usage_dari(data)
+        if u:
+            total = {k: total[k] + u[k] for k in total}
+        jawaban = (data["choices"][0]["message"].get("content") or "").strip() or FALLBACK
+        rekam(output=jawaban, usage=total)
+        return jawaban
