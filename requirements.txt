@@ -7,7 +7,7 @@ google-auth-oauthlib
 python-dotenv
 sentry-sdk[fastapi]>=2.0,<3
 pymupdf                     # render halaman PDF mutasi bank -> gambar (reconciliation)
-langfuse>=2.60,<3           # pelacakan panggilan LLM (opsional — env LANGFUSE_* kosong = off)
+langfuse>=5,<6              # pelacakan panggilan LLM (opsional — env LANGFUSE_* kosong = off); v5 pakai endpoint ingestion v4 (v2 legacy sudah ditolak Cloud)
 
 # Pengembangan dan pengujian
 pytest>=8
