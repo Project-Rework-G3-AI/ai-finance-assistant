@@ -383,18 +383,20 @@ kategori. Hasil SC-01 yang rendah karena itu tidak meramalkan SC-02.
 ## Catatan tentang kestabilan angka
 
 Kode sudah mengirim `temperature: 0` pada payload `_vision_extract()`, tetapi
-hasilnya tidak dapat diulang. Enam eksekusi SC-01 berturut-turut pada 65 gambar
-yang sama memberi akurasi 15,4%, 13,8%, 12,3%, 4,6%, 7,7%, dan 10,8% — rentang
-10,8 poin persen.
+hasilnya tidak dapat diulang. Delapan eksekusi SC-01 pada 65 gambar yang sama
+memberi akurasi 15,4%, 13,8%, 12,3%, 4,6%, 7,7%, 10,8%, 7,7%, dan 9,2% —
+rentang 10,8 poin persen.
 
 Sebagian variasi berasal dari model, sebagian kecil dari jalur galat: pada
-beberapa run ada baris yang jatuh ke `mock` karena model membalas
-`content: null`, yang memicu galat di `main.py` baris 135. Baris seperti itu
-tercatat gagal, jadi ikut menekan angka.
+beberapa run ada baris yang jatuh ke `mock` karena model membalas `content`
+kosong. Baris seperti itu tercatat gagal, jadi ikut menekan angka. Penanganan
+galatnya sudah diperbaiki, tetapi kegagalan model untuk menjawab tetap mungkin
+terjadi.
 
-Satu baris juga pernah memakan 515 detik karena model berpikir sangat panjang.
-Timeout 90 detik di `_vision_extract()` adalah timeout per operasi baca, bukan
-batas total, sehingga baris seperti itu tidak diputus. Untuk 65 gambar, sediakan
+Satu baris juga pernah memakan 515 detik, dan pada run 27 November satu baris
+memakan 280 detik karena model berpikir sangat panjang. Timeout 90 detik di
+`_vision_extract()` adalah timeout per operasi baca, bukan batas total, sehingga
+baris seperti itu tidak diputus. Untuk 65 gambar, sediakan
 waktu 10 sampai 25 menit.
 
 Konsekuensinya untuk pelaporan: satu angka tidak cukup. Laporkan rentang dari

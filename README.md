@@ -248,15 +248,22 @@ Yang berbeda hanya cara menilainya.
 
 Target di bawah dikutip dari tabel Success Criteria pada BRD bagian 6.
 
+**SC-01 sampai SC-06 sudah punya pengukur.** SC-07 dan SC-08 sudah ditetapkan di
+BRD, tetapi **belum punya pengukur**: runner hanya mengenal `sc01` sampai `sc06`,
+sehingga kedua kriteria itu belum dapat dijalankan dan belum boleh ditulis
+tercapai. Barisnya tetap dicantumkan agar selisih antara BRD dan pengukur
+terlihat, bukan tersembunyi.
+
 | Kriteria | Yang diukur | Target | Status | Butuh |
 |---|---|---|---|---|
-| SC-01 | Akurasi usulan kategori | Minimal 85% | sudah | kunci AI |
-| SC-02 | Kelengkapan field wajib | Minimal 90% | **tercapai: 90,2%** | kunci AI |
-| SC-03 | Waktu proses sampai tersimpan | Rata-rata di bawah 5 detik | sudah | kunci AI + Google Sheets |
-| SC-04 | Biaya per gambar | Di bawah Rp50 per gambar | sudah | kunci AI + kurs |
-| SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | sudah | tidak ada |
-| SC-06 | Pemetaan kolom wajib cash report | Tidak ada kolom wajib yang hilang | sudah | template + kunci AI |
-| SC-07 | Waktu satu periode vs manual | Di bawah 1 hari kerja | belum, tidak dapat diotomasi | manusia |
+| SC-01 | Akurasi usulan kategori | Minimal 85% | **belum tercapai: 9,2%** | kunci AI |
+| SC-02 | Kelengkapan field wajib | Minimal 90% | **tercapai: 93,5%** | kunci AI |
+| SC-03 | Waktu proses sampai tersimpan | Rata-rata di bawah 5 detik | **belum tercapai: 10,31 detik** | kunci AI + Google Sheets |
+| SC-04 | Biaya per gambar | Di bawah Rp50 per gambar | **tercapai: Rp22,10** | kunci AI + kurs |
+| SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | **tercapai: 5 dari 5** | tidak ada |
+| SC-06 | Pemetaan kolom wajib cash report | Tidak ada kolom wajib yang hilang | **tercapai: 79 dari 79 baris** | template + kunci AI |
+| SC-07 | Rekonsiliasi mutasi rekening bank | Saldo akhir sama pada kedua rekening | belum diukur | kunci AI + PDF mutasi |
+| SC-08 | Tanya jawab analitik keuangan | Seluruh jawaban sesuai | belum diukur | kunci AI + daftar pertanyaan baku |
 
 SC-01 dan SC-02 membaca hasil ekstraksi, jadi bisa dihitung ulang dari
 `results_per_row.csv` kapan saja tanpa biaya.
@@ -376,7 +383,7 @@ tetap dihitung lengkap. Kecocokan isi diukur di SC-01, dan sengaja tidak diukur
 di sini untuk field lain.
 
 Pemisahan itu bukan pelonggaran. Kalau SC-02 ikut menilai kebenaran isi, satu
-field yang merosot (kategori, 7,7%) menyeret kriteria yang seharusnya mengukur
+field yang merosot (kategori, 9,2%) menyeret kriteria yang seharusnya mengukur
 hal lain, dan kegagalan yang sama dilaporkan dua kali.
 
 ```bash
@@ -387,16 +394,16 @@ Perintah itu hanya merangkum `sc-out/results_per_row.csv`, jadi **tidak**
 menuntut `pairs.csv` maupun folder gambar. Tanpa berkas hasil itu, pesannya
 menyuruh menjalankan pengukuran dulu.
 
-Hasil pada 65 gambar: **kelengkapan rata-rata 90,2%, tercapai** (target 90%).
+Hasil pada 65 gambar: **kelengkapan rata-rata 93,5%, tercapai** (target 90%).
 
 | Ukuran | Nilai | Dipakai menilai target? |
 |---|---|---|
-| Kelengkapan rata-rata (5 field) | 90,2% | **ya** |
-| Baris dengan 5/5 field lengkap | 37 dari 65 | tidak, angka pendukung |
+| Kelengkapan rata-rata (5 field) | 93,5% | **ya** |
+| Baris dengan 5/5 field lengkap | 49 dari 65 | tidak, angka pendukung |
 
 Angka pendukung itu perlu disebut karena ia menjawab pertanyaan berbeda: bukan
 "berapa persen sel yang terisi", melainkan "berapa gambar yang tidak perlu
-diperiksa ulang sama sekali". Tanpa itu, 90,2% bisa disangka berarti hampir
+diperiksa ulang sama sekali". Tanpa itu, 93,5% bisa disangka berarti hampir
 semua gambar bersih.
 
 #### Jebakan yang membuat angkanya bisa palsu

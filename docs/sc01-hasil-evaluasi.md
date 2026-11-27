@@ -14,12 +14,12 @@ disebut terang-terangan:
 
 | Angka | Nilai (run terbaru) | Dipakai menilai target? |
 |---|---|---|
-| **Akurasi** (benar / total) | **7,7%** | **ya** |
+| **Akurasi** (benar / total) | **9,2%** | **ya** |
 | Baseline kelas mayoritas | 75,4% | tidak, batas bawah |
-| Macro-average recall | 21,6% | tidak, penjelas |
-| Lift atas baseline | −67,7% | tidak, penjelas |
+| Macro-average recall | 31,6% | tidak, penjelas |
+| Lift atas baseline | −66,2% | tidak, penjelas |
 
-**Yang dibandingkan dengan target 85% adalah akurasi 7,7%**, yaitu 5 jawaban
+**Yang dibandingkan dengan target 85% adalah akurasi 9,2%**, yaitu 6 jawaban
 benar dari 65 pasangan.
 
 Alasannya: BRD menyebut "akurasi usulan kategori", dan akurasi berarti proporsi
@@ -38,21 +38,23 @@ memaksa pembaca menebak.
 Akurasi diukur berulang kali karena model tidak deterministik. Semua run memakai
 65 pasangan yang sama:
 
-| Metrik | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 | Run 6 | Run 7 (terbaru) |
-|---|---|---|---|---|---|---|---|
-| Total pasangan diuji | 65 | 65 | 65 | 65 | 65 | 65 | 65 |
-| Benar | 10 | 9 | 8 | 3 | 5 | 7 | **5** |
-| **Akurasi** | **15,4%** | **13,8%** | **12,3%** | **4,6%** | **7,7%** | **10,8%** | **7,7%** |
-| Baseline kelas mayoritas | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% |
-| **Lift atas baseline** | **−60,0%** | **−61,5%** | **−63,1%** | **−70,8%** | **−67,7%** | **−64,6%** | **−67,7%** |
-| Macro-average recall | 52,9% | 52,4% | 42,4% | 40,4% | 41,2% | 22,4% | **21,6%** |
-| Target BRD | 85% | 85% | 85% | 85% | 85% | 85% | 85% |
-| Status | belum | belum | belum | belum | belum | belum | **belum** |
+| Metrik | Run 1 | Run 2 | Run 3 | Run 4 | Run 5 | Run 6 | Run 7 | Run 8 (terbaru) |
+|---|---|---|---|---|---|---|---|---|
+| Total pasangan diuji | 65 | 65 | 65 | 65 | 65 | 65 | 65 | 65 |
+| Benar | 10 | 9 | 8 | 3 | 5 | 7 | 5 | **6** |
+| **Akurasi** | **15,4%** | **13,8%** | **12,3%** | **4,6%** | **7,7%** | **10,8%** | **7,7%** | **9,2%** |
+| Baseline kelas mayoritas | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% | 75,4% |
+| **Lift atas baseline** | **−60,0%** | **−61,5%** | **−63,1%** | **−70,8%** | **−67,7%** | **−64,6%** | **−67,7%** | **−66,2%** |
+| Macro-average recall | 52,9% | 52,4% | 42,4% | 40,4% | 41,2% | 22,4% | 21,6% | **31,6%** |
+| Target BRD | 85% | 85% | 85% | 85% | 85% | 85% | 85% | 85% |
+| Status | belum | belum | belum | belum | belum | belum | belum | **belum** |
 
-Tujuh eksekusi pada data yang sama memberi akurasi antara **4,6% dan 15,4%**,
-rentang **10,8 poin persen**, dengan rata-rata 10,4%. Kode sudah mengirim
-`temperature: 0`, tetapi model penalaran lewat API pihak ketiga tidak menjamin
-determinisme penuh, dan tidak ada parameter `seed`.
+Delapan eksekusi pada data yang sama memberi akurasi antara **4,6% dan 15,4%**,
+rentang **10,8 poin persen**, dengan rata-rata 10,2%. Run 8 dijalankan pada
+27 November 2026, setelah prompt ekstraksi berubah (`TUNAI` menjadi `UANG KAS`,
+dan aturan `arah=transfer` diperjelas). Kode sudah mengirim `temperature: 0`,
+tetapi model penalaran lewat API pihak ketiga tidak menjamin determinisme penuh,
+dan tidak ada parameter `seed`.
 
 Model memang menjawab berbeda-beda, bukan gagal. Pada satu run ia memilih 17
 kategori berbeda untuk 65 gambar. Namun pada beberapa run ada baris yang jatuh
@@ -127,26 +129,25 @@ karena tidak ada yang bisa dibaca.
 
 | Kategori acuan | Jumlah | Benar | Recall |
 |---|---|---|---|
-| `Transfer Antar Bank` | 49 | 7 | 14% |
+| `Transfer Antar Bank` | 49 | 4 | 8% |
 | `Pendapatan Usaha (Penjualan Lainnya)` | 12 | 0 | 0% |
 | `Biaya-Perlengkapan Kantor dan Administrasi` | 2 | 1 | 50% |
-| `Biaya-Gaji Karyawan` | 1 | 1 | 100% |
+| `Biaya-Gaji Karyawan` | 1 | 0 | 0% |
 | `Biaya-Transportasi` | 1 | 1 | 100% |
 
-Recall 100% pada dua kategori terakhir tidak boleh dibaca sebagai keberhasilan:
-masing-masing hanya berisi satu baris.
+Recall 100% pada `Biaya-Transportasi` tidak boleh dibaca sebagai keberhasilan:
+kategori itu hanya berisi satu baris.
 
 ## Uraian kesalahan
 
-Dari 55 baris yang salah:
+Dari 59 baris yang salah:
 
 | Jumlah | Pola |
 |---|---|
-| 41 | Acuan `Transfer Antar Bank`, model memberi kategori rinci (`Bahan Baku`, `Biaya-Ongkir`, dan sejenisnya) |
-| 8 | Acuan kategori rinci, model memberi `Transfer Antar Bank` |
-| 4 | Lain-lain |
-| 1 | Acuan `Pendapatan Usaha (Penjualan Lainnya)`, model memberi pecahan pendapatan lain |
-| 1 | Acuan `Transfer Antar Bank`, model tidak menjawab karena galat |
+| 45 | Acuan `Transfer Antar Bank`, model memberi kategori rinci (`Bahan Baku`, `Biaya-Ongkir`, dan sejenisnya) |
+| 8 | Acuan kategori rinci, model memberi kategori rinci lain |
+| 5 | Acuan kategori rinci, model memberi `Transfer Antar Bank` |
+| 1 | Acuan kategori rinci, model tidak menjawab karena galat |
 
 Pola terbesar bukan model salah membaca. Contohnya, bukti transfer Rp640.350
 tertulis jelas "Mocaf 50 kg" dan model menjawab `Bahan Baku` — secara isi benar,
@@ -160,20 +161,24 @@ tetap dihitung salah.
 
 ## Satu galat yang ditemukan
 
-Satu dari 65 gambar gagal karena `main.py` baris 135–136:
+Pada run 8, satu dari 65 gambar (`photo_2026-01-05_09-57-49.jpg`) gagal dan jatuh
+ke mode cadangan setelah menunggu 280 detik. Penyebabnya model membalas dengan
+`content` kosong:
 
-```python
-text = r.json()["choices"][0]["message"]["content"]
-m = re.search(r"\{.*\}", text, re.S)
+```
+ValueError: balasan AI bukan JSON (content kosong)
 ```
 
-Ketika model mengembalikan `content` bernilai `null`, `re.search` menerima
-`None` dan melempar `TypeError: expected string or bytes-like object, got
-'NoneType'`. `extract()` menangkapnya lalu jatuh ke mock, sehingga kategori
-menjadi kosong dan baris tetap tercatat seolah berhasil.
+Penanganan galat ini **sudah diperbaiki di `main.py`**. Sebelumnya, `content`
+bernilai `null` membuat `re.search` melempar `TypeError: expected string or
+bytes-like object, got 'NoneType'`, dan galat itu tertelan tanpa jejak. Sekarang
+kondisi tersebut dikenali lebih dulu dan dilaporkan sebagai `ValueError` dengan
+pesan yang jelas, lalu baris jatuh ke mode cadangan.
 
-Akibatnya bukan hanya satu baris hilang: pengguna melihat balasan "Draft
-tercatat" padahal kategorinya tidak pernah terisi.
+Yang belum tertangani: **durasi 280 detik untuk satu gambar**. Batas waktu
+panggilan model belum memotong respons yang menggantung selama itu, sehingga
+satu gambar bisa menahan seluruh proses. Ini perlu ditangani terpisah, dan
+tercatat sebagai temuan.
 
 ## Berkas pendukung
 
@@ -191,8 +196,8 @@ berbayar; penulisan bertahap inilah yang menyelamatkan hasilnya.
 ## Kesimpulan
 
 SC-01 belum tercapai dan tidak dapat dicapai tanpa lebih dulu menyelesaikan
-masalah granularitas kategori. Kesimpulan ini berlaku pada kedua run, terlepas
-dari selisih dua poin persen di antaranya.
+masalah granularitas kategori. Kesimpulan ini berlaku pada kedelapan run,
+terlepas dari selisih angka di antaranya yang berkisar antara 4,6% dan 15,4%.
 
 Dua langkah yang masuk akal, dan keduanya perlu keputusan pemilik produk:
 

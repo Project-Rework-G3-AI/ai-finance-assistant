@@ -128,17 +128,32 @@ menunjukkan field mana yang paling sering gagal dibaca model.
 
 | Field | Terisi | Wajib | Kelengkapan |
 |---|---|---|---|
-| `tanggal` | 65 | 65 | 100,0% |
-| `keterangan` | 65 | 65 | 100,0% |
-| `nominal` | 65 | 65 | 100,0% |
-| `arah` | 65 | 65 | 100,0% |
-| `kategori` | 65 | 65 | 100,0% |
-| `bank` | 37 | 65 | **56,9%** |
-| `kantong_tujuan` | 19 | 20 | 95,0% |
+| `tanggal` | 64 | 65 | 98,5% |
+| `nominal` | 64 | 65 | 98,5% |
+| `arah` | 64 | 65 | 98,5% |
+| `kategori` | 63 | 65 | 96,9% |
+| `bank` | 49 | 65 | **75,4%** |
 
-37 dari 65 gambar lengkap seluruh field. Seluruh kekurangan berasal dari satu
-field: `bank`. Angka ini **tidak** dipakai sebagai verdict SC-06, karena SC-06
-mengukur pemetaan kolom, sedangkan kelengkapan field adalah lingkup SC-02.
+Angka di atas berasal dari pengukuran **27 November 2026**, sama dengan yang
+dipakai SC-02, sehingga keduanya dapat dibandingkan langsung.
+
+Dua field lain tidak masuk tabel karena tidak tersimpan pada hasil pengukuran
+27 November:
+
+| Field | Keadaan | Sumber |
+|---|---|---|
+| `keterangan` | terisi pada seluruh 65 gambar | sampel 26 November 2026 |
+| `kantong_tujuan` | terisi pada **19 dari 20** transaksi yang memerlukannya | sampel 26 November 2026 |
+
+`kantong_tujuan` hanya wajib saat `arah=transfer`. Dari 65 gambar, 20 di
+antaranya transfer, dan pada sampel 26 November 19 terisi sedangkan 1 tidak.
+Karena itu angkanya **95% dari 20 yang berlaku**, bukan 20 dari 65.
+
+Kekurangan terbesar ada pada `bank`, yang tidak dapat dicapai penuh karena bukti
+transfer tidak mencetak rekening asal.
+
+Angka-angka ini **tidak** dipakai sebagai verdict SC-06, karena SC-06 mengukur
+pemetaan kolom, sedangkan kelengkapan field adalah lingkup SC-02.
 
 ## Cara menjalankan
 
