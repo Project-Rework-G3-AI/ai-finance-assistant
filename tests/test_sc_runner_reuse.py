@@ -125,103 +125,96 @@ def test_source_json_is_written_inside_the_output_directory(tmp_path):
 
 # ------------------------------------------- angka yang dipakai menilai target
 
+ROW_VISION = {
+    "file": "a",
+    "record": {"date": "2026-01-01", "amount": 1000, "bank": "BNI",
+               "direction": "keluar", "category": "Bahan Baku",
+               "remark": "", "mode": "vision"},
+    "reference": {"date": "2026-01-01", "amount": "1000", "bank": "BNI",
+                  "direction": "", "category": "Bahan Baku"},
+}
+
+
 def test_report_names_the_number_used_to_judge_the_target(tmp_path):
     """Laporan wajib menyebut angka mana yang dibandingkan dengan target.
 
-    Tanpa ini, pembaca melihat kelengkapan 98,2% dan kecocokan 72,5% lalu
-    menebak sendiri mana yang dipakai. Status "BELUM TERCAPAI" saja tidak
-    cukup, karena tidak menjelaskan dari kolom mana angka itu diambil.
+    Tanpa ini, pembaca melihat beberapa persentase lalu menebak sendiri mana
+    yang dipakai. Status "BELUM TERCAPAI" saja tidak cukup, karena tidak
+    menjelaskan dari kolom mana angka itu diambil.
     """
     import sc_runner
 
-    rows = [
-        {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
-                                 "bank": "BNI", "direction": "keluar",
-                                 "category": "Bahan Baku", "remark": "", "mode": "vision"},
-         "reference": {"date": "2026-01-01", "amount": "1000",
-                       "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
-    ]
-    rep = sc_runner.write_sc02_report(rows, tmp_path)
-    text = rep["text"]
-
+    text = sc_runner.write_sc02_report([ROW_VISION], tmp_path)["text"]
     assert "Angka yang dinilai" in text
-    assert "kecocokan rata-rata" in text
+    assert "kelengkapan rata-rata" in text
     assert "dibandingkan dengan target" in text
     assert "Status" in text
 
 
-def test_report_states_the_denominator_of_the_average(tmp_path):
-    """Penyebut harus disebut: 4 field beracuan, bukan 5."""
+def test_report_states_how_many_fields_are_averaged(tmp_path):
+    """Penyebut harus disebut: kelima field wajib, bukan sebagian."""
     import sc_runner
 
-    rows = [
-        {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
-                                 "bank": "BNI", "direction": "keluar",
-                                 "category": "Bahan Baku", "remark": "", "mode": "vision"},
-         "reference": {"date": "2026-01-01", "amount": "1000",
-                       "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
-    ]
-    text = sc_runner.write_sc02_report(rows, tmp_path)["text"]
-    assert "4 field beracuan" in text
+    text = sc_runner.write_sc02_report([ROW_VISION], tmp_path)["text"]
+    assert "5 field" in text
 
 
-def test_report_shows_accuracy_without_category(tmp_path):
-    """Sebab kegagalan harus terbaca, bukan tersembunyi di rata-rata."""
+def test_wrong_values_do_not_change_the_judged_number(tmp_path):
+    """Nilai salah tidak boleh menurunkan SC-02.
+
+    SC-02 mengukur kelengkapan. Kategori WRONG tetap terbaca, jadi angkanya
+    harus sama dengan baris yang nilainya benar.
+    """
     import sc_runner
 
-    rows = [
-        {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
-                                 "bank": "BNI", "direction": "keluar",
-                                 "category": "WRONG", "remark": "", "mode": "vision"},
-         "reference": {"date": "2026-01-01", "amount": "1000",
-                       "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
-    ]
-    text = sc_runner.write_sc02_report(rows, tmp_path)["text"]
-    assert "kecocokan tanpa kategori" in text
+    (tmp_path / "a").mkdir(parents=True, exist_ok=True)
+    benar = sc_runner.write_sc02_report([ROW_VISION], tmp_path / "a")["text"]
+    (tmp_path / "b").mkdir(parents=True, exist_ok=True)
+    salah_row = dict(ROW_VISION,
+                     record=dict(ROW_VISION["record"], category="WRONG"))
+    salah = sc_runner.write_sc02_report([salah_row], tmp_path / "b")["text"]
+
+    def angka(t):
+        baris = [x for x in t.splitlines() if x.startswith("Angka yang dinilai")]
+        return baris[0]
+
+    assert angka(benar) == angka(salah)
 
 
-def test_scored_count_counts_only_fields_with_a_reference():
+def test_compute_ignores_reference_entirely():
+    """Acuan tidak boleh mengubah hasil, walau pemanggil masih mengirimnya."""
     from sc02_completeness import compute
 
-    rows = [
-        {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
-                                 "bank": "BNI", "direction": "keluar",
-                                 "category": "Bahan Baku", "remark": "", "mode": "vision"},
-         "reference": {"date": "2026-01-01", "amount": "1000",
-                       "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
-    ]
-    c = compute(rows)
-    assert c.scored_count == 4  # direction tanpa acuan tidak ikut
+    salah = {"file": "a", "record": dict(ROW_VISION["record"], category="WRONG")}
+    c_tanpa = compute([salah])
+    c_dengan = compute([dict(salah, reference=ROW_VISION["reference"])])
+    assert c_tanpa.overall_completeness == c_dengan.overall_completeness
 
 
-def test_accuracy_excluding_removes_only_the_named_field():
-    from sc02_completeness import compute
+def test_unreadable_field_still_lowers_the_judged_number(tmp_path):
+    """Kebalikannya: field yang tidak terbaca harus benar-benar menurunkan."""
+    import sc_runner
 
-    rows = [
-        {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
-                                 "bank": "BNI", "direction": "keluar",
-                                 "category": "WRONG", "remark": "", "mode": "vision"},
-         "reference": {"date": "2026-01-01", "amount": "1000",
-                       "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
-    ]
-    c = compute(rows)
-    without = c.accuracy_excluding("category")
-    assert without > c.overall_accuracy
-    assert without == pytest.approx(1.0)
+    gagal = dict(ROW_VISION,
+                 record=dict(ROW_VISION["record"], remark="(kantong tidak terbaca — pakai default)"))
+    text = sc_runner.write_sc02_report([gagal], tmp_path)["text"]
+    assert "BELUM TERCAPAI" in text
 
 
-def test_accuracy_excluding_returns_zero_when_nothing_left():
-    from sc02_completeness import compute
+def test_metrics_json_has_no_accuracy_keys(tmp_path):
+    """Berkas metrik tidak boleh lagi memuat sisa medan akurasi."""
+    import json
 
-    rows = [
-        {"file": "a", "record": {"date": "2026-01-01", "amount": 1000,
-                                 "bank": "BNI", "direction": "keluar",
-                                 "category": "Bahan Baku", "remark": "", "mode": "vision"},
-         "reference": {"date": "2026-01-01", "amount": "1000",
-                       "bank": "BNI", "direction": "", "category": "Bahan Baku"}},
-    ]
-    c = compute(rows)
-    assert c.accuracy_excluding("date", "amount", "bank", "category") == 0.0
+    import sc_runner
+
+    sc_runner.write_sc02_report([ROW_VISION], tmp_path)
+    data = json.loads((tmp_path / "sc02_metrics.json").read_text(encoding="utf-8"))
+    assert "overall_accuracy" not in data
+    for isi in data["fields"].values():
+        assert "accuracy" not in isi
+        assert "correct" not in isi
+        assert "scored" not in isi
+
 
 def test_restart_truncates_the_old_results_file(tmp_path, monkeypatch):
     """`--restart` harus memotong berkas hasil lama, bukan menambahinya.

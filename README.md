@@ -246,14 +246,14 @@ Target di bawah dikutip dari tabel Success Criteria pada BRD bagian 6.
 | Kriteria | Yang diukur | Target | Status | Butuh |
 |---|---|---|---|---|
 | SC-01 | Akurasi usulan kategori | Minimal 85% | sudah | kunci AI |
-| SC-02 | Kelengkapan field wajib | Minimal 90% | sudah | kunci AI |
+| SC-02 | Kelengkapan field wajib | Minimal 90% | **tercapai: 90,2%** | kunci AI |
 | SC-03 | Waktu proses sampai tersimpan | Rata-rata di bawah 5 detik | sudah | kunci AI + Google Sheets |
 | SC-04 | Biaya per gambar | Di bawah Rp50 per gambar | sudah | kunci AI + kurs |
 | SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | sudah | tidak ada |
 | SC-06 | Pemetaan kolom wajib cash report | Tidak ada kolom wajib yang hilang | sudah | template + kunci AI |
 | SC-07 | Waktu satu periode vs manual | Di bawah 1 hari kerja | belum, tidak dapat diotomasi | manusia |
 
-SC-01 dan SC-02 mengukur **isi** hasil ekstraksi, jadi bisa dihitung ulang dari
+SC-01 dan SC-02 membaca hasil ekstraksi, jadi bisa dihitung ulang dari
 `results_per_row.csv` kapan saja tanpa biaya.
 
 SC-03 dan SC-04 mengukur hal yang **tidak tersimpan** di hasil ekstraksi: durasi
@@ -352,7 +352,7 @@ itu gagal, sehingga angka ini tidak bisa diam-diam mengukur tiruan.
 #### Yang sengaja tidak diukur SC-06
 
 **Kebenaran nilai.** Nominal 20.000 yang terbaca 50.000 tetap dihitung terisi.
-Kecocokan nilai adalah SC-01 dan SC-02.
+Kecocokan nilai adalah SC-01. SC-02 hanya menilai kelengkapan.
 
 **Kebenaran kantong asal.** Produksi mengisi kolom Kantong dengan
 `CR_DEFAULT_BANK` (`TUNAI`) ketika model gagal membaca kantong asal, sehingga
@@ -361,6 +361,53 @@ transfer yang tercatat "keluar dari TUNAI" padahal dananya bukan kas tunai.
 Cacat itu dilaporkan terpisah di
 [`docs/bug-kantong-tunai.md`](docs/bug-kantong-tunai.md), bukan dijadikan angka
 kriteria ini, karena BRD memeriksa keberadaan kolom, bukan kebenaran isinya.
+
+### SC-02 mengukur kelengkapan, bukan kebenaran isi
+
+SC-02 hanya menjawab satu pertanyaan: **apakah field wajibnya terbaca**.
+
+Apakah nilainya benar **bukan** urusan SC-02. Nominal 20.000 yang terbaca 50.000
+tetap dihitung lengkap. Kecocokan isi diukur di SC-01, dan sengaja tidak diukur
+di sini untuk field lain.
+
+Pemisahan itu bukan pelonggaran. Kalau SC-02 ikut menilai kebenaran isi, satu
+field yang merosot (kategori, 7,7%) menyeret kriteria yang seharusnya mengukur
+hal lain, dan kegagalan yang sama dilaporkan dua kali.
+
+```bash
+python3 tests/sc_runner.py --sc02
+```
+
+Hasil pada 65 gambar: **kelengkapan rata-rata 90,2%, tercapai** (target 90%).
+
+| Ukuran | Nilai | Dipakai menilai target? |
+|---|---|---|
+| Kelengkapan rata-rata (5 field) | 90,2% | **ya** |
+| Baris dengan 5/5 field lengkap | 37 dari 65 | tidak, angka pendukung |
+
+Angka pendukung itu perlu disebut karena ia menjawab pertanyaan berbeda: bukan
+"berapa persen sel yang terisi", melainkan "berapa gambar yang tidak perlu
+diperiksa ulang sama sekali". Tanpa itu, 90,2% bisa disangka berarti hampir
+semua gambar bersih.
+
+#### Jebakan yang membuat angkanya bisa palsu
+
+`main.extract` mengisi nilai bawaan saat model gagal membaca: tanggal hari ini,
+arah `"keluar"`, bank `CR_DEFAULT_BANK`, kategori `"Perlu Ditinjau"`. Kalau
+kelengkapan diukur dengan "field kosong atau tidak", hasilnya mendekati 100%
+padahal model tidak membaca apa pun.
+
+Karena itu penilaian memakai dua sinyal yang tidak bisa dipalsukan nilai bawaan:
+
+1. **`catatan`** dari `main.py:194–212` (`"nominal tidak terbaca — isi manual"`).
+2. **`mode`** — `mock` berarti model tidak dipanggil atau gagal total.
+
+Nilai acuan dari dataset **tidak** dipakai, karena membandingkan dengan acuan
+adalah pengukuran kebenaran isi.
+
+Aturan ini dikunci test, termasuk yang membuktikan nilai salah tetap dihitung
+lengkap (`test_wrong_but_present_value_is_still_complete`) dan acuan diabaikan
+(`test_reference_is_ignored_even_when_provided`).
 
 ### Yang perlu diperiksa saat `main` berubah
 
@@ -478,7 +525,7 @@ Hasil ada di `sc-out/`:
 |---|---|
 | `sc01_report.txt` | SC-01: ringkasan, rincian per kategori, confusion matrix, baris salah |
 | `sc01_metrics.json` | SC-01 dalam bentuk JSON |
-| `sc02_report.txt` | SC-02: kelengkapan dan kecocokan per field wajib |
+| `sc02_report.txt` | SC-02: kelengkapan per field wajib |
 | `sc02_metrics.json` | SC-02 dalam bentuk JSON |
 | `sc03_report.txt` | SC-03: sebaran waktu dan pecahan per tahap |
 | `sc03_metrics.json` | SC-03 dalam bentuk JSON |

@@ -153,3 +153,42 @@ def test_every_env_example_variable_used_by_tests_is_mentioned():
             encoding="utf-8")))
     missing_keys = [v for v in used if f"{v}=" not in env_example]
     assert not missing_keys, f".env.example tidak memuat: {missing_keys}"
+
+
+# --------------------------------------------- SC-02 tidak menilai kebenaran isi
+
+def test_readme_says_sc02_measures_completeness_only(testing_section):
+    """README harus menyatakan SC-02 mengukur kelengkapan, bukan isi.
+
+    Kalau README kembali menyebut SC-02 mengukur kebenaran isi, pembaca akan
+    mengira kategori salah menggagalkan SC-02 padahal itu SC-01.
+    """
+    assert "SC-02 mengukur kelengkapan" in testing_section
+    # Kalimat lama yang sudah tidak benar tidak boleh muncul lagi.
+    assert "Kecocokan nilai adalah SC-01 dan SC-02" not in testing_section
+
+
+def test_readme_sc02_number_matches_the_judged_metric(testing_section):
+    """Angka SC-02 di README harus angka yang benar-benar dipakai menilai.
+
+    Cacat yang dicegah: README menulis angka kelengkapan sementara kode menilai
+    dari angka lain, sehingga pembaca melihat dua angka berbeda untuk satu
+    kriteria tanpa tahu mana yang menentukan.
+    """
+    import sc02_completeness  # noqa: F401  (memastikan modul bisa diimpor)
+
+    sumber = (Path(__file__).resolve().parent / "sc_runner.py").read_text(
+        encoding="utf-8")
+    # Ambil ekspresi yang dipakai sebagai angka penilai SC-02.
+    m = re.search(r"judged = c\.overall_(\w+)", sumber)
+    assert m, "tidak menemukan angka penilai SC-02 di sc_runner.py"
+    dipakai = m.group(1)
+    assert dipakai == "completeness", (
+        f"SC-02 dinilai dari overall_{dipakai}, bukan kelengkapan")
+
+    # README harus menyebut ukuran itu sebagai yang dipakai menilai.
+    baris = [x for x in testing_section.splitlines()
+             if "Dipakai menilai target" in x]
+    assert baris, "README tidak punya tabel angka penilai SC-02"
+    assert "Kelengkapan rata-rata" in testing_section
+

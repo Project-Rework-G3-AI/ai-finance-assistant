@@ -118,29 +118,43 @@ def sc02_report(tmp_path, category="Bahan Baku"):
 
 def test_sc02_report_names_the_judged_number(tmp_path):
     text = sc02_report(tmp_path)
-    assert "Angka yang dinilai : kecocokan rata-rata" in text
+    assert "Angka yang dinilai : kelengkapan rata-rata" in text
 
 
-def test_sc02_report_states_the_denominator(tmp_path):
+def test_sc02_report_states_how_many_fields_are_averaged(tmp_path):
     text = sc02_report(tmp_path)
-    assert "4 field beracuan" in text
+    assert "5 field" in text
 
 
-def test_sc02_report_shows_completeness_as_not_judged(tmp_path):
+def test_sc02_report_judges_completeness_not_accuracy(tmp_path):
+    """Angka yang dipakai menilai target adalah kelengkapan."""
     text = sc02_report(tmp_path)
-    assert "kelengkapan rata-rata" in text
-    assert "belum tentu benar" in text
+    judged = text.split("Angka yang dinilai :")[1].split("\n")[0]
+    assert "kelengkapan" in judged
+    assert "kecocokan" not in judged
 
 
 def test_sc02_target_is_90_percent(tmp_path):
     text = sc02_report(tmp_path)
+    assert "minimal 90% in text" not in text
     assert "minimal 90%" in text
 
 
-def test_sc02_wrong_category_fails_the_target(tmp_path):
-    """Kategori salah menurunkan kecocokan, jadi status harus gagal."""
+def test_sc02_wrong_category_still_passes_the_target(tmp_path):
+    """Kategori salah TIDAK boleh menggagalkan SC-02.
+
+    SC-02 mengukur kelengkapan, bukan kebenaran isi. Kategori yang salah tetap
+    terbaca, jadi kelengkapannya utuh. Kalau test ini gagal, SC-02 sudah
+    mencampuri urusan SC-01 dan kegagalan yang sama dilaporkan dua kali.
+    """
     text = sc02_report(tmp_path, category="WRONG")
-    assert "BELUM TERCAPAI" in text
+    assert "TERCAPAI" in text
+    assert "BELUM TERCAPAI" not in text
+
+
+def test_sc02_reports_baris_lengkap_as_supporting_number(tmp_path):
+    text = sc02_report(tmp_path)
+    assert "baris lengkap semua field" in text
 
 
 # ------------------------------------------------------------ konsistensi

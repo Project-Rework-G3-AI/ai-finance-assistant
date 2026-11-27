@@ -356,29 +356,27 @@ def write_sc01_report(results: list[dict], out: Path) -> dict:
 def build_sc02_rows(results: list[dict]) -> list[dict]:
     """Ubah hasil per baris menjadi masukan SC-02.
 
-    Acuan diambil dari `sc_pairs.csv` bila tersedia, supaya "terbaca" bisa
-    dibedakan dari "terbaca benar". Tanpa acuan, hanya keterbacaan yang dinilai.
-    """
-    reference_by_file = {}
-    try:
-        for p in cfg.read_pairs(cfg.pairs_file()):
-            name = (p.get("file") or "").strip()
-            if name:
-                reference_by_file[name] = {
-                    "date": p.get("reference_date") or "",
-                    "amount": p.get("reference_amount") or "",
-                    "bank": p.get("bank") or "",
-                    # Arah tidak punya kolom acuan di dataset. Dibandingkan hanya
-                    # bila kelak ditambahkan, bukan ditebak sekarang.
-                    "direction": p.get("reference_direction") or "",
-                    "category": p.get("reference_category") or "",
-                }
-    except SystemExit:
-        reference_by_file = {}
+    Menerima dua bentuk, karena dua pemanggil nyata memakainya:
 
+    1. Baris CSV datar dari `results_per_row.csv` (`proposed_date`, `note`, ...).
+    2. Baris yang sudah membawa `record` berisi kunci Inggris, seperti yang
+       dipakai `tests/test_sc_verdict.py`.
+
+    Bentuk 2 diperiksa lebih dulu. Tanpa itu, pemanggil yang sudah menyiapkan
+    `record` akan dinilai dari kolom yang tidak ada, dan hasilnya 0% tanpa
+    penjelasan.
+
+    Nilai acuan sengaja tidak diteruskan. SC-02 mengukur kelengkapan field, bukan
+    kebenaran isinya, jadi membandingkan dengan acuan hanya akan mencampur dua
+    pengukuran yang seharusnya terpisah.
+    """
     rows = []
     for r in results:
         name = (r.get("file") or "").strip()
+        siap = r.get("record")
+        if isinstance(siap, dict) and siap:
+            rows.append({"file": name, "record": siap})
+            continue
         record = {
             "date": r.get("proposed_date") or "",
             "amount": r.get("proposed_amount") or "",
@@ -390,12 +388,7 @@ def build_sc02_rows(results: list[dict]) -> list[dict]:
             "remark": r.get("note") or "",
             "mode": r.get("mode") or "",
         }
-        # Acuan yang sudah menempel di baris hasil dipakai lebih dulu. Tanpa
-        # ini, fungsi ini hanya bisa bekerja bila file pasangan ada di disk,
-        # sehingga tidak bisa diuji dan diam-diam menilai tanpa acuan.
-        reference = r.get("reference") or reference_by_file.get(name)
-        rows.append({"file": name, "record": record,
-                     "reference": reference})
+        rows.append({"file": name, "record": record})
     return rows
 
 
@@ -584,8 +577,7 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
     c = sc02_completeness.compute(rows)
 
     target = 0.90
-    judged = c.overall_accuracy
-    without_category = c.accuracy_excluding("category")
+    judged = c.overall_completeness
     lines = [
         "SC-02 — Kelengkapan field wajib",
         "=" * 60,
@@ -594,16 +586,11 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
         c.summary(),
         "",
     ]
-    # Sama seperti SC-01: beberapa angka ditampilkan, jadi angka yang dinilai
-    # harus disebut. Penyebutnya juga disebut, supaya 72,5% tidak disangka
-    # rata-rata kelima field padahal hanya yang beracuan.
     lines += verdict_block(
-        f"kecocokan rata-rata ({c.scored_count} field beracuan)", judged, target,
+        "kelengkapan rata-rata (5 field)", judged, target,
         [
-            ("kelengkapan rata-rata", c.overall_completeness,
-             "field terbaca, belum tentu benar"),
-            ("kecocokan tanpa kategori", without_category,
-             "kategori sudah diukur di SC-01"),
+            ("baris lengkap semua field", c.all_fields_complete / c.total,
+             f"{c.all_fields_complete} dari {c.total} baris"),
         ],
     )
     lines += [
@@ -611,9 +598,8 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
         "Catatan penilaian",
         "-" * 60,
         "kelengkapan = field terbaca, tanpa penanda gagal baca dan bukan mode mock",
-        "akurasi     = terbaca dan nilainya cocok dengan acuan (bila acuan ada)",
-        "tebakan     = field yang diisi nilai bawaan kode karena model gagal membaca",
-        "field tanpa acuan di dataset tidak ikut dirata-rata",
+        "tebakan     = field yang ditandai gagal baca, lalu diisi nilai bawaan kode",
+        "kecocokan isi tidak diukur di sini; kategori diukur di SC-01",
     ]
     text = "\n".join(lines)
     (out / "sc02_report.txt").write_text(text, encoding="utf-8")
@@ -621,12 +607,10 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
         json.dumps({
             "total": c.total,
             "overall_completeness": c.overall_completeness,
-            "overall_accuracy": c.overall_accuracy,
             "all_fields_complete": c.all_fields_complete,
             "fields": {n: {"total": f.total, "readable": f.readable,
-                           "correct": f.correct, "fallback": f.fallback,
-                           "scored": f.scored, "has_reference": f.has_reference,
-                           "completeness": f.completeness, "accuracy": f.accuracy}
+                           "fallback": f.fallback,
+                           "completeness": f.completeness}
                        for n, f in c.fields.items()},
         }, indent=2, ensure_ascii=False), encoding="utf-8")
     return {"result": c, "text": text}
@@ -687,6 +671,8 @@ def spread_value(name: str, report: dict) -> float:
     """Angka utama satu kriteria, dipakai untuk mengukur sebaran antar-run."""
     if name == "sc01":
         return report["metrics"].accuracy
+    if name == "sc02":
+        return report["result"].overall_completeness
     return report["result"].overall_accuracy
 
 
