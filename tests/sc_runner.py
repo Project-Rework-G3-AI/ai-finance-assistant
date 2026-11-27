@@ -625,6 +625,12 @@ AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03", "sc04", "sc05", "sc06")
 # memanggil model sama sekali.
 FREE_CRITERIA = {"sc03", "sc04", "sc05", "sc06"}
 
+# Kriteria yang tidak membaca dataset gambar maupun `pairs.csv`. SC-02 termasuk
+# karena ia mengukur kelengkapan dari `results_per_row.csv` saja; nilai acuan
+# dari `pairs.csv` tidak dipakai lagi. Tanpa pemisahan ini, `--sc02` menuntut
+# dataset yang tidak dibacanya, dan pesan galatnya menyesatkan.
+NEEDS_NO_DATASET = FREE_CRITERIA | {"sc02"}
+
 
 def selected_criteria(args) -> list[str]:
     """Kriteria yang diminta.
@@ -789,6 +795,19 @@ def main_cli() -> int:
         # tidak perlu memanggil model dan tidak boleh mencetak banner "hasil
         # lama dipakai lagi" yang menyiratkan ada ekstraksi.
         reports = run_reports([], out, criteria)
+        print(join_reports(reports))
+        return 0
+
+    if set(criteria) <= NEEDS_NO_DATASET:
+        # SC-02 hanya butuh hasil ekstraksi yang sudah ada, bukan dataset gambar.
+        results = list(read_results(out / "results_per_row.csv").values())
+        if not results:
+            raise SystemExit(
+                f"tidak ada hasil di {out / 'results_per_row.csv'}\n"
+                "SC-02 merangkum hasil ekstraksi; jalankan pengukuran SC-01 "
+                "lebih dulu untuk mengisinya."
+            )
+        reports = run_reports(results, out, criteria)
         print(join_reports(reports))
         return 0
 

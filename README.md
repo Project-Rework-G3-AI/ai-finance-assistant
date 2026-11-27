@@ -378,6 +378,10 @@ hal lain, dan kegagalan yang sama dilaporkan dua kali.
 python3 tests/sc_runner.py --sc02
 ```
 
+Perintah itu hanya merangkum `sc-out/results_per_row.csv`, jadi **tidak**
+menuntut `pairs.csv` maupun folder gambar. Tanpa berkas hasil itu, pesannya
+menyuruh menjalankan pengukuran dulu.
+
 Hasil pada 65 gambar: **kelengkapan rata-rata 90,2%, tercapai** (target 90%).
 
 | Ukuran | Nilai | Dipakai menilai target? |
