@@ -12,6 +12,8 @@ flowchart LR
     TG -->|"getUpdates<br/>long polling"| BOT["Bot — main.py<br/>FastAPI + asyncio<br/>(Render; lokal = fallback uji)"]
     BOT -.->|"error / log"| SEN["Sentry<br/>(error tracking)"]
     BOT -.->|"trace panggilan AI"| LF["Langfuse<br/>(jejak LLM: prompt · token · biaya)"]
+    UR -.->|"ping /health · 5 mnt<br/>(jaga Render tetap hidup)"| BOT
+    W["Browser lokal<br/>GET /health<br/>POST /api/extract<br/>POST /api/reconcile"] --> BOT
     BOT --> ROUT{"jenis<br/>pesan?"}
 
     ROUT -->|"gambar"| EXT{"Ekstraksi"}
@@ -40,11 +42,10 @@ flowchart LR
     PEND -->|"retry tiap siklus"| CR
 
     CR -->|"review manual:<br/>draft → verified"| U
-    W["Browser lokal<br/>GET /health<br/>POST /api/extract<br/>POST /api/reconcile"] --> BOT
 
     classDef cloud fill:#1e3a5f,stroke:#3b82f6,color:#fff
     classDef local fill:#14532d,stroke:#22c55e,color:#fff
-    class TG,CR,VIS,DRIVE,YR,AS,RC,SEN,LF cloud
+    class TG,CR,VIS,DRIVE,YR,AS,RC,SEN,LF,UR cloud
     class BOT,MOCK,PEND,W local
 ```
 
