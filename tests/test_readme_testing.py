@@ -192,3 +192,29 @@ def test_readme_sc02_number_matches_the_judged_metric(testing_section):
     assert baris, "README tidak punya tabel angka penilai SC-02"
     assert "Kelengkapan rata-rata" in testing_section
 
+
+def test_criteria_without_a_measurer_are_never_marked_as_met(testing_section):
+    """Kriteria yang belum punya pengukur tidak boleh ditulis tercapai.
+
+    Cacat yang dicegah: SC-07 dan SC-08 sudah ditetapkan di BRD, tetapi runner
+    hanya mengenal sc01 sampai sc06. Menulisnya "tercapai" berarti mengklaim
+    hasil pengukuran yang tidak pernah dijalankan.
+    """
+    terukur = set(sc_runner.AVAILABLE_CRITERIA)
+
+    for nomor in ("07", "08"):
+        kunci = f"sc{nomor}"
+        if kunci in terukur:
+            continue  # sudah punya pengukur, aturan ini tidak berlaku
+
+        baris = [x for x in testing_section.splitlines()
+                 if x.strip().startswith(f"| SC-{nomor} |")]
+        assert baris, f"README tidak punya baris tabel SC-{nomor}"
+
+        for b in baris:
+            kolom = [c.strip() for c in b.split("|")]
+            isi_status = " ".join(kolom[4:5])
+            assert "tercapai" not in isi_status.lower(), (
+                f"SC-{nomor} ditulis tercapai padahal belum punya pengukur: {b}")
+
+
