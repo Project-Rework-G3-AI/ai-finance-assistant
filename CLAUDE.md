@@ -49,7 +49,7 @@ Photo/caption → Telegram → poll_loop() → handle_update()
 
 ### Extraction Modes
 
-- **Vision**: Enabled when `AI_API_KEY` set. Sends base64 image to `AI_BASE_URL/chat/completions`. Expects JSON back with `{tanggal, keterangan, nominal, arah, kategori, bank, kantong_tujuan}` — `bank` = kantong asal (BRI/BNI/Jago/UANG KAS), `arah` may be `transfer` (then `kantong_tujuan` filled).
+- **Vision**: Enabled when `AI_API_KEY` set. Sends base64 image to `AI_BASE_URL/chat/completions`. Expects JSON back with `{tanggal, keterangan, nominal, arah, kategori, bank, kantong_tujuan}` — `bank` = kantong asal (BRI/BNI/Jago/UANG KAS), `arah=transfer` only when the receiver is one of the own pockets (payer-side proof to an outside party = `keluar`; the prompt states this rule), then `kantong_tujuan` is mandatory.
 - **Mock**: Fallback. Date from `YYYY-MM-DD` regex in filename; amount from `Rp\d+` in caption; direction from keyword match; kantong empty (→ `CR_DEFAULT_BANK`).
 
 ### Cash Report writer (Drive + Sheets split)
