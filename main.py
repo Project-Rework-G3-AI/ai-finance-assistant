@@ -27,6 +27,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+import ai_trace
 import sentry_setup
 from cash_report import categories as KAT
 from cash_report import qa
@@ -59,7 +60,7 @@ SA_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "service_account.json").strip
 DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip()  # folder Receipts (upload foto)
 CR_FOLDER_ID = os.getenv("CASH_REPORT_FOLDER_ID", "").strip()
 CR_TEMPLATE_ID = os.getenv("CASH_REPORT_TEMPLATE_ID", "").strip()
-CR_DEFAULT_BANK = os.getenv("CR_DEFAULT_BANK", "TUNAI").strip().upper()
+CR_DEFAULT_BANK = os.getenv("CR_DEFAULT_BANK", "UANG KAS").strip().upper()
 AI_KEY = os.getenv("AI_API_KEY", "").strip()
 AI_BASE = os.getenv("AI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
 AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini").strip()
@@ -150,44 +151,59 @@ async def _vision_extract(client: httpx.AsyncClient, filename: str, image_bytes:
     prompt = (
         "Ekstrak data transaksi dari bukti ini. Balas HANYA JSON tanpa teks lain: "
         '{"tanggal":"YYYY-MM-DD HH:MM:SS","keterangan":"...","nominal":number,'
-        '"arah":"masuk|keluar|transfer",'
+        '"arah":"masuk|keluar|transfer — transfer HANYA bila uang berpindah antar '
+        'kantong milik sendiri: penerima tercantum sebagai salah satu dari '
+        'BRI/BNI/Jago/UANG KAS. Bukti sisi pembayar ke pihak LUAR daftar itu '
+        '(merchant, QRIS, orang lain) berarti keluar; '
+        'masuk hanya bila bukti menunjukkan dana diterima (mutasi masuk, pembayaran dari pembeli)",'
         f'"kategori":"satu dari: {KAT.PROMPT_KATEGORI}",'
-        '"bank":"kantong asal dana — salah satu dari: BRI, BNI, Jago, TUNAI; '
+        '"bank":"kantong asal dana — salah satu dari: BRI, BNI, Jago, UANG KAS; '
         'kosong bila tidak terbaca",'
-        '"kantong_tujuan":"hanya bila arah=transfer — kantong tujuan: '
-        'BRI, BNI, Jago, TUNAI; kosong bila bukan transfer"}'
+        '"kantong_tujuan":"WAJIB terisi bila arah=transfer — kantong tujuan: '
+        'BRI, BNI, Jago, UANG KAS (cocokkan nama penerima di bukti ke daftar ini); '
+        'kosong bila arah bukan transfer"}'
     )
     if caption:
         prompt += f"\nCaption Telegram: {caption}"
-    r = await client.post(
-        f"{AI_BASE}/chat/completions",
-        headers={"Authorization": f"Bearer {AI_KEY}"},
-        json={
-            "model": AI_MODEL,
-            "messages": [{"role": "user", "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
-            ]}],
-            "temperature": 0,
-        },
-        timeout=90,
-    )
-    try:
-        r.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        # raise_for_status() hanya membawa kode status. Isi respons dari provider
-        # (mis. {"error":{"message":...}}) menjelaskan penyebab sebenarnya, jadi
-        # dilampirkan sebelum diteruskan.
-        body = ""
-        with suppress(Exception):
-            body = e.response.text[:800]
-        raise RuntimeError(
-            f"AI HTTP {e.response.status_code} dari {AI_BASE}: {body or '(respons kosong)'}"
-        ) from e
-    text = r.json()["choices"][0]["message"]["content"]
+    with ai_trace.lacak(
+        "vision-extract",
+        model=AI_MODEL,
+        input=prompt,
+        metadata={"filename": filename, "caption": bool(caption)},
+    ) as rekam:
+        r = await client.post(
+            f"{AI_BASE}/chat/completions",
+            headers={"Authorization": f"Bearer {AI_KEY}"},
+            json={
+                "model": AI_MODEL,
+                "messages": [{"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                ]}],
+                "temperature": 0,
+            },
+            timeout=90,
+        )
+        try:
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            # raise_for_status() hanya membawa kode status. Isi respons dari provider
+            # (mis. {"error":{"message":...}}) menjelaskan penyebab sebenarnya, jadi
+            # dilampirkan sebelum diteruskan.
+            body = ""
+            with suppress(Exception):
+                body = e.response.text[:800]
+            raise RuntimeError(
+                f"AI HTTP {e.response.status_code} dari {AI_BASE}: {body or '(respons kosong)'}"
+            ) from e
+        data = r.json()
+        rekam(output=data["choices"][0]["message"]["content"], usage=ai_trace.usage_dari(data))
+    text = data["choices"][0]["message"]["content"] or ""
     m = re.search(r"\{.*\}", text, re.S)
     if not m:
-        raise ValueError("balasan AI bukan JSON")
+        raise ValueError(
+            "balasan AI bukan JSON" + (" (content kosong)" if not text else "")
+        )
     data = json.loads(m.group(0))
     arah = str(data.get("arah", "")).lower()
     keterangan = _gabung_keterangan(str(data.get("keterangan") or ""), caption, filename)
@@ -239,47 +255,63 @@ async def extract(client: httpx.AsyncClient, filename: str, image_bytes: bytes, 
     return _mock_extract(filename, caption)
 
 
-# ---------- Google Drive (OAuth user) ----------
-# Drive = OAuth akun user (SA tidak bisa membuat file: kuota SA = 0, error
-# storageQuotaExceeded). Sel/struktur Cash Report = service account (folder
-# sudah di-share ke SA). Scope penuh diperlukan: cari folder & copy template
-# milik user — token lama ber-scopes drive.file harus dibuat ulang (README).
+# ---------- Google Drive ----------
+# Split: baca (cari id spreadsheet utk rekonsiliasi) = service account (scope
+# drive penuh, tidak pernah kedaluwarsa). Operasi yang MEMBUAT file (folder,
+# copy template, upload foto) = Apps Script Web App — SA tidak bisa membuat
+# file (kuota 0, storageQuotaExceeded), dan OAuth user Testing kedaluwarsa
+# tiap7 hari (invalid_grant, lihat README bagian Drive).
 
-DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
-OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
-OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
-OAUTH_REFRESH_TOKEN = os.getenv("GOOGLE_OAUTH_REFRESH_TOKEN", "").strip()
+APPS_SCRIPT_URL = os.getenv("APPS_SCRIPT_URL", "").strip()
+APPS_SCRIPT_SECRET = os.getenv("APPS_SCRIPT_SECRET", "").strip()
 
 
 def _drive_ready() -> bool:
-    return bool(DRIVE_FOLDER_ID and OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET and OAUTH_REFRESH_TOKEN)
+    return bool(DRIVE_FOLDER_ID and APPS_SCRIPT_URL and APPS_SCRIPT_SECRET)
 
 
-def _oauth_creds():
-    from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials
+def apps_script_call(action: str, payload: dict) -> dict:
+    """Panggil Web App Apps Script. Return body['data'] atau raise RuntimeError.
 
-    creds = Credentials.from_authorized_user_info(
-        {
-            "refresh_token": OAUTH_REFRESH_TOKEN,
-            "client_id": OAUTH_CLIENT_ID,
-            "client_secret": OAUTH_CLIENT_SECRET,
-        },
-        scopes=[DRIVE_SCOPE],
-    )
-    creds.refresh(Request())
-    return creds
+    Sinkron — googleapiclient lama juga blocking, dan dipakai script utilitas
+    (build_template, migrasi) di luar event loop. follow_redirects wajib:
+    Web App bisa menjawab 302 sebelum /exec final.
+    """
+    if not (APPS_SCRIPT_URL and APPS_SCRIPT_SECRET):
+        raise RuntimeError("APPS_SCRIPT_URL / APPS_SCRIPT_SECRET belum diisi")
+    body = {"secret": APPS_SCRIPT_SECRET, "action": action, **payload}
+    with httpx.Client(follow_redirects=True, timeout=30) as cli:
+        r = cli.post(APPS_SCRIPT_URL, json=body)
+    if r.status_code != 200:
+        raise RuntimeError(f"Apps Script HTTP {r.status_code}: {r.text[:200]}")
+    out = r.json()
+    if not out.get("ok"):
+        raise RuntimeError(f"Apps Script {action} gagal: {out.get('error')}")
+    return out.get("data") or {}
 
 
-_drive_svc = None
+_sa_drive = None
 
 
 def _drive():
-    global _drive_svc
-    if _drive_svc is None:
+    """Drive API client (service account) — hanya untuk BACA (files.list)."""
+    global _sa_drive
+    if _sa_drive is None:
+        from google.oauth2 import service_account as sa_credentials
         from googleapiclient.discovery import build
-        _drive_svc = build("drive", "v3", credentials=_oauth_creds(), cache_discovery=False)
-    return _drive_svc
+
+        sa_raw = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+        creds = (
+            sa_credentials.Credentials.from_service_account_info(
+                json.loads(sa_raw), scopes=GOOGLE_SCOPES
+            )
+            if sa_raw
+            else sa_credentials.Credentials.from_service_account_file(
+                SA_FILE, scopes=GOOGLE_SCOPES
+            )
+        )
+        _sa_drive = build("drive", "v3", credentials=creds, cache_discovery=False)
+    return _sa_drive
 
 
 _sheet_cli = None
@@ -299,68 +331,44 @@ def _sheets():
 
 
 def upload_drive(image_bytes: bytes, filename: str) -> str:
-    """Upload foto ke folder Drive (akun user via OAuth). Return webViewLink."""
-    import io
+    """Upload foto ke folder Receipts via Apps Script. Return webViewLink."""
+    import base64
 
-    from googleapiclient.http import MediaIoBaseUpload
-
-    drive = _drive()
     mime = "image/png" if filename.lower().endswith(".png") else "image/jpeg"
-    f = drive.files().create(
-        body={"name": filename, "parents": [DRIVE_FOLDER_ID]},
-        media_body=MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype=mime),
-        fields="id, webViewLink",
-    ).execute()
-    return f.get("webViewLink", "")
-
-
-def _escape_drive_query(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("'", "\\'")
+    data = apps_script_call(
+        "upload",
+        {
+            "filename": filename,
+            "folder_id": DRIVE_FOLDER_ID,
+            "content_base64": base64.b64encode(image_bytes).decode(),
+            "mime": mime,
+        },
+    )
+    return data.get("link", "")
 
 
 def _find_or_create_folder(folder_name: str, parent_id: str) -> str:
-    """Folder di Drive (OAuth): cari, kalau tidak ada buat. Gagal jika >1."""
-    q = (
-        f"name = '{_escape_drive_query(folder_name)}' "
-        f"and '{parent_id}' in parents "
-        "and mimeType = 'application/vnd.google-apps.folder' "
-        "and trashed = false"
-    )
-    files = _drive().files().list(q=q, fields="files(id, name)", pageSize=100).execute().get("files", [])
-    if len(files) > 1:
-        raise RuntimeError(f"Folder ganda ditemukan: {folder_name}")
-    if files:
-        return files[0]["id"]
-    f = _drive().files().create(
-        body={"name": folder_name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent_id]},
-        fields="id",
-    ).execute()
-    return f["id"]
+    """Folder di Drive (via Apps Script): cari, kalau tidak ada buat."""
+    data = apps_script_call("folder", {"name": folder_name, "parent_id": parent_id})
+    return data["id"]
 
 
 def _find_or_create_spreadsheet(year: str, year_folder_id: str) -> dict:
-    """Spreadsheet gabungan 'Cash Report {tahun}': cari, kalau tidak ada copy template."""
-    name = f"Cash Report {year}"
-    q = (
-        f"name = '{_escape_drive_query(name)}' "
-        f"and '{year_folder_id}' in parents "
-        "and mimeType = 'application/vnd.google-apps.spreadsheet' "
-        "and trashed = false"
-    )
-    files = _drive().files().list(q=q, fields="files(id, name, webViewLink)", pageSize=100).execute().get("files", [])
-    if len(files) > 1:
-        raise RuntimeError(f"Cash Report ganda ditemukan: {name}")
-    if files:
-        return files[0]
+    """Spreadsheet gabungan 'Cash Report {tahun}': cari, kalau tidak ada copy template (via Apps Script)."""
     if not CR_TEMPLATE_ID:
         raise RuntimeError("CASH_REPORT_TEMPLATE_ID kosong")
-    f = _drive().files().copy(
-        fileId=CR_TEMPLATE_ID,
-        body={"name": name, "parents": [year_folder_id]},
-        fields="id, name, webViewLink",
-    ).execute()
-    _init_year_dates(f["id"], year)
-    return f
+    data = apps_script_call(
+        "copy_template",
+        {
+            "name": f"Cash Report {year}",
+            "parent_id": year_folder_id,
+            "template_id": CR_TEMPLATE_ID,
+        },
+    )
+    out = {"id": data["id"], "name": data["name"], "webViewLink": data.get("link", "")}
+    if data.get("created"):
+        _init_year_dates(out["id"], year)
+    return out
 
 
 def _init_year_dates(spreadsheet_id: str, year: str) -> None:
@@ -486,20 +494,25 @@ def write_cash_report(rec: dict, image_bytes: bytes = b"", filename: str = "") -
     return {"status": "ok", "worksheet": ws.title, "row": row, "link": link}
 
 
-def push_pending(rec: dict, error: str) -> None:
+def push_pending(rec: dict, error: str, chat_id: int | None = None) -> None:
     with PENDING.open("a", encoding="utf-8") as f:
         # default=str: rec["tanggal"] kini bisa datetime — tanpa ini
         # json.dumps TypeError dan transaksi hilang saat tulis gagal.
-        f.write(json.dumps({**rec, "_error": error, "_ts": int(time.time())},
+        # chat_id: agar flush_pending bisa memberi tahu user hasil retry.
+        f.write(json.dumps({**rec, "chat_id": chat_id, "_error": error, "_ts": int(time.time())},
                            ensure_ascii=False, default=str) + "\n")
 
 
-def flush_pending(client: httpx.AsyncClient) -> int:
+async def flush_pending(client: httpx.AsyncClient) -> int:
     """Kirim ulang antrean. Return jumlah yang masih tersisa.
 
     Baris dibaca satu per satu dan dikumpulkan dulu, baru file ditulis ulang.
     Versi sebelumnya menghapus file sebelum memproses, sehingga satu baris JSON
     rusak membuat seluruh antrean transaksi hilang tanpa bisa dipulihkan.
+
+    Notifikasi: sukses retry selalu diberi tahu ke chat asal (chat_id tersimpan
+    di record); kegagalan hanya sekali (flag _notif) agar polling tiap siklus
+    tidak jadi spam. Record lama tanpa chat_id lewat tanpa notifikasi.
     """
     if not PENDING.exists():
         return 0
@@ -518,18 +531,33 @@ def flush_pending(client: httpx.AsyncClient) -> int:
             sentry_setup.capture_exception(e)
             sisa.append(ln)
             continue
+        chat_id = rec.get("chat_id")
         rec.pop("_error", None)
         rec.pop("_ts", None)
         try:
-            write_cash_report(rec)  # tanpa gambar: retry hanya barisnya, link kosong
+            hasil = await asyncio.to_thread(write_cash_report, rec)  # tanpa gambar: link kosong
         except Exception as e:
             # Retry gagal berarti transaksi belum tercatat; ini perlu terlihat.
             log.warning("Retry antrean gagal, dikembalikan ke pending: %s: %s", type(e).__name__, e)
             sentry_setup.capture_exception(e)
-            # Simpan dengan anotasi error; ditulis sekali di akhir, bukan
-            # append per baris, agar isi file tidak tercampur dua sumber.
             sisa.append(json.dumps({**rec, "_error": f"retry gagal: {e}", "_ts": int(time.time())},
                                    ensure_ascii=False, default=str))
+            if chat_id and not rec.get("_notif"):
+                # Beri tahu sekali; siklus berikutnya diam (lihat flag _notif).
+                await tg_send(
+                    client, chat_id,
+                    f"⚠️ Percobaan ulang transaksi tertunda gagal lagi ({type(e).__name__})."
+                    " Akan dicoba otomatis tiap siklus.",
+                )
+                sisa[-1] = json.dumps({**rec, "_notif": True, "_error": f"retry gagal: {e}",
+                                       "_ts": int(time.time())}, ensure_ascii=False, default=str)
+            continue
+        if chat_id:
+            await tg_send(
+                client, chat_id,
+                f"✅ Transaksi tertunda tadi berhasil tercatat — {hasil.get('worksheet', '?')} "
+                f"baris {hasil.get('row', '?')}.",
+            )
 
     # Tulis ulang hanya bila masih ada sisa; file kosong dihapus agar /health
     # melaporkan pending=false dengan benar.
@@ -726,11 +754,20 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
     doc = msg.get("document")
     photo = msg.get("photo")
 
-    # PDF diperlakukan sebagai mutasi bank, bukan receipt transaksi.
-    if doc and (
+    # Ack sesuai ekspektasi latensi: foto/PDF = proses panjang (vision +
+    # tulis sheet) -> teks "mohon tunggu"; teks = cepat -> cukup indikator
+    # typing (command <2 detik, bahasa bebas lewat LLM beberapa detik).
+    is_pdf = bool(doc and (
         doc.get("mime_type") == "application/pdf"
         or str(doc.get("file_name", "")).lower().endswith(".pdf")
-    ):
+    ))
+    if is_pdf:
+        await tg_send(client, chat_id, "⏳ Memproses mutasi bank — mohon tunggu…")
+    elif doc or photo:
+        await tg_send(client, chat_id, "⏳ Membaca bukti transaksi — mohon tunggu…")
+
+    # PDF diperlakukan sebagai mutasi bank, bukan receipt transaksi.
+    if is_pdf:
         await handle_bank_statement_pdf(
             client=client,
             chat_id=chat_id,
@@ -743,6 +780,8 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
         # Routing: foto/dokumen ke ekstraksi; teks ke tanya-jawab (lihat qa.py).
         text = str(msg.get("text") or "").strip()
         if text:
+            with suppress(Exception):
+                await tg_call(client, "sendChatAction", chat_id=chat_id, action="typing")
             await handle_text(client, chat_id, text)
         else:
             await tg_send(
@@ -777,7 +816,7 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
         # log.exception() level ERROR sudah dikirim sebagai event oleh
         # LoggingIntegration, jadi tidak perlu capture_exception() lagi.
         log.exception("Tulis Cash Report gagal, masuk antrean")
-        push_pending(rec, str(e))
+        push_pending(rec, str(e), chat_id=chat_id)
         await tg_send(client, chat_id, f"⚠️ Ekstraksi OK, tapi tulis ke Cash Report gagal ({type(e).__name__}). Masuk antrean, dikirim ulang otomatis.")
         return
     if hasil["status"] == "dup":
@@ -790,11 +829,11 @@ async def handle_update(client: httpx.AsyncClient, upd: dict) -> None:
     baris_bukti = f'\n<a href="{hasil["link"]}">Bukti transfer</a>' if hasil["link"] else ""
     baris_kantong = ""
     if not str(rec.get("bank") or "").strip():
-        # Bukti: kantong default mengotori TUNAI/Kas Operasional (Q&A stakeholder:
-        # kas operasional direkonsiliasikan ke buku kas fisik) — sorot di balasan.
+        # Bukti: kantong default mengotori saldo UANG KAS (kas operasional) di tab
+        # ACCOUNT — direkonsiliasikan stakeholder ke buku kas fisik. Sorot di balasan.
         baris_kantong = (
             f"\n⚠️ Kantong asal tidak terbaca — ditulis sebagai <b>{kantong} (default)</b>;"
-            " koreksi di Sheet bila bukan tunai."
+            " koreksi di Sheet bila bukan kas."
         )
     await tg_send(
         client, chat_id,
@@ -812,7 +851,7 @@ async def poll_loop() -> None:
             try:
                 # retry antrean lokal setiap siklus
                 if PENDING.exists():
-                    flush_pending(client)
+                    await flush_pending(client)
                 updates = await tg_call(client, "getUpdates", offset=offset, timeout=25, allowed_updates=["message", "channel_post"])
                 for upd in updates:
                     offset = upd["update_id"] + 1
@@ -827,10 +866,17 @@ async def poll_loop() -> None:
                         chat = (upd.get("message") or {}).get("chat", {}).get("id")
                         if chat:
                             await tg_send(client, chat, f"❌ Gagal memproses: {type(e).__name__}: {e}")
-            except Exception:
+            except Exception as e:
                 # Loop terluar: menelan semua error agar bot tetap hidup. Tanpa
                 # laporan di sini, bot bisa diam berjam-jam tanpa jejak apa pun.
-                log.exception("poll_loop gagal, ulang dalam 3 detik")
+                if "error_code=409" in str(e):
+                    # Deploy overlap Render: instance lama & baru polling
+                    # bersamaan beberapa detik. Wajar, pulih sendiri lewat
+                    # retry — warning tanpa traceback & tanpa event Sentry
+                    # (menghindari noise per deploy; pola: burst lalu diam).
+                    log.warning("getUpdates 409 (deploy overlap) — ulang 3 detik")
+                else:
+                    log.exception("poll_loop gagal, ulang dalam 3 detik")
                 await asyncio.sleep(3)
 
 

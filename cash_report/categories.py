@@ -1,7 +1,7 @@
 """Daftar kategori transaksi — sumber tunggal untuk seluruh repo.
 
 Dipakai oleh main.py (prompt AI + validasi), build_template.py (sheet SETUP,
-EXPENSE DETAIL, INCOME STATEMENT), dan cr.py.
+EXPENSE DETAIL, INCOME STATEMENT).
 
 Sumber nama:
   - SOP Pencatatan Uang Keluar (10 kategori pengeluaran, eksplisit di tabel)
@@ -113,7 +113,7 @@ PROMPT_KATEGORI = ", ".join(KATEGORI_UNTUK_MODEL)
 # --- Alias ------------------------------------------------------------------
 # Varian ejaan/skema yang sah -> nama final. Mencakup:
 #   - skema 'Beban Operasional-*' (tab Salinan BNI/BRI) -> 'Biaya-*' (SOP)
-#   - typo pada file perusahaan dan pada cr.py
+#   - typo pada file perusahaan
 #   - nama ringkas yang mungkin dihasilkan model
 ALIAS = {
     "Beban Operasional-Gaji Karyawan": "Biaya-Gaji Karyawan",

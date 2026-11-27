@@ -1,3 +1,11 @@
+"""[DEPRECATED — JANGAN DIPAKAI]
+
+Prototipe awal sebelum konsolidasi ke main.py. Memakai OAuth user
+(OAUTH_CLIENT_ID/SECRET/REFRESH_TOKEN) yang sudah diganti Apps Script Web App
+(apps_script/Code.gs — README bagian Drive), jadi alur kredensial di file ini
+tidak berlaku lagi. Tidak diimport modul mana pun; disimpan sebagai referensi
+sejarah. Aman dihapus bila tidak diperlukan.
+"""
 import os
 import logging
 import sys

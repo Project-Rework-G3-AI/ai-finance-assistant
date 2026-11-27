@@ -20,9 +20,9 @@ curl http://localhost:8000/health
 curl -X POST http://localhost:8000/api/extract \
   -H "Content-Type: application/json" \
   -d '{"filename":"2024-01-15_receipt.jpg","caption":"Rp50000 makan siang"}'
+# Run tests (31 tests — pending queue, reconciliation, QA, categories, ai_trace)
+pytest -q
 ```
-
-No test framework configured. Test via `/health` and `/api/extract` endpoints.
 
 ## Architecture
 
@@ -40,19 +40,21 @@ Photo/caption → Telegram → poll_loop() → handle_update()
   │                        #   (SA); dedupe by Ref ID (col I); upload photo → col K;
   │                        #   append row A–K at first empty row; transfer = 2 paired
   │                        #   rows sharing the same Ref ID in col I
-  → on failure: push_pending() → pending.jsonl
-  → flush_pending()        # retried each polling cycle (no image → col K empty)
+  → on failure: push_pending(chat_id) → pending.jsonl
+  → flush_pending()        # retried each polling cycle; notifies origin chat
+                           #   on success & on first failure only (_notif flag);
+                           #   no image → col K empty
   → tg_send()              # reply: worksheet + row + receipt link
 ```
 
 ### Extraction Modes
 
-- **Vision**: Enabled when `AI_API_KEY` set. Sends base64 image to `AI_BASE_URL/chat/completions`. Expects JSON back with `{tanggal, keterangan, nominal, arah, kategori, bank, kantong_tujuan}` — `bank` = kantong asal (BRI/BNI/Jago/TUNAI), `arah` may be `transfer` (then `kantong_tujuan` filled).
+- **Vision**: Enabled when `AI_API_KEY` set. Sends base64 image to `AI_BASE_URL/chat/completions`. Expects JSON back with `{tanggal, keterangan, nominal, arah, kategori, bank, kantong_tujuan}` — `bank` = kantong asal (BRI/BNI/Jago/UANG KAS), `arah=transfer` only when the receiver is one of the own pockets (payer-side proof to an outside party = `keluar`; the prompt states this rule), then `kantong_tujuan` is mandatory.
 - **Mock**: Fallback. Date from `YYYY-MM-DD` regex in filename; amount from `Rp\d+` in caption; direction from keyword match; kantong empty (→ `CR_DEFAULT_BANK`).
 
 ### Cash Report writer (Drive + Sheets split)
 
-- **Drive (OAuth user, scope `drive`)**: find/create year folder, find/copy template spreadsheet, upload receipt photo. SA cannot own files (`storageQuotaExceeded`).
+- **Drive — Apps Script Web App** (`APPS_SCRIPT_URL`/`SECRET`, kode `apps_script/Code.gs`): year folder, copy template, receipt photo upload, blank-sheet bootstrap. SA cannot own files (`storageQuotaExceeded`); OAuth user (Testing) expired every 7 days — Web App runs as the owner account, no expiring token. Drive **reads** (find spreadsheet id for reconciliation) stay on SA (scope `drive`).
 - **Sheets (service account)**: all cell writes. Folder `Cash Report` is shared to `client_email` as Editor — files created inside inherit access.
 - Target: file `Cash Report <tahun>` inside year folder → sheet `TRANSAKSI` (flat ledger, Bizschool style). Period cell `RECAP OVERVIEW!B3` = `=DATE(<tahun>,1,1)` written once on copy; RECAP/YEARLY/EXPENSE/INCOME are all derived via SUMIFS.
 - Template built by `cash_report/build_template.py` (7 sheets, year-agnostic); verified by `cash_report/verify_template.py`.
@@ -62,7 +64,7 @@ Photo/caption → Telegram → poll_loop() → handle_update()
 
 ### Failure Queue
 
-`pending.jsonl` — JSONL file, one record per line. Retried before each polling cycle. **Not persistent across Render redeploys.**
+`pending.jsonl` — JSONL file, one record per line. Retried before each polling cycle; records store `chat_id` so retry outcomes are notified (success, or first failure only via `_notif` flag). **Not persistent across Render redeploys.**
 
 ### Tanya-jawab (milestone 3, `cash_report/qa.py`)
 
@@ -70,7 +72,11 @@ Routing di `handle_update`: foto/document → ekstraksi, PDF → rekonsiliasi, t
 
 ### Rekonsiliasi mutasi bank (milestone 2, `reconciliation/`)
 
-PDF mutasi (Telegram atau `/api/reconcile`) → render halaman (`pymupdf`) → vision AI per halaman → validasi keras (`statement_validator`: total, saldo jalan, saldo akhir) → normalisasi → cocok TRANSAKSI periode itu dengan kunci **(tanggal, kantong, debit, credit)** → tulis tab **RECONCILIATION** (bank+rekening+periode sama → **replace**, idempotent; TRANSAKSI tak disentuh). Butuh env `BNI/BRI/JAGO_ACCOUNT_NUMBER`. Contoh file uji di `samples/`.
+PDF mutasi (Telegram atau `/api/reconcile`) → render halaman (`pymupdf`) → vision AI per halaman → validasi keras (`statement_validator`: total, saldo jalan, saldo akhir) → normalisasi → cocok TRANSAKSI periode itu dengan kunci **(tanggal, kantong, debit, credit)** → tulis tab **RECONCILIATION** (bank+rekening+periode sama → **replace**, idempotent; TRANSAKSI tak disentuh; kolom uang Debit/Credit/Bank Balance/Sheet Debit/Sheet Credit diformat `"Rp"#,##0` ulang tiap tulis). Butuh env `BNI/BRI/JAGO_ACCOUNT_NUMBER`. Contoh file uji di `samples/`.
+
+### LLM observability (`ai_trace.py`, Langfuse v5)
+
+Optional Langfuse Cloud tracing of every AI call: `vision-extract` (main.py), `qa-tool-calling` (qa.py, usage accumulated across tool rounds), `recon-vision` (vision_extractor.py, per page). Helper `ai_trace.lacak()` context manager records success/failure; `ai_trace.diagnosa()` verifies credentials. Active only when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are set (env `LANGFUSE_BASE_URL` for non-EU regions) and never under pytest. Only text is sent — images/credentials never leave. SDK must be **v5+**: v2 used the legacy `/api/public/ingestion` endpoint that Langfuse Cloud stopped accepting on 2026-11-16.
 
 ## Key Config
 
@@ -80,10 +86,10 @@ PDF mutasi (Telegram atau `/api/reconcile`) → render halaman (`pymupdf`) → v
 | `TELEGRAM_ALLOWED_CHAT_IDS` | Yes | Whitelist (comma-sep) |
 | `CASH_REPORT_FOLDER_ID` | Yes | Drive folder `Cash Report` (shared to SA) |
 | `CASH_REPORT_TEMPLATE_ID` | Yes | Template spreadsheet to copy (from `build_template.py`) |
-| `CR_DEFAULT_BANK` | No | Kantong fallback when extraction finds none (default TUNAI) |
+| `CR_DEFAULT_BANK` | No | Kantong fallback when extraction finds none (default UANG KAS) |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Cloud | Full SA JSON as string |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | Local | Path to SA JSON file |
-| `GOOGLE_OAUTH_CLIENT_ID/SECRET/REFRESH_TOKEN` | Drive | User OAuth, scope `drive` |
+| `APPS_SCRIPT_URL/SECRET` | Drive | Web App Apps Script (pembuat file: folder, copy template, upload, create_sheet) — setup di README bagian Drive |
 | `GOOGLE_DRIVE_FOLDER_ID` | No | Receipts folder (photo archive, col K) |
 | `AI_API_KEY` | No | Enables vision extraction |
 | `AI_BASE_URL` | No | Default: OpenAI |

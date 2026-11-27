@@ -6,6 +6,8 @@ import httpx
 import asyncio
 import random
 
+import ai_trace
+
 
 SYSTEM_PROMPT = """
 You are a financial bank statement extraction system.
@@ -222,42 +224,50 @@ async def extract_statement_page(
 """
     )
 
-    response = await post_with_retry(
-        client=client,
-        url=f"{ai_base}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {ai_key}"
-        },
-        payload={
-            "model": ai_model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": prompt
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": (
-                                    "data:image/jpeg;base64,"
-                                    + image_b64
-                                )
+    with ai_trace.lacak(
+        "recon-vision",
+        model=ai_model,
+        input=prompt,
+        metadata={"page": page_number},
+    ) as rekam:
+        response = await post_with_retry(
+            client=client,
+            url=f"{ai_base}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {ai_key}"
+            },
+            payload={
+                "model": ai_model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": prompt
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": (
+                                        "data:image/jpeg;base64,"
+                                        + image_b64
+                                    )
+                                }
                             }
-                        }
-                    ]
+                        ]
+                    }
+                ],
+                "temperature": 0,
+                "response_format": {
+                    "type": "json_object"
                 }
-            ],
-            "temperature": 0,
-            "response_format": {
-                "type": "json_object"
             }
-        }
-    )
+        )
 
-    content = response.json()["choices"][0]["message"]["content"]
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+        rekam(output=content, usage=ai_trace.usage_dari(data))
 
     if not content:
         raise ValueError(

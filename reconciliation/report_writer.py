@@ -112,6 +112,30 @@ def build_report_rows(
     return rows
 
 
+# Indeks kolom uang (0-based): Debit, Credit, Bank Balance, Sheet Debit, Sheet Credit
+KOLOM_UANG = (8, 9, 10, 14, 15)
+BARIS_FORMAT_UANG = 5000
+
+
+def _format_uang_requests(sheet_id: int) -> list:
+    """repeatCell format Rupiah untuk kolom uang RECONCILIATION (I,J,K,O,P)."""
+    money = {"numberFormat": {"type": "NUMBER", "pattern": '"Rp"#,##0'}}
+    return [
+        {"repeatCell": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": 1,          # baris 2 (baris 1 = header)
+                "endRowIndex": BARIS_FORMAT_UANG,
+                "startColumnIndex": kol,
+                "endColumnIndex": kol + 1,
+            },
+            "cell": {"userEnteredFormat": money},
+            "fields": "userEnteredFormat.numberFormat",
+        }}
+        for kol in KOLOM_UANG
+    ]
+
+
 def write_reconciliation_report(
     sheets_service,
     spreadsheet_id,
@@ -201,6 +225,14 @@ def write_reconciliation_report(
         values=final_rows,
         value_input_option="USER_ENTERED",
     )
+
+    # Format Rupiah untuk kolom uang — diterapkan ulang tiap tulis agar
+    # tetap ada meski clear()/tulis menimpa isi. Gagal format tidak boleh
+    # menggagalkan laporan (nilai sudah tertulis).
+    try:
+        spreadsheet.batch_update({"requests": _format_uang_requests(worksheet.id)})
+    except Exception as e:  # pragma: no cover - hanya spreadsheet tiruan/anomali
+        logger.warning("Format kolom uang RECONCILIATION gagal: %s: %s", type(e).__name__, e)
 
     logger.info(
         "Reconciliation report berhasil ditulis. "

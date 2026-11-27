@@ -1,4 +1,9 @@
-"""Cara A: arahkan data 2026 ke file baru hasil template baru.
+"""[ARSIP — sudah dijalankan, jangan diulang]
+
+Cara A: arahkan data 2026 ke file baru hasil template baru.
+Skrip sekali-pakai untuk migrasi data2026 ke template Bizschool (PR#15-era);
+migrasinya telah selesai. Disimpan sebagai riwayat prosedur — bila skema
+kolom berubah lagi, tulis skrip baru mengikuti pola ini.
 
 SKEMA TETAP: script ini mengasumsikan kolom TRANSAKSI A–K (indeks Masuk=2,
 Keluar=3, Kategori=4, Link Bukti=10). Bila format template berubah, sesuaikan
