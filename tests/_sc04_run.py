@@ -117,12 +117,17 @@ def fallback_prompt() -> str:
     return (
         "Ekstrak data transaksi dari bukti ini. Balas HANYA JSON tanpa teks lain: "
         '{"tanggal":"YYYY-MM-DD HH:MM:SS","keterangan":"...","nominal":number,'
-        '"arah":"masuk|keluar|transfer",'
+        '"arah":"masuk|keluar|transfer — transfer HANYA bila uang berpindah antar '
+        'kantong milik sendiri: penerima tercantum sebagai salah satu dari '
+        'BRI/BNI/Jago/UANG KAS. Bukti sisi pembayar ke pihak LUAR daftar itu '
+        '(merchant, QRIS, orang lain) berarti keluar; '
+        'masuk hanya bila bukti menunjukkan dana diterima (mutasi masuk, pembayaran dari pembeli)",'
         f'"kategori":"satu dari: {KAT.PROMPT_KATEGORI}",'
-        '"bank":"kantong asal dana — salah satu dari: BRI, BNI, Jago, TUNAI; '
+        '"bank":"kantong asal dana — salah satu dari: BRI, BNI, Jago, UANG KAS; '
         'kosong bila tidak terbaca",'
-        '"kantong_tujuan":"hanya bila arah=transfer — kantong tujuan: '
-        'BRI, BNI, Jago, TUNAI; kosong bila bukan transfer"}'
+        '"kantong_tujuan":"WAJIB terisi bila arah=transfer — kantong tujuan: '
+        'BRI, BNI, Jago, UANG KAS (cocokkan nama penerima di bukti ke daftar ini); '
+        'kosong bila arah bukan transfer"}'
     )
 
 
