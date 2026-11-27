@@ -22,7 +22,7 @@ curl -X POST http://localhost:8000/api/extract \
   -d '{"filename":"2026-01-15_receipt.jpg","caption":"Rp50000 beli kardus"}'
 ```
 
-Tidak ada test framework — verifikasi via `/health` dan `/api/extract` sebelum dan sesudah mengubah kode.
+Test: `pytest -q` (31 test — antrean pending, rekonsiliasi/validator, QA, kategori, ai_trace). Verifikasi runtime via `/health` dan `/api/extract` sebelum dan sesudah mengubah kode.
 
 ## Architecture Notes
 
@@ -41,6 +41,6 @@ Tidak ada test framework — verifikasi via `/health` dan `/api/extract` sebelum
 
 ## Common Workflows
 
-- **Ubah kode**: edit `main.py` → test `/health` + `/api/extract` lokal → commit → push `main` (Render deploy otomatis) → cek `/health` produksi.
+- **Ubah kode**: edit `main.py` → `pytest -q` + test `/health` + `/api/extract` lokal → commit → **PR ke `main`** (dilindungi; Render deploy otomatis setelah merge) → cek `/health` produksi.
 - **Ganti config/key**: ubah di env lokal **dan** Dashboard Render (sinkron), lalu redeploy.
 - **Repo**: https://github.com/Project-Rework-G3-AI/ai-finance-assistant — `main` dilindungi PR (admin bisa langsung push).

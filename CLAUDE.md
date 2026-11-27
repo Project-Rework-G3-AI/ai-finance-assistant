@@ -20,9 +20,9 @@ curl http://localhost:8000/health
 curl -X POST http://localhost:8000/api/extract \
   -H "Content-Type: application/json" \
   -d '{"filename":"2024-01-15_receipt.jpg","caption":"Rp50000 makan siang"}'
+# Run tests (31 tests — pending queue, reconciliation, QA, categories, ai_trace)
+pytest -q
 ```
-
-No test framework configured. Test via `/health` and `/api/extract` endpoints.
 
 ## Architecture
 
@@ -49,7 +49,7 @@ Photo/caption → Telegram → poll_loop() → handle_update()
 
 ### Extraction Modes
 
-- **Vision**: Enabled when `AI_API_KEY` set. Sends base64 image to `AI_BASE_URL/chat/completions`. Expects JSON back with `{tanggal, keterangan, nominal, arah, kategori, bank, kantong_tujuan}` — `bank` = kantong asal (BRI/BNI/Jago/TUNAI), `arah` may be `transfer` (then `kantong_tujuan` filled).
+- **Vision**: Enabled when `AI_API_KEY` set. Sends base64 image to `AI_BASE_URL/chat/completions`. Expects JSON back with `{tanggal, keterangan, nominal, arah, kategori, bank, kantong_tujuan}` — `bank` = kantong asal (BRI/BNI/Jago/UANG KAS), `arah` may be `transfer` (then `kantong_tujuan` filled).
 - **Mock**: Fallback. Date from `YYYY-MM-DD` regex in filename; amount from `Rp\d+` in caption; direction from keyword match; kantong empty (→ `CR_DEFAULT_BANK`).
 
 ### Cash Report writer (Drive + Sheets split)

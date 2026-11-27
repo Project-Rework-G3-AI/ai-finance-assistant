@@ -62,12 +62,13 @@ Kredensial **tidak** ada di repository — hanya di environment variable Render 
 Buka health check; jawaban yang benar:
 
 ```json
-{"ok": true, "telegram": true, "sheets": true, "ai": "vision", "pending": false, "sentry": true}
+{"ok": true, "telegram": true, "sheets": true, "ai": "vision", "drive": true, "pending": false, "sentry": true}
 ```
 
 - `telegram: false` → token/chat_id belum terisi atau belum terbaca.
 - `sheets: false` → `CASH_REPORT_FOLDER_ID` / `CASH_REPORT_TEMPLATE_ID` belum terisi.
 - `ai: "mock"` → `AI_API_KEY` kosong (ekstraksi hanya dari caption).
+- `drive: false` → env Apps Script (`APPS_SCRIPT_URL`/`SECRET`) belum terisi — upload foto bukti mati, bot tetap jalan (kolom Link Bukti kosong).
 - `pending: true` → ada antrean yang belum terkirim ke Sheet (lihat log).
 - `sentry: false` → `SENTRY_DSN` kosong; bot tetap jalan, hanya observability yang mati.
 
@@ -107,7 +108,7 @@ Tanpa `SENTRY_DSN`, seluruh fungsi observability jadi no-op dan bot berjalan sep
 
 Gambar bukti transaksi tidak pernah dikirim karena body request tidak direkam.
 
-**Error yang dilaporkan.** Selain exception yang lolos ke FastAPI (otomatis), ada 7 jalur yang menangani error sendiri dan sekarang memanggil `capture_exception()`:
+**Error yang dilaporkan.** Selain exception yang lolos ke FastAPI (otomatis), ada 9 jalur yang menangani error sendiri dan kini meninggalkan jejak di Sentry — sebagian memanggil `capture_exception()` langsung, sisanya mencatat log level ERROR (LoggingIntegration mengirimkannya otomatis):
 
 | Lokasi | Kejadian |
 |---|---|
