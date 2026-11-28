@@ -470,10 +470,10 @@ lama:
 list, karena 13 unit test lama mengunci perilaku itu. Yang ditambahkan adalah
 cara lain menanyakan jumlah, bukan mengubah cara lama.
 
-Sesudah perbaikan, diukur **enam kali**: lima run menjawab keempat pertanyaan
-dengan angka benar berturut-turut, satu run gagal pada pertanyaan kategori
-sebelum tool `by_category` ditambahkan. Dengan kode terakhir, empat run terakhir
-semuanya 4 dari 4. Rinciannya di
+Sesudah perbaikan, diukur **tujuh kali**: enam run menjawab keempat pertanyaan
+dengan angka benar, satu run gagal pada pertanyaan kategori sebelum tool
+`by_category` ditambahkan. Empat run terakhir, dengan kode terakhir, semuanya
+4 dari 4 berturut-turut. Rinciannya di
 [`docs/sc08-hasil-evaluasi.md`](docs/sc08-hasil-evaluasi.md).
 
 Penyebabnya: `reconciliation/vision_extractor.py` tidak punya percobaan ulang
