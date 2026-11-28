@@ -23,7 +23,7 @@ Target dari BRD: saldo akhir sama pada kedua rekening.
 
 Angka ini sama dengan pengukuran sebelumnya. Yang berubah bukan hasilnya,
 melainkan **kesempatan hasil itu tercapai**: dulu dua dari empat percobaan
-berhenti di tengah, sekarang tiga dari tiga percobaan selesai penuh.
+berhenti di tengah, sekarang empat dari empat percobaan selesai penuh.
 
 Penyebabnya satu: balasan model yang kadang datang kosong, dan jalur rekonsiliasi
 tidak pernah mencoba ulang. Setelah percobaan ulang ditambahkan, kejadian yang
@@ -61,13 +61,14 @@ BNI gagal 1 kali, BRI gagal 2 kali, dan **tidak ada rekening yang gagal di
 halaman yang sama dua kali**. Artinya kegagalan ini tidak menempel pada halaman
 atau berkas tertentu, melainkan pada balasan model yang kadang datang kosong.
 
-**Sesudah perbaikan, 3 dari 3 percobaan selesai penuh.**
+**Sesudah perbaikan, 4 dari 4 percobaan selesai penuh.**
 
 | Percobaan | Balasan kosong yang diulang | BNI | BRI |
 |---|---|---|---|
 | 1 | tidak ada | cocok | cocok |
 | 2 | tidak ada | cocok | cocok |
 | 3 | **2 kali** (BNI halaman 2, BRI halaman 1) | cocok | cocok |
+| 4 (clone bersih) | tidak ada | cocok | cocok |
 
 Percobaan ketiga adalah buktinya. Dua halaman membalas kosong, keduanya diulang,
 dan kedua rekening tetap berakhir dengan saldo yang cocok. Sebelum perbaikan,

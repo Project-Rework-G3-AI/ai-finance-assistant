@@ -298,7 +298,7 @@ pengukur terlihat, bukan tersembunyi.
 | SC-04 | Biaya per gambar | Di bawah Rp50 per gambar | **tercapai: Rp22,10** | kunci AI + kurs |
 | SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | **tercapai: 5 dari 5** | tidak ada |
 | SC-06 | Pemetaan kolom wajib cash report | Tidak ada kolom wajib yang hilang | **tercapai: 79 dari 79 baris** | template + kunci AI |
-| SC-07 | Rekonsiliasi mutasi rekening bank | Saldo akhir sama pada kedua rekening | **tercapai: 2 dari 2 rekening, 3 dari 3 percobaan selesai** | kunci AI + PDF mutasi |
+| SC-07 | Rekonsiliasi mutasi rekening bank | Saldo akhir sama pada kedua rekening | **tercapai: 2 dari 2 rekening, 4 dari 4 percobaan selesai** | kunci AI + PDF mutasi |
 | SC-08 | Tanya jawab analitik keuangan | Seluruh jawaban sesuai | belum diukur | kunci AI + daftar pertanyaan baku |
 
 SC-01 dan SC-02 membaca hasil ekstraksi, jadi bisa dihitung ulang dari
@@ -401,8 +401,8 @@ baris.
 
 **Sudah diperbaiki.** Pembacaan halaman diulang bila balasannya kosong atau bukan
 JSON, sampai tiga percobaan dengan jeda singkat, dan galat HTTP tetap ditangani
-`post_with_retry` agar tidak diulang dua lapisan. Sesudah perbaikan, tiga dari
-tiga percobaan selesai penuh, termasuk satu percobaan yang mengalami balasan
+`post_with_retry` agar tidak diulang dua lapisan. Sesudah perbaikan, empat dari
+empat percobaan selesai penuh, termasuk satu percobaan yang mengalami balasan
 kosong dua kali dan berhasil setelah diulang. Perilakunya dijaga
 `tests/test_reconciliation_retry.py`.
 
