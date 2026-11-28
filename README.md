@@ -2,7 +2,7 @@
 
 Bot Telegram terima foto/screenshot bukti transaksi → ekstraksi field → tulis ke **Cash Report** (satu file gabungan per tahun, flat ledger `TRANSAKSI`, RECAP/PnL otomatis, status `draft`, review manual). Tanpa database.
 
-Deploy aktif: https://ai-finance-assistant-z473.onrender.com/health — detail di [DEPLOYMENT.md](DEPLOYMENT.md).
+Deploy aktif: https://ai-finance-assistant-z473.onrender.com/health (ringkas di bagian **Men-deploy**; detail operasional di [DEPLOYMENT.md](DEPLOYMENT.md)).
 
 ## Arsitektur
 
@@ -171,7 +171,43 @@ Verifikasi: `/health` → `"drive": true`; kirim foto → balasan ada tautan "Bu
 
 Catatan: unggahan hanya terjadi untuk baris **baru** (duplikat dilewati), dan hanya bila tulis Cash Report sukses. Gagal unggah Drive tidak mematikan proses — kolom dibiarkan kosong, error muncul di log, dan `pending.jsonl` tetap menjadi jaring pengaman. Kalau Apps Script menolak (`secret salah`), cek kecocokan `APPS_SCRIPT_SECRET` dengan Script Properties; kalau `HTTP 403/404`, deploy ulang dengan akses **Anyone**.
 
-## Alur
+## Men-deploy
+
+- **Platform**: Render (free tier — dapat tertidur; UptimeRobot mem-ping `/health` tiap 5 menit agar tetap hidup).
+- Connect repo GitHub ini ke Render sebagai Web Service → Build: `pip install -r requirements.txt`; Start: `python main.py` (host/port dari env).
+- **Secrets**: semua variabel yang disebut di Setup di atas (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_IDS`, `GOOGLE_SERVICE_ACCOUNT_JSON`/`_FILE`, `CASH_REPORT_FOLDER_ID`/`_TEMPLATE_ID`, `AI_API_KEY`/`AI_BASE_URL`/`AI_MODEL`, `APPS_SCRIPT_URL`/`APPS_SCRIPT_SECRET`, `GOOGLE_DRIVE_FOLDER_ID`, `BNI`/`BRI`/`JAGO_ACCOUNT_NUMBER`, opsional `LANGFUSE_*`, `SENTRY_DSN`) — diisi di Dashboard Render → Environment; tidak pernah di-commit.
+- Merge ke `main` → Render deploy otomatis; cek `/health` produksi setelahnya.
+
+## Struktur project
+
+| Berkas/Folder | Fungsi |
+|---|---|
+| `main.py` | satu-satunya proses: polling Telegram + server FastAPI + ekstraksi + penulis Cash Report + routing QA/rekonsiliasi |
+| `cash_report/categories.py` | **sumber tunggal daftar kategori** (prompt AI, dropdown, normalizer) |
+| `cash_report/qa.py` | tanya-jawab: tool baca-saja + tool-calling LLM |
+| `cash_report/build_template.py`, `verify_template.py`, `verify_setup.py` | bangun & verifikasi template Cash Report (sekali jalan) |
+| `reconciliation/` | modul rekonsiliasi PDF mutasi: render, vision, validasi saldo, matching, penulis tab RECONCILIATION |
+| `apps_script/Code.gs` | Web App Apps Script — 4 aksi pembuat file Drive (folder, copy template, upload foto, bootstrap) |
+| `ai_trace.py` | pelacak panggilan LLM ke Langfuse (opsional, no-op tanpa env) |
+| `sentry_setup.py` | inisialisasi Sentry (opsional, no-op tanpa DSN) |
+| `tests/` | pytest (31 test: antrean pending, rekonsiliasi, QA, kategori, ai_trace) |
+| `samples/` | PDF mutasi bank simulasi untuk uji/demo rekonsiliasi |
+| `requirements.txt` | dependensi Python 3.12 |
+
+## Pengaturan batas pemakaian
+
+Tidak ada kuota yang dikelola kode — pengaman berupa **saklar**: kosongkan `AI_API_KEY` → mode mock (nol panggilan AI); kosongkan env Langfuse/Sentry → pelaporan mati. Volume bersifat chat-per-chat: satu panggilan AI per foto/PDF/pertanyaan bebas, tanpa pekerjaan latar berulang. `LANGFUSE_*`/`SENTRY_DSN` kosong aman untuk pytest.
+
+## Cara menggunakan
+
+1. Chat bot di Telegram dari chat yang terdaftar di `TELEGRAM_ALLOWED_CHAT_IDS`.
+2. Kirim **satu foto bukti dalam satu pesan** + caption opsional (`Rp195.000 penjualan satvika`) → bot membalas status pencatatan + tautan bukti di Drive.
+3. Kirim bukti yang sama lagi → dibalas "sudah tercatat" (dedupe Ref ID), tanpa baris baru.
+4. Kirim **PDF mutasi bank** → tab RECONCILIATION diisi hasil pencocokan.
+5. Tanya buku: `/total Nov`, `/rekap Nov`, atau bahasa bebas ("berapa pengeluaran November kategori Listrik?").
+6. Reviewer membuka Cash Report di Sheets → koreksi bila perlu → ubah `Status` dari `draft` ke `verified` → RECAP/PnL langsung menghitung ulang.
+
+Detail perilaku di balik langkah-langkah itu:
 
 - Kirim **foto ke bot dalam satu pesan**, dengan caption (opsional, mis. `Rp195.000 penjualan satvika`). Caption dipakai sebagai konteks ekstraksi **dan digabung ke Keterangan** (`hasil LLM — caption`, bila keduanya berbeda).
   - Caption yang dikirim sebagai pesan terpisah **tidak** terbaca bot — selalu satu paket foto + caption.
@@ -242,7 +278,7 @@ Kirim **file PDF mutasi bank** (BNI/BRI/Jago) ke bot, atau `POST /api/reconcile`
 
 Butuh env `BNI_ACCOUNT_NUMBER` / `BRI_ACCOUNT_NUMBER` / `JAGO_ACCOUNT_NUMBER` (lihat `.env.example`); butuh `AI_API_KEY`. Catatan: berjalan inline di polling loop — PDF tebal menunda balasan bot lain selama pemrosesan.
 
-## Batasan (milestone 1)
+## Keterbatasan
 
 - Ekstraksi mock tanpa AI = nominal hanya dari caption (gambar tidak dibaca); tanpa caption, kolom `Nominal` kosong.
 - Klasifikasi awal kosong (kolom Kategori diisi AI bila vision aktif, sisanya manual).
@@ -302,3 +338,7 @@ Aturan tetap: AI hanya menerjemahkan intent → parameter dan menyusun narasi; j
 - **Google Drive sebagai penyimpanan bukti transfer** — sudah diimplementasikan (lihat "Setup Google Drive"): folder `Receipts` + kolom Link Bukti (K). Yang belum: **folder per periode** (`Receipts 2026/01`) supaya arsip terpisah per bulan.
 - **Nama admin otomatis** — tambah kolom `Nama Admin` diisi dari data pengirim Telegram (`message.from`: `first_name` + `last_name`, fallback `username`, terakhir `"Tidak diketahui"`) — menggantikan kolom "Tanggal Input dan Nama Admin" gaya Cash Report perusahaan. Pertimbangan: nama bergantung pada akun pengirim (bukan selalu orang yang sama dengan yang menginput).
 - **Struktur lama (sudah pensiun)** — sebelum gaya Bizschool, bot menulis ke file per bank per tahun dengan tab bulanan + kolom A–P format perusahaan. Struktur itu digantikan file gabungan `Cash Report <tahun>` / sheet `TRANSAKSI` (lihat "Skema kolom"); file lama dibiarkan sebagai arsip historis.
+
+## Catatan data
+
+Berkas di `samples/` adalah PDF mutasi bank **simulasi** untuk uji/demo rekonsiliasi — bukan data nyata. Ledger dan foto bukti sebenarnya tersimpan di Google Sheets/Drive milik pengguna, tidak pernah di repository: jangan mengunggah data keuangan rahasia ke repo ini (`.env`, `service_account.json`, `credentials.json`, `pending.jsonl` sudah dikecualikan lewat `.gitignore`).
