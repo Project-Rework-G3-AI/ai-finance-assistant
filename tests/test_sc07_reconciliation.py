@@ -24,8 +24,20 @@ sys.path.insert(0, str(REPO / "tests"))
 
 import sc07_reconciliation as sc07  # noqa: E402
 
-STATEMENT_DIR = Path("/tmp/mutasi")
+import sc_common as cfg  # noqa: E402
+
+STATEMENT_DIR = cfg.statements_dir()
 BRI_PDF = STATEMENT_DIR / "Mutasi_Rekening_BRI-Januari_2026.pdf"
+
+
+def _ensure_statements() -> None:
+    """Fetch the statement PDFs once so these tests do not depend on a local path."""
+    if BRI_PDF.exists() and (STATEMENT_DIR / "BNI_Mutasi_Januari_2026.pdf").exists():
+        return
+    try:
+        cfg.download_statements(STATEMENT_DIR)
+    except SystemExit as exc:
+        pytest.skip(f"statement PDFs unavailable: {exc}")
 
 
 def _sample(difference=0.0, statement_closing=192643952.0, validation=True, errors=()):
@@ -107,6 +119,7 @@ def test_reference_is_independent_of_the_model():
     """The reference must not come from the model under test."""
     import _sc07_run as run
 
+    _ensure_statements()
     for filename in (run.BNI_FILE, run.BRI_FILE):
         path = STATEMENT_DIR / filename
         if not path.exists():
@@ -132,6 +145,7 @@ def test_bri_text_layer_is_arithmetically_consistent():
     """Opening balance + credit - debit must equal the printed closing balance."""
     import _sc07_text_statement as statement
 
+    _ensure_statements()
     if not BRI_PDF.exists():
         pytest.skip("BRI PDF not available")
 
