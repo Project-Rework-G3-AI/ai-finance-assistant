@@ -59,7 +59,8 @@ flowchart LR
 ## Setup
 
 ```bash
-cd bot
+git clone https://github.com/Project-Rework-G3-AI/ai-finance-assistant.git
+cd ai-finance-assistant
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env        # lalu isi
