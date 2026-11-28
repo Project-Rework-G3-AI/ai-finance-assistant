@@ -99,7 +99,7 @@ publik dan datanya berisi transaksi perusahaan.
 
 | Berkas | Lokasi |
 |---|---|
-| Daftar 65 pasangan | `pairs.csv` di repo privat `Project-Rework-G3-AI/rework-ai-finance-assistant-dataset` |
+| Daftar 65 pasangan | `pairs.csv` di repo publik `Project-Rework-G3-AI/rework-ai-finance-assistant-dataset` |
 | 118 gambar bukti | `Bukti Transaksi Januari 2026/` di repo yang sama |
 | Harness dan test | `tests/sc01_*.py` di repo ini |
 

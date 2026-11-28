@@ -72,6 +72,29 @@ Isi `.env` minimal:
 1. `TELEGRAM_BOT_TOKEN` — dari @BotFather.
 2. `TELEGRAM_ALLOWED_CHAT_IDS` — chat_id pengguna yang boleh (cek via @userinfobot), pisahkan koma.
 
+## Dataset
+
+Pengujian memakai dataset terpisah, tidak disimpan di repo ini karena berisi
+data keuangan riil perusahaan:
+
+**https://github.com/Project-Rework-G3-AI/rework-ai-finance-assistant-dataset**
+
+Repo itu **publik**, jadi tidak perlu token GitHub dan tidak perlu izin tambahan
+untuk membacanya. Isinya 118 foto bukti transaksi, 3 Cash Report, 2 mutasi
+rekening PDF, 3 SOP, dan `pairs.csv` berisi 65 pasangan gambar ke baris laporan.
+
+Kode mengunduhnya sendiri, jadi repo dataset tidak wajib di-clone lebih dulu:
+
+```bash
+python3 tests/sc_runner.py --download          # 118 foto + pairs.csv
+python3 tests/sc_runner.py --download-templates # 3 template Cash Report (SC-06)
+python3 tests/_sc07_run.py                     # 2 PDF mutasi, lalu ukur SC-07
+```
+
+Hasil unduhan masuk ke `dataset/`, yang sudah ada di `.gitignore`. Rincian bahan
+per kriteria ada di README repo dataset. Kalau dataset dipindahkan ke repo lain,
+cukup ganti `GITHUB_DATASET_REPO` di `.env`; kode tidak perlu diubah.
+
 ## Setup Google Sheets (service account)
 
 Gratis, tanpa billing, sekali setup (~5 menit), kunci tidak kedaluwarsa.
