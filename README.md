@@ -136,6 +136,8 @@ Isi template (7 sheet, year-agnostic):
 
 Sel periode (`RECAP OVERVIEW!B3`) ditulis bot saat file baru dibuat = `1 Januari <tahun>`; semua sheet lain turunannya. Locale template harus `en_US` — file hasil copy mewarisi locale template, dan rumus berpemisah koma jadi `#ERROR!` bila locale-nya Indonesia; bot memaksa `en_US` pada setiap file baru sebagai pengaman.
 
+Tab **RECONCILIATION** tidak termasuk template — ia dibuat otomatis oleh bot saat rekonsiliasi pertama dijalankan untuk file tahun itu (lihat **Rekonsiliasi Mutasi**).
+
 Aturan penting:
 
 - **Transfer antar kantong** ditulis **2 baris berpasangan** — keduanya berbagi `Ref ID` yang sama di kolom I (pasangan dikenali dari situ) — saldo tiap kantong akurat, recap/PnL mengecualikannya.
@@ -144,7 +146,7 @@ Aturan penting:
 
 ## Setup Google Drive (opsional — arsip bukti transfer)
 
-Foto yang diterima juga diunggah ke Google Drive (folder `Receipts`); tautannya ditulis ke kolom **Link Bukti (K)** supaya bisa dibuka langsung dari Cash Report (memenuhi UC-02). Fitur ini **opsional** — tanpa konfigurasi, bot tetap jalan normal.
+Foto yang diterima juga diunggah ke Google Drive (folder `Receipts`); tautannya ditulis ke kolom **Link Bukti (K)** supaya bisa dibuka langsung dari Cash Report (memenuhi UC-02). Fiturnya **sudah terimplementasi** — yang opsional adalah pemasangannya: tanpa konfigurasi Drive, bot tetap jalan normal (kolom Link Bukti kosong, foto tidak diarsip).
 
 **Kenapa Apps Script?** Service account tidak bisa membuat file (kuota 0, `storageQuotaExceeded`), dan OAuth user status Testing kedaluwarsa tiap 7 hari (`invalid_grant`, terbukti 25 Nov 2026 di Sentry). Apps Script Web App berjalan sebagai akun pemilik **tanpa token yang kedaluwarsa** — sekali deploy, selesai. Pembagian kerja:
 
@@ -280,9 +282,12 @@ Butuh env `BNI_ACCOUNT_NUMBER` / `BRI_ACCOUNT_NUMBER` / `JAGO_ACCOUNT_NUMBER` (l
 
 ## Keterbatasan
 
-- Ekstraksi mock tanpa AI = nominal hanya dari caption (gambar tidak dibaca); tanpa caption, kolom `Nominal` kosong.
-- Kategori: mode mock mengosongkannya; mode vision mengisi lalu dinormalkan ke nama baku — ejaan tak dikenal mendarat di kategori `Perlu Ditinjau` (hanya kode boleh memasangnya) dan menunggu koreksi manusia.
-- Belum ada hal lain di luar balancing yang tertunda; tanya-jawab dan rekonsiliasi mutasi sudah aktif — lihat bagian **Tanya-jawab** dan **Rekonsiliasi Mutasi**.
+- Ekstraksi mock tanpa AI = nominal hanya dari caption (gambar tidak dibaca); tanpa caption, kolom `Nominal` kosong; kategori kosong.
+- Kategori mode vision diisi AI lalu dinormalkan ke nama baku — ejaan tak dikenal mendarat di kategori `Perlu Ditinjau` (hanya kode boleh memasangnya) dan menunggu koreksi manusia.
+- Rekonsiliasi berjalan inline di loop polling — PDF tebal menunda balasan pesan bot lain selama pemrosesan.
+- `pending.jsonl` hidup di disk proses — hilang saat redeploy Render; penahan kegagalan sementara, bukan arsip.
+- `Ref ID` = identitas konten file: foto yang diedit/kompres ulang dianggap bukti baru (rencana perbaikan: nomor referensi dokumen — lihat **Catatan desain**).
+- Tanya-jawab bahasa bebas dan rekonsiliasi butuh `AI_API_KEY`; tanpa itu, command `/` tetap jalan.
 
 ## Pengembangan Berikutnya
 
@@ -294,46 +299,10 @@ Butuh env `BNI_ACCOUNT_NUMBER` / `BRI_ACCOUNT_NUMBER` / `JAGO_ACCOUNT_NUMBER` (l
 
 Yang tidak perlu dibangun: database, login, dashboard analytics, n8n.
 
-## Rancangan Tanya-Jawab & Data (hasil diskusi desain)
-
-Keputusan inti: **tanpa database untuk query AI** — Sheet tetap satu-satunya source of truth.
-
-### Query AI baca Sheet langsung, bukan mirror DB
-
-Data diedit manual di Sheet (draft → verified); mirror DB akan jadi basi dan menimbulkan masalah sync yang justru dihindari. Volume kecil → baca via `gspread` saat query juga cukup. Bentuknya **tools**, bukan database:
-
-| Tool | Fungsi |
-|---|---|
-| `aggregate(period, arah, kategori?)` | total masuk/keluar — dihitung **kode** |
-| `list_rows(period, filter?)` | daftar baris untuk pertanyaan rinci |
-| `get_receipt(ref_id)` | ambil tautan foto dari kolom Link Bukti (K) (read-only) |
-
-Aturan tetap: AI hanya menerjemahkan intent → parameter dan menyusun narasi; jawaban wajib menyebut sumber (tab/baris).
-
-### PnL & reconcile: cukup spreadsheet
-
-- **PnL**: baca → agregasi per kategori di kode (sudah dibuktikan prototipe).
-- **Reconcile**: matching *in-memory* antara transaksi Sheet dan **tab `Mutasi`** (hasil parse PDF/XLSX disimpan sekali — jangan parse ulang tiap run) → hasil ditulis ke kolom (`Status Reconcile`, `Cocok Dengan`, `Selisih`) + laporan selisih per periode.
-- **Database hanya kalau**: butuh log nilai AI vs final (sebelum koreksi vs setelah verifikasi) untuk mengukur akurasi — bahan SC-01/SC-02 & Testing Report — dengan **SQLite** append-only, atau baris > ~100rb / multi-penulis → **PostgreSQL**. Sinkron **satu arah Sheet → DB**, tidak pernah dua arah.
-
-### Routing pesan: foto vs tanya-data
-
-- Foto/dokumen → jalur ekstraksi **tidak berubah** dan tidak pernah melewati LLM (cukup cek tipe pesan).
-- Teks → berurutan: (1) command `/` dulu (gratis, deterministik); (2) bahasa bebas → **satu panggilan LLM tool-calling** — pilihan tool-nya *adalah* routing-nya. Classifier terpisah tidak direkomendasikan (berarti dua panggilan AI per pertanyaan: lambat, mahal, dua titik gagal).
-- Klasifikasi gagal / AI mati → balasan bantuan (fallback, pola sama dengan mode mock).
-
-### Command `/` — opsional, parameter divalidasi
-
-- Tidak wajib; disarankan untuk pola berulang: `/total Nov`, `/rekap`, `/help`.
-- Parameter tidak valid → balas **usage singkat dengan contoh**, tidak pernah exception:
-  - `/total` atau `/total abc` → `Format: /total <bulan> — contoh: /total Nov, /total 2026-11`
-  - command tidak dikenal → ringkasan bantuan.
-- `first = text.split()[0].split("@")[0]` (buang `@botname` di grup) → lookup dict handler → parse argumen di dalam handler.
-
-### Catatan desain (belum diimplementasi)
+## Catatan desain (belum diimplementasi)
 
 - **Ref ID prioritas nomor referensi dokumen** — `Ref ID` saat ini selalu diisi `tg:<file_unique_id>` sehingga nomor referensi hasil ekstraksi (`rec["ref"]`) terbuang. Rencana: `ref_id = f"doc:{rec['ref']}"` bila ada, fallback `tg:<file_unique_id>`. Alasan: nomor referensi bank unik per transaksi → deteksi duplikat lebih kuat (foto diedit/kompresi ulang tetap ketangkap) dan menjadi kunci pencocokan untuk balancing terhadap kolom referensi di mutasi bank. Format prefix `doc:`/`tg:` ditentukan sejak awal dan tidak diubah-ubah.
-- **Google Drive sebagai penyimpanan bukti transfer** — sudah diimplementasikan (lihat "Setup Google Drive"): folder `Receipts` + kolom Link Bukti (K). Yang belum: **folder per periode** (`Receipts 2026/01`) supaya arsip terpisah per bulan.
+- **Arsip bukti per periode** — foto kini tersimpan rata di folder `Receipts` + kolom Link Bukti (K) (sudah jalan, lihat "Setup Google Drive"); yang belum: folder per bulan (`Receipts 2026/01`) supaya arsip terpisah per periode.
 - **Nama admin otomatis** — tambah kolom `Nama Admin` diisi dari data pengirim Telegram (`message.from`: `first_name` + `last_name`, fallback `username`, terakhir `"Tidak diketahui"`) — menggantikan kolom "Tanggal Input dan Nama Admin" gaya Cash Report perusahaan. Pertimbangan: nama bergantung pada akun pengirim (bukan selalu orang yang sama dengan yang menginput).
 - **Struktur lama (sudah pensiun)** — sebelum gaya Bizschool, bot menulis ke file per bank per tahun dengan tab bulanan + kolom A–P format perusahaan. Struktur itu digantikan file gabungan `Cash Report <tahun>` / sheet `TRANSAKSI` (lihat "Skema kolom"); file lama dibiarkan sebagai arsip historis.
 
