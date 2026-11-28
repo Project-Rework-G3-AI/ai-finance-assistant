@@ -72,6 +72,37 @@ Isi `.env` minimal:
 1. `TELEGRAM_BOT_TOKEN` — dari @BotFather.
 2. `TELEGRAM_ALLOWED_CHAT_IDS` — chat_id pengguna yang boleh (cek via @userinfobot), pisahkan koma.
 
+## Dataset
+
+Pengujian memakai dataset terpisah, tidak disimpan di repo ini karena berisi
+data keuangan riil perusahaan:
+
+**https://github.com/Project-Rework-G3-AI/rework-ai-finance-assistant-dataset**
+
+Repo itu **publik**, jadi tidak perlu token GitHub dan tidak perlu izin tambahan
+untuk membacanya. Isinya 118 foto bukti transaksi, 3 Cash Report, 2 mutasi
+rekening PDF, 3 SOP, dan `pairs.csv` berisi 65 pasangan gambar ke baris laporan.
+
+Kode mengunduhnya sendiri, jadi repo dataset tidak wajib di-clone lebih dulu:
+
+```bash
+python3 tests/sc_runner.py --download          # 118 foto + pairs.csv
+python3 tests/sc_runner.py --download-templates # 3 template Cash Report (SC-06)
+python3 tests/_sc07_run.py                     # 2 PDF mutasi, lalu ukur SC-07
+```
+
+`--download` dan `--download-templates` tidak butuh kunci AI. `_sc07_run.py`
+mengunduh kedua PDF lalu langsung memanggil model, jadi ia butuh `AI_API_KEY`.
+Tanpa kunci, unduh PDF-nya saja:
+
+```bash
+python3 -c "import sys; sys.path.insert(0,'tests'); import sc_common as C; C.download_statements()"
+```
+
+Hasil unduhan masuk ke `dataset/`, yang sudah ada di `.gitignore`. Rincian bahan
+per kriteria ada di README repo dataset. Kalau dataset dipindahkan ke repo lain,
+cukup ganti `GITHUB_DATASET_REPO` di `.env`; kode tidak perlu diubah.
+
 ## Setup Google Sheets (service account)
 
 Gratis, tanpa billing, sekali setup (~5 menit), kunci tidak kedaluwarsa.
@@ -261,6 +292,520 @@ Mekanisme agar ekstraksi tidak hilang ketika Drive/Sheets tidak bisa dijangkau:
 
 `pending.jsonl` sudah masuk `.gitignore` — tidak pernah ikut ter-commit.
 
+## Pengujian
+
+Repo ini punya dua lapis pengujian. Yang pertama gratis dan cepat, jadi bisa
+dijalankan sesering apa pun. Yang kedua memanggil model berbayar, jadi harus
+diminta secara eksplisit.
+
+### Test cepat (gratis, sekitar 1 detik)
+
+```bash
+pytest
+```
+
+Menjalankan test rumus metrik SC-01, aturan penilaian SC-02, perhitungan waktu
+SC-03, perhitungan biaya SC-04, penolakan duplikat SC-05, tata cara runner,
+penamaan, serta validasi dataset. Tidak memanggil AI, tidak butuh jaringan, tidak butuh dataset. Ini yang
+aman dijalankan di CI.
+
+### Evaluasi kriteria keberhasilan
+
+Kriteria keberhasilan (SC) pada BRD diukur dengan satu set data dan satu runner.
+Yang berbeda hanya cara menilainya.
+
+Target di bawah dikutip dari tabel Success Criteria pada BRD bagian 6.
+
+**SC-01 sampai SC-08 sudah punya pengukur.** Seluruh kriteria di BRD dapat
+diukur. Yang belum tentu tercapai, dan statusnya ditulis apa adanya di tabel
+bawah.
+
+| Kriteria | Yang diukur | Target | Status | Butuh |
+|---|---|---|---|---|
+| SC-01 | Akurasi usulan kategori | Minimal 85% | **belum tercapai: 9,2%** | kunci AI |
+| SC-02 | Kelengkapan field wajib | Minimal 90% | **tercapai: 93,5%** | kunci AI |
+| SC-03 | Waktu proses sampai tersimpan | Rata-rata di bawah 5 detik | **belum tercapai: 10,31 detik** | kunci AI + Google Sheets |
+| SC-04 | Biaya per gambar | Di bawah Rp50 per gambar | **tercapai: Rp22,10** | kunci AI + kurs |
+| SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | **tercapai: 5 dari 5** | tidak ada |
+| SC-06 | Pemetaan kolom wajib cash report | Tidak ada kolom wajib yang hilang | **tercapai: 79 dari 79 baris** | template + kunci AI |
+| SC-07 | Rekonsiliasi mutasi rekening bank | Saldo akhir sama pada kedua rekening | **tercapai: 2 dari 2 rekening, 4 dari 4 percobaan selesai** | kunci AI + PDF mutasi |
+| SC-08 | Tanya jawab analitik keuangan | Seluruh jawaban sesuai | **tercapai: 4 dari 4 pertanyaan, 4 run berturut-turut** | kunci AI + daftar pertanyaan baku |
+
+SC-01 dan SC-02 membaca hasil ekstraksi, jadi bisa dihitung ulang dari
+`results_per_row.csv` kapan saja tanpa biaya.
+
+SC-03 dan SC-04 mengukur hal yang **tidak tersimpan** di hasil ekstraksi: durasi
+dan jumlah token. Keduanya perlu pengukuran sendiri lebih dulu, dan laporannya
+hanya merangkum sampel yang sudah ada.
+
+SC-07 juga begitu, dan ada satu syarat tambahan: pembandingnya **tidak boleh
+berasal dari model yang sedang diuji**. Untuk BRI, saldo akhir dibaca dari
+lapisan teks PDF. Untuk BNI, PDF-nya hasil pindai tanpa teks, sehingga angkanya
+dibaca manual dan dicatat di `tests/_sc07_pembanding_bni.json` beserta letaknya
+di halaman. Kalau keduanya dibaca model yang sama, hasilnya model dibandingkan
+dengan model, dan itu bukan pengukuran.
+
+SC-08 memakai syarat yang sama: angka pembanding dihitung `tests/_sc08_reference.py`
+langsung dari baris mentah ledger, dengan parser tanggal dan angka sendiri, bukan
+dengan memanggil `cash_report.qa.aggregate`. Kalau memanggil fungsi itu, bot akan
+dibandingkan dengan dirinya sendiri dan hasilnya selalu cocok. Yang dinilai hanya
+angka yang disebut dalam jawaban; kalimatnya tidak dinilai.
+
+Persiapan sekali saja:
+
+```bash
+cp .env.example .env
+# isi AI_API_KEY, dan sesuaikan AI_BASE_URL serta AI_MODEL
+python3 tests/sc_runner.py --download     # unduh 65 gambar, sekali saja
+```
+
+Menjalankan:
+
+```bash
+python3 tests/sc_runner.py                 # semua kriteria (sama dengan --all)
+python3 tests/sc_runner.py --sc01          # SC-01 saja
+python3 tests/sc_runner.py --sc02          # SC-02 saja
+python3 tests/sc_runner.py --sc03          # SC-03 saja
+python3 tests/sc_runner.py --sc04          # SC-04 saja
+python3 tests/sc_runner.py --sc05          # SC-05 saja
+python3 tests/sc_runner.py --download-templates  # sekali saja, untuk SC-06
+python3 tests/_sc06_run.py                 # SC-06: panggil model sekali per gambar
+python3 tests/sc_runner.py --sc06          # SC-06 saja (merangkum sampel)
+python3 tests/_sc07_run.py                 # SC-07: unduh PDF mutasi lalu ukur
+python3 tests/sc_runner.py --sc07          # SC-07 saja (merangkum sampel)
+python3 tests/_sc08_run.py                 # SC-08: tanya jawab, panggil model
+python3 tests/sc_runner.py --sc08          # SC-08 saja (merangkum sampel)
+python3 tests/sc_runner.py --metrics-only  # hitung ulang tanpa biaya
+python3 tests/sc_runner.py --repeat 3      # lihat sebaran antar-run
+```
+
+Tanpa flag berarti semua kriteria yang tersedia. Flag kriteria saling
+eksklusif, dan menggabungkannya akan ditolak.
+
+Menjalankan perintah yang sama dua kali **tidak** memanggil model lagi pada run
+kedua: hasil per gambar disimpan di `sc-out/` dan dilanjutkan dari situ. Runner
+mengumumkannya dengan jelas, dan mencatat asal angkanya di `sc-out/source.json`.
+Pakai `--restart` untuk benar-benar mengukur ulang dari nol.
+
+### SC-07 membandingkan saldo akhir dengan angka yang tercetak di mutasi
+
+SC-07 mengukur satu hal saja: apakah saldo akhir hasil hitung sistem sama dengan
+saldo akhir yang tercetak pada mutasi rekening. Satu transaksi yang hilang akan
+membuat saldo akhir meleset, jadi kecocokan saldo akhir menuntut seluruh
+transaksi terbaca benar.
+
+Yang membuat pengukuran ini sah adalah **asal pembandingnya**:
+
+| Rekening | Asal pembanding | Alasan |
+|---|---|---|
+| BRI | lapisan teks PDF | PDF BRI punya teks, angkanya dibaca langsung tanpa model |
+| BNI | dibaca manual | PDF BNI hasil pindai, 7 halaman tanpa satu pun karakter teks |
+
+Pembanding BNI yang dibaca manual itu bukan jalan pintas. Kalau saldo akhir BNI
+dibaca oleh model yang sama dengan yang diuji, yang terjadi adalah model
+dibandingkan dengan model, dan hasilnya tidak mengukur apa pun. Angka manual itu
+dicatat di `tests/_sc07_pembanding_bni.json` beserta letaknya di halaman dan
+pemeriksaan aritmetikanya, sehingga orang lain bisa memeriksa ulang.
+
+Pembanding BRI juga diperiksa mandiri: saldo awal + kredit - debet harus sama
+dengan saldo akhir yang tercetak, dan saldo berjalan tiap baris harus
+berkesinambungan. Kalau PDF-nya sendiri tidak konsisten, pembandingnya tidak
+dipakai.
+
+```bash
+python3 tests/_sc07_run.py                # unduh PDF mutasi bila belum ada, lalu ukur
+python3 tests/sc_runner.py --sc07         # laporan, gratis
+```
+
+PDF mutasi diunduh otomatis dari repo dataset. Nama berkas di repo memakai
+spasi, sedangkan SC-07 menyimpannya dengan garis bawah; pemetaannya ada di
+`STATEMENT_FILES` (`tests/sc_common.py`), jadi tidak perlu menyalin dan
+mengganti nama secara manual. Berkas yang diunduh identik dengan aslinya
+(hash-nya sama), sehingga pengukuran orang lain memakai bahan yang sama.
+
+Saldo akhir **cocok pada kedua rekening**: BNI 9.556.974,00 dan BRI
+192.643.952,00, dengan seluruh 14 transaksi BRI terbaca. Rinciannya di
+[`docs/sc07-hasil-evaluasi.md`](docs/sc07-hasil-evaluasi.md).
+
+Sebelumnya hasil ini tidak selalu tercapai. Dari empat kali pengukuran, dua
+berhenti karena model membalas kosong pada satu halaman. Tidak ada rekening yang
+gagal di halaman yang sama dua kali, jadi kegagalannya tidak menempel pada
+halaman atau berkas tertentu.
+
+### SC-08 menilai angka dalam jawaban, bukan kalimatnya
+
+SC-08 mengajukan empat pertanyaan baku tentang data Januari 2026, lalu memeriksa
+apakah angka yang disebut dalam jawaban sama dengan angka spreadsheet. Yang
+dinilai hanya angka; susunan kalimatnya tidak.
+
+Pembandingnya dihitung `tests/_sc08_reference.py` dari baris mentah ledger,
+dengan parser tanggal dan parser angka sendiri. Berkas itu **tidak boleh**
+mengimpor `cash_report` atau `main`, dan ada test yang menegakkannya: kalau
+pembanding memanggil fungsi yang dipakai menjawab, bot dibandingkan dengan
+dirinya sendiri dan hasilnya selalu cocok. Test itu membaca pohon impor dengan
+`ast`, bukan mencari teks, supaya kata "cash_report" di penjelasan tidak
+dianggap pelanggaran.
+
+Aturannya dinyatakan ulang di pembanding, tidak diimpor dari produksi:
+
+| Aturan | Arti |
+|---|---|
+| periode setengah terbuka | 31 Januari masuk, 1 Februari tidak |
+| transfer bukan pemasukan/pengeluaran | hanya sisi masuknya yang dihitung, di kantong terpisah |
+| verified dan draft tidak dicampur | baris draft bukan angka resmi |
+| tanggal tak terbaca di luar semua periode | termasuk di luar total |
+
+Soal datanya:
+
+```bash
+python3 tests/_sc08_run.py --ledger sc-out/sc08_ledger.csv
+python3 tests/sc_runner.py --sc08              # laporan, gratis
+```
+
+Ledger diambil dari hasil ekstraksi yang sudah ada
+(`sc-out/results_per_row.csv`), bukan dari model yang dipanggil ulang, karena
+kriteria ini soal jawaban atas data yang tercatat, bukan soal membaca bukti
+transaksi lagi. Bila ledger belum ada, `_sc08_run.py` menyusunnya sendiri dari
+hasil ekstraksi itu.
+
+Susunan ledger meniru apa yang ditulis `write_cash_report()`, dengan satu
+tambahan yang disengaja: transfer dengan kantong tujuan yang terbaca ditulis
+sebagai dua baris dan sisi masuknya ditandai `verified`. Tanpa itu, ledger hanya
+berisi baris keluar, aturan "transfer bukan pemasukan" tidak akan pernah terlihat,
+dan pengukurannya diam-diam tidak membuktikan apa pun.
+
+Pengukuran pertama **belum tercapai**: dua dari empat run gagal pada pertanyaan
+jumlah baris. Sebabnya ada di kode produksi, bukan pada model:
+
+| Sebab | Bukti |
+|---|---|
+| `list_rows` memotong di 50 baris tanpa memberi tahu | `qa.list_rows(..., limit=100)` mengembalikan 50 baris untuk 71 baris data |
+| jumlah baris tidak pernah dilaporkan tool mana pun | `aggregate()` hanya memberi `n` per status (53, 1, 17), tidak pernah 71 |
+| tidak ada tool untuk rincian per kategori | `rekap()` ada di kode, tetapi tidak didaftarkan sebagai tool, sehingga pertanyaan kategori terbesar dijawab "tidak ada data" |
+
+Model lalu menghitung sendiri dari daftar yang sudah terpotong: 70 baris di satu
+run, 15 baris di run lain. Pada run yang benar pun angkanya tidak berasal dari
+tool, melainkan dari cara model menjumlahkan.
+
+**Sudah diperbaiki.** Tiga perubahan, semuanya menambah tanpa mengubah perilaku
+lama:
+
+| Perubahan | Akibat |
+|---|---|
+| `count_rows()` baru, didaftarkan sebagai tool | jumlah baris dihitung penuh, tidak ikut batas 50 |
+| `aggregate()` menambah kunci `jumlah_baris` | jumlah baris tersedia tanpa tool tambahan |
+| `by_category` sebagai tool, memakai `rekap()` yang sudah ada | pertanyaan kategori terbesar dapat dijawab dari data |
+| aturan nomor 7 di prompt | jumlah transaksi wajib diambil dari tool, bukan dihitung dari panjang daftar |
+
+`list_rows` **tidak diubah**: batas 50 tetap ada dan bentuk balikannya tetap
+list, karena 13 unit test lama mengunci perilaku itu. Yang ditambahkan adalah
+cara lain menanyakan jumlah, bukan mengubah cara lama.
+
+Sesudah perbaikan, diukur **tujuh kali**: enam run menjawab keempat pertanyaan
+dengan angka benar, satu run gagal pada pertanyaan kategori sebelum tool
+`by_category` ditambahkan. Empat run terakhir, dengan kode terakhir, semuanya
+4 dari 4 berturut-turut. Rinciannya di
+[`docs/sc08-hasil-evaluasi.md`](docs/sc08-hasil-evaluasi.md).
+
+Penyebabnya: `reconciliation/vision_extractor.py` tidak punya percobaan ulang
+untuk balasan kosong, sedangkan `post_with_retry` hanya mengulang pada galat
+HTTP 5xx. Satu halaman yang gagal menghentikan seluruh mutasi, bukan hanya satu
+baris.
+
+**Sudah diperbaiki.** Pembacaan halaman diulang bila balasannya kosong atau bukan
+JSON, sampai tiga percobaan dengan jeda singkat, dan galat HTTP tetap ditangani
+`post_with_retry` agar tidak diulang dua lapisan. Sesudah perbaikan, empat dari
+empat percobaan selesai penuh, termasuk satu percobaan yang mengalami balasan
+kosong dua kali dan berhasil setelah diulang. Perilakunya dijaga
+`tests/test_reconciliation_retry.py`.
+
+### SC-06 memeriksa dua hal: susunan kolom dan hasil pencatatan
+
+Kalimat BRD menentukan cara periksanya:
+
+> Membandingkan **susunan kolom** keluaran dengan kolom wajib pada template cash
+> report perusahaan.
+
+Jadi ada dua bagian, dan keduanya diukur:
+
+| Bagian | Yang diperiksa | Butuh |
+|---|---|---|
+| 1. Susunan kolom | setiap kolom wajib template punya tempat di keluaran | berkas template |
+| 2. Hasil pencatatan | setiap baris yang ditulis punya kolom wajib terisi | balasan model |
+
+Bagian 1 saja tidak cukup: susunan kolom bisa lengkap sementara isinya kosong.
+Bagian 2 saja juga tidak cukup: satu baris bisa lengkap sementara ada kolom
+perusahaan yang tidak punya tempat sama sekali.
+
+```bash
+python3 tests/sc_runner.py --download-templates   # sekali saja
+python3 tests/_sc06_run.py                        # ambil balasan model
+python3 tests/sc_runner.py --sc06                 # laporan, gratis
+```
+
+#### Bagian 1: susunan kolom
+
+Kolom wajib dibaca dari **tiga berkas template perusahaan** di repo dataset
+(`Cash Report dan Mutasi Rekening/`), bukan daftar yang ditulis ulang di kode
+test. Ketiga berkas dibaca semuanya, dan header dicari lewat isinya
+(`TANGGAL TRANSAKSI`), bukan nomor baris, karena berkas Operasional menaruhnya
+di baris 4 sementara yang lain di baris 5.
+
+Setiap kolom punya keputusan tertulis: `langsung`, `diturunkan`, `terbagi`,
+`bukan data bot`, atau `HILANG`. Keputusan itu ditulis eksplisit di `MAPPING`
+supaya bisa diperiksa orang lain, bukan hasil tebakan pencocokan nama.
+
+`TANGGAL INPUT DAN NAMA ADMIN` diisi manusia di template: bot menerima gambar
+bukti transaksi, bukan identitas admin. Kolom itu tetap ditampilkan beserta
+alasannya tetapi dikeluarkan dari penyebut, sehingga yang dinilai **9 dari 9**
+kolom relevan bot.
+
+#### Bagian 2: kelengkapan hasil pencatatan
+
+Setiap baris yang ditulis diperiksa kolom wajibnya. Tiga aturan yang perlu
+diketahui:
+
+- **`DEBET`/`KREDIT` berpasangan.** Satu baris hanya mengisi salah satunya, jadi
+  menuntut keduanya terisi akan membuat setiap baris dianggap kurang. Aturan ini
+  dikunci test.
+- **`SALDO` dihitung formula** di sheet `ACCOUNT`, tidak ditulis per baris.
+- **`LAMPIRAN NOTA` tidak diukur** di harness ini karena isinya URL hasil unggah
+  Drive. Kolom itu dikeluarkan dari penyebut, bukan dianggap gagal.
+
+Pengukuran bagian 2 memakai tiruan penulisan baris yang **dijaga test**
+membandingkannya dengan `main.write_cash_report`. Kalau produksi berubah, test
+itu gagal, sehingga angka ini tidak bisa diam-diam mengukur tiruan.
+
+#### Yang sengaja tidak diukur SC-06
+
+**Kebenaran nilai.** Nominal 20.000 yang terbaca 50.000 tetap dihitung terisi.
+Kecocokan nilai adalah SC-01. SC-02 hanya menilai kelengkapan.
+
+**Kebenaran kantong asal.** Produksi mengisi kolom Kantong dengan
+`CR_DEFAULT_BANK` (`TUNAI`) ketika model gagal membaca kantong asal, sehingga
+kolomnya selalu terlihat terisi. Pada dataset ini 12 dari 65 gambar adalah
+transfer yang tercatat "keluar dari TUNAI" padahal dananya bukan kas tunai.
+Cacat itu dilaporkan terpisah di
+[`docs/bug-kantong-tunai.md`](docs/bug-kantong-tunai.md), bukan dijadikan angka
+kriteria ini, karena BRD memeriksa keberadaan kolom, bukan kebenaran isinya.
+
+### SC-02 mengukur kelengkapan, bukan kebenaran isi
+
+SC-02 hanya menjawab satu pertanyaan: **apakah field wajibnya terbaca**.
+
+Apakah nilainya benar **bukan** urusan SC-02. Nominal 20.000 yang terbaca 50.000
+tetap dihitung lengkap. Kecocokan isi diukur di SC-01, dan sengaja tidak diukur
+di sini untuk field lain.
+
+Pemisahan itu bukan pelonggaran. Kalau SC-02 ikut menilai kebenaran isi, satu
+field yang merosot (kategori, 9,2%) menyeret kriteria yang seharusnya mengukur
+hal lain, dan kegagalan yang sama dilaporkan dua kali.
+
+```bash
+python3 tests/sc_runner.py --sc02
+```
+
+Perintah itu hanya merangkum `sc-out/results_per_row.csv`, jadi **tidak**
+menuntut `pairs.csv` maupun folder gambar. Tanpa berkas hasil itu, pesannya
+menyuruh menjalankan pengukuran dulu.
+
+Hasil pada 65 gambar: **kelengkapan rata-rata 93,5%, tercapai** (target 90%).
+
+| Ukuran | Nilai | Dipakai menilai target? |
+|---|---|---|
+| Kelengkapan rata-rata (5 field) | 93,5% | **ya** |
+| Baris dengan 5/5 field lengkap | 49 dari 65 | tidak, angka pendukung |
+
+Angka pendukung itu perlu disebut karena ia menjawab pertanyaan berbeda: bukan
+"berapa persen sel yang terisi", melainkan "berapa gambar yang tidak perlu
+diperiksa ulang sama sekali". Tanpa itu, 93,5% bisa disangka berarti hampir
+semua gambar bersih.
+
+#### Jebakan yang membuat angkanya bisa palsu
+
+`main.extract` mengisi nilai bawaan saat model gagal membaca: tanggal hari ini,
+arah `"keluar"`, bank `CR_DEFAULT_BANK`, kategori `"Perlu Ditinjau"`. Kalau
+kelengkapan diukur dengan "field kosong atau tidak", hasilnya mendekati 100%
+padahal model tidak membaca apa pun.
+
+Karena itu penilaian memakai dua sinyal yang tidak bisa dipalsukan nilai bawaan:
+
+1. **`catatan`** dari `main.py:194–212` (`"nominal tidak terbaca — isi manual"`).
+2. **`mode`** — `mock` berarti model tidak dipanggil atau gagal total.
+
+Nilai acuan dari dataset **tidak** dipakai, karena membandingkan dengan acuan
+adalah pengukuran kebenaran isi.
+
+Aturan ini dikunci test, termasuk yang membuktikan nilai salah tetap dihitung
+lengkap (`test_wrong_but_present_value_is_still_complete`) dan acuan diabaikan
+(`test_reference_is_ignored_even_when_provided`).
+
+### Yang perlu diperiksa saat `main` berubah
+
+Test SC memanggil kode produksi apa adanya, jadi perubahan di `main.py` bisa
+membuat pengukuran salah tanpa ada test yang gagal. Tiga hal yang perlu dicek
+setiap kali `main` berubah:
+
+1. **Metode worksheet baru.** `write_cash_report` yang memanggil metode baru
+   (mis. `ws.format(...)`) akan gagal di worksheet tiruan SC-05. Harness
+   menandainya GAGAL DIUKUR, dan
+   `test_fake_worksheet_supports_every_method_production_calls` menangkapnya
+   lebih dulu.
+2. **Panggilan Sheets baru.** Panggilan tambahan di `write_cash_report` harus
+   dibungkus di `tests/_sc03_probe.py`, kalau tidak durasinya jatuh ke tahap
+   `dedupe` dan laporan SC-03 menyalahkan tahap yang salah.
+3. **Prompt ekstraksi.** `tests/_sc04_run.py` menyalin prompt produksi sebagai
+   cadangan. Salinan itu harus ikut diperbarui, kalau tidak jumlah token yang
+   diukur bukan lagi token produksi.
+
+### SC-03 dan SC-04 perlu pengukuran sendiri
+
+SC-01 dan SC-02 membaca keluaran ekstraksi, jadi menambah kriteria itu tidak
+menambah biaya. **SC-03 dan SC-04 berbeda.** Durasi dan jumlah token tidak
+tersimpan di `results_per_row.csv`, sehingga tidak bisa dihitung ulang dari
+sana. Keduanya punya pengukur sendiri yang harus dijalankan lebih dulu:
+
+```bash
+# SC-03: waktu sampai baris tersimpan (butuh Google Sheets)
+python3 tests/_sc03_run.py
+
+# SC-04: biaya per gambar (butuh kunci AI dan kurs)
+python3 tests/_sc04_run.py --usd-idr 18227
+python3 tests/_sc04_run.py --limit 5 --usd-idr 18227    # coba cepat
+```
+
+SC-03 menolak berjalan tanpa dua variabel sandbox, dan itu disengaja:
+
+```
+SC03_SANDBOX_FOLDER=...     # ID folder Drive khusus uji
+SC03_SANDBOX_TEMPLATE=...   # ID spreadsheet template di folder itu
+```
+
+Isi keduanya dengan folder **khusus uji**, bukan folder Cash Report perusahaan.
+Untuk menyiapkan template 7 tab di folder sandbox, pakai
+`python3 tests/_sandbox_build.py`.
+
+Setelah itu `--sc03` dan `--sc04` hanya merangkum sampel yang sudah ada, dan
+tidak memanggil model. Kalau sampelnya belum ada, laporannya bilang
+`BELUM DIUKUR` beserta perintah yang harus dijalankan.
+
+**SC-03 menulis baris sungguhan ke Google Sheets.** Pengukurannya memakai folder
+sandbox terpisah, bukan folder Cash Report perusahaan. Jangan arahkan ke folder
+perusahaan.
+
+### SC-05 tidak butuh apa pun
+
+SC-05 menguji bahwa berkas yang dikirim berulang tidak menghasilkan dua baris.
+Kriterianya gratis dan tidak butuh kredensial, dataset, maupun jaringan:
+
+```bash
+python3 tests/sc_runner.py --sc05
+```
+
+Pengukurannya memanggil `handle_update` dan `write_cash_report` dari `main.py`
+apa adanya. Yang diganti hanya tiga hal di luar aplikasi: Telegram, Google
+Sheets, dan ekstraksi AI. Logika dedup yang dinilai tetap yang sebenarnya.
+
+Karena jalur asli yang dipanggil, tiruan worksheet harus punya **semua** metode
+yang dipakai produksi. Bila produksi memakai metode baru, harness menandainya
+**GAGAL DIUKUR**, bukan TERCAPAI: kegagalan tulis tidak boleh terbaca sebagai
+duplikat yang berhasil ditolak. `test_fake_worksheet_supports_every_method_production_calls`
+menjaga hal ini.
+
+Tiga skenario diuji, dan yang ketiga bukan pelengkap:
+
+| Skenario | Harapan |
+|---|---|
+| Kirim ulang berkas yang sama | ditolak |
+| Isi sama, `file_id` berbeda | ditolak menurut BRD, dilaporkan sebagai temuan |
+| Gambar berbeda | tetap dicatat |
+
+Skenario ketiga adalah **kendali**. Tanpa itu, dedup yang menolak semua kiriman
+akan tampak lulus sempurna padahal merusak aplikasi.
+
+Skenario kedua dilaporkan sebagai **temuan**, bukan dipakai menghukum. BRD
+menyebut pengenalan duplikat lewat hash berkas, sedangkan kode memakai identitas
+berkas dari Telegram. Selisih itu dicatat apa adanya.
+
+**SC-04 menghitung uang.** Tarif model dan kurs adalah masukannya, dan keduanya
+bisa disesuaikan:
+
+```python
+# bagian atas tests/sc04_cost.py
+PRICE_PROMPT_USD = 0.00000015
+PRICE_COMPLETION_USD = 0.0000006
+USD_TO_IDR = 0.0        # 0 berarti wajib diisi lewat --usd-idr atau SC04_USD_IDR
+TARGET_IDR = 50.0
+```
+
+Mengubah tarif atau kurs langsung mengubah laporan tanpa mengukur ulang, karena
+biaya selalu diturunkan dari token x tarif x kurs dan tidak pernah disimpan.
+Bisa juga ditimpa untuk satu kali jalan tanpa menyunting kode:
+
+```bash
+python3 tests/_sc04_run.py --price-prompt 0.0000003 --price-completion 0.0000012 --usd-idr 18227
+SC04_USD_IDR=18227 python3 tests/sc_runner.py --sc04
+```
+
+Urutan siapa yang menang: argumen CLI, lalu variabel lingkungan, lalu variabel
+di kode, lalu katalog penyedia. Tidak ada tarif atau kurs yang ditebak.
+
+Hasil ada di `sc-out/`:
+
+| Berkas | Isi |
+|---|---|
+| `sc01_report.txt` | SC-01: ringkasan, rincian per kategori, confusion matrix, baris salah |
+| `sc01_metrics.json` | SC-01 dalam bentuk JSON |
+| `sc02_report.txt` | SC-02: kelengkapan per field wajib |
+| `sc02_metrics.json` | SC-02 dalam bentuk JSON |
+| `sc03_report.txt` | SC-03: sebaran waktu dan pecahan per tahap |
+| `sc03_metrics.json` | SC-03 dalam bentuk JSON |
+| `sc04_report.txt` | SC-04: biaya per gambar dan token |
+| `sc04_metrics.json` | SC-04 dalam bentuk JSON |
+| `sc05_report.txt` | SC-05: tiap skenario duplikat dan jumlah baris tersimpan |
+| `sc05_metrics.json` | SC-05 dalam bentuk JSON |
+| `sc06_report.txt` | SC-06: susunan kolom dan baris yang kurang |
+| `sc06_rows.csv` | SC-06: rincian per baris hasil pencatatan |
+| `sc06_samples.csv` | SC-06: balasan mentah model per gambar |
+| `sc07_report.txt` | SC-07: saldo akhir sistem dibanding saldo akhir tercetak, per rekening |
+| `sc07_metrics.json` | SC-07 dalam bentuk JSON |
+| `sc07_samples.json` | SC-07: keluaran sistem dan pembanding per rekening |
+| `sc08_report.txt` | SC-08: angka pembanding, tanya jawab, penilaian per pertanyaan |
+| `sc08_metrics.json` | SC-08 dalam bentuk JSON |
+| `sc08_samples.json` | SC-08: pertanyaan, jawaban, angka yang cocok dan tidak |
+| `sc08_ledger.csv` | SC-08: isi ledger yang dipakai sebagai sumber data |
+| `results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
+| `sc03_samples.csv` | SC-03: waktu per gambar dan pecahan tahap (bahan laporan SC-03) |
+| `sc04_samples.csv` | SC-04: token per gambar (bahan laporan SC-04) |
+
+Dataset tidak disimpan di repo ini karena berisi data keuangan riil perusahaan.
+`--download` mengambilnya dari repo dataset terpisah, dan tidak memerlukan token
+GitHub. Folder `dataset/` dan `sc-out/` sudah masuk `.gitignore`.
+
+Untuk memaksa evaluasi berjalan sebagai assertion lulus atau gagal terhadap
+target BRD, pakai opt-in karena sifatnya berbayar dan lama:
+
+```bash
+SC_RUN_MODEL=1 pytest -m sc_model -v
+```
+
+Panduan rinci, termasuk jebakan penilaian tiap kriteria dan alasan angka
+antar-run berbeda, ada di
+[`docs/sc-cara-menjalankan.md`](docs/sc-cara-menjalankan.md).
+
+Hasil pengukuran tiap kriteria:
+
+| Kriteria | Dokumen hasil |
+|---|---|
+| SC-01 | [`docs/sc01-hasil-evaluasi.md`](docs/sc01-hasil-evaluasi.md) |
+| SC-02 | [`docs/sc02-hasil-evaluasi.md`](docs/sc02-hasil-evaluasi.md) |
+| SC-03 | [`docs/sc03-hasil-evaluasi.md`](docs/sc03-hasil-evaluasi.md) |
+| SC-04 | [`docs/sc04-hasil-evaluasi.md`](docs/sc04-hasil-evaluasi.md) |
+| SC-05 | [`docs/sc05-hasil-evaluasi.md`](docs/sc05-hasil-evaluasi.md) |
+| SC-06 | [`docs/sc06-hasil-evaluasi.md`](docs/sc06-hasil-evaluasi.md) |
+| SC-07 | [`docs/sc07-hasil-evaluasi.md`](docs/sc07-hasil-evaluasi.md) |
+| SC-08 | [`docs/sc08-hasil-evaluasi.md`](docs/sc08-hasil-evaluasi.md) |
+
 ## Tanya-jawab
 
 Routing: foto/dokumen → jalur ekstraksi (tidak pernah lewat LLM); teks → command `/` dulu (deterministik, gratis), lalu bahasa bebas lewat **satu panggilan LLM tool-calling** (modul `cash_report/qa.py`).
@@ -269,7 +814,7 @@ Routing: foto/dokumen → jalur ekstraksi (tidak pernah lewat LLM); teks → com
 - `/rekap [bulan]` — rincian per kategori (default bulan ini)
 - `/help` — bantuan; pertanyaan bebas, mis. `"berapa pengeluaran November kategori Listrik?"`
 
-Aturan main: tool **baca-saja** (`aggregate`, `list_rows`, `get_receipt`); angka dihitung kode, LLM hanya merangkai kalimat dan wajib menyebut sumber (periode + TRANSAKSI). Angka **verified dan draft disebut terpisah**, termasuk rincian transfer; transfer antar kantong dikecualikan dari total (konsisten dengan RECAP). Tanpa `AI_API_KEY` atau AI gagal → balasan bantuan; **tidak ada env baru, tidak ada database**.
+Aturan main: tool **baca-saja** (`aggregate`, `count_rows`, `by_category`, `list_rows`, `get_receipt`); angka dihitung kode, LLM hanya merangkai kalimat dan wajib menyebut sumber (periode + TRANSAKSI). Angka **verified dan draft disebut terpisah**, termasuk rincian transfer; transfer antar kantong dikecualikan dari total (konsisten dengan RECAP). Tanpa `AI_API_KEY` atau AI gagal → balasan bantuan; **tidak ada env baru, tidak ada database**.
 
 ## Rekonsiliasi Mutasi
 

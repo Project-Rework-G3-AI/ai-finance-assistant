@@ -7,3 +7,25 @@ __pycache__/
 .venv/
 .DS_Store
 .commandcode/
+
+# Keluaran evaluasi seluruh kriteria: berisi data transaksi dan hasil model.
+sc-out/
+results_per_row.csv
+sc01_report.txt
+sc01_metrics.json
+sc02_report.txt
+sc02_metrics.json
+sc03_report.txt
+sc03_metrics.json
+sc03_samples.csv
+sc04_report.txt
+sc04_metrics.json
+sc04_samples.csv
+sc05_report.txt
+sc05_metrics.json
+sc06_report.txt
+sc06_rows.csv
+
+# Dataset lokal untuk evaluasi (gambar bukti + daftar pasangan).
+# Berisi transaksi perusahaan; sumber aslinya ada di repo dataset terpisah.
+dataset/
