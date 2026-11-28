@@ -131,10 +131,15 @@ dinilai di sini.
 ## Cara menjalankan
 
 ```bash
-# taruh kedua PDF mutasi di satu folder
-python3 tests/_sc07_run.py --statements /tmp/mutasi   # panggil model, berbayar
-python3 tests/sc_runner.py --sc07                     # laporan, gratis
+python3 tests/_sc07_run.py            # unduh PDF mutasi bila belum ada, lalu ukur
+python3 tests/sc_runner.py --sc07     # laporan, gratis
 ```
+
+PDF mutasi diunduh otomatis dari repo dataset ke `dataset/mutasi/`. Nama berkas
+di repo memakai spasi, sedangkan SC-07 menyimpannya dengan garis bawah;
+pemetaannya ada di `STATEMENT_FILES` (`tests/sc_common.py`). Berkas yang
+diunduh identik dengan aslinya, hash-nya sama, sehingga pengukuran orang lain
+memakai bahan yang sama persis.
 
 Berkas keluaran:
 

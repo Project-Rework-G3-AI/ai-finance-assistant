@@ -159,6 +159,26 @@ def test_file_names_are_never_truncated(tmp_path):
         "a file name was truncated in one of the tables"
 
 
+def test_statement_download_maps_repo_names_to_local_names(tmp_path):
+    """The dataset repo uses spaces in file names; SC-07 uses underscores.
+
+    Without this mapping, anyone reproducing the measurement has to rename the
+    files by hand, and a wrong name silently becomes a skipped account.
+    """
+    import sc_common as cfg
+
+    assert cfg.STATEMENT_FILES["BNI_Mutasi_Januari_2026.pdf"] == "BNI_Mutasi_Januari_2026.pdf"
+    assert cfg.STATEMENT_FILES["Mutasi_Rekening_BRI-Januari_2026.pdf"] == \
+        "Mutasi Rekening BRI-Januari 2026.pdf"
+    assert cfg.STATEMENTS_SUBDIR == "Cash Report dan Mutasi Rekening"
+
+    # Both names the harness expects must be reachable from the mapping.
+    import _sc07_run as run
+
+    assert run.BRI_FILE in cfg.STATEMENT_FILES
+    assert run.BNI_FILE in cfg.STATEMENT_FILES
+
+
 def test_missing_samples_gives_instructions(tmp_path):
     with pytest.raises(SystemExit) as excinfo:
         sc07.write_report(tmp_path)

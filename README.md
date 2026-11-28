@@ -298,7 +298,7 @@ python3 tests/sc_runner.py --sc05          # SC-05 saja
 python3 tests/sc_runner.py --download-templates  # sekali saja, untuk SC-06
 python3 tests/_sc06_run.py                 # SC-06: panggil model sekali per gambar
 python3 tests/sc_runner.py --sc06          # SC-06 saja (merangkum sampel)
-python3 tests/_sc07_run.py --mutasi /tmp/mutasi   # SC-07: baca PDF mutasi bank
+python3 tests/_sc07_run.py                 # SC-07: unduh PDF mutasi lalu ukur
 python3 tests/sc_runner.py --sc07          # SC-07 saja (merangkum sampel)
 python3 tests/sc_runner.py --metrics-only  # hitung ulang tanpa biaya
 python3 tests/sc_runner.py --repeat 3      # lihat sebaran antar-run
@@ -338,9 +338,15 @@ berkesinambungan. Kalau PDF-nya sendiri tidak konsisten, pembandingnya tidak
 dipakai.
 
 ```bash
-python3 tests/_sc07_run.py --mutasi /tmp/mutasi   # panggil model, berbayar
-python3 tests/sc_runner.py --sc07                 # laporan, gratis
+python3 tests/_sc07_run.py                # unduh PDF mutasi bila belum ada, lalu ukur
+python3 tests/sc_runner.py --sc07         # laporan, gratis
 ```
+
+PDF mutasi diunduh otomatis dari repo dataset. Nama berkas di repo memakai
+spasi, sedangkan SC-07 menyimpannya dengan garis bawah; pemetaannya ada di
+`STATEMENT_FILES` (`tests/sc_common.py`), jadi tidak perlu menyalin dan
+mengganti nama secara manual. Berkas yang diunduh identik dengan aslinya
+(hash-nya sama), sehingga pengukuran orang lain memakai bahan yang sama.
 
 Hasil pengukuran terakhir: **saldo akhir cocok pada 2 dari 2 rekening**
 (BNI 9.556.974,00 dan BRI 192.643.952,00), seluruh transaksi BRI 14 dari 14

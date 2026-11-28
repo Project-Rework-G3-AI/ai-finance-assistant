@@ -31,9 +31,9 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import sc_common as cfg  # noqa: E402
 from _sc07_text_statement import read_bni_reference, read_text_statement  # noqa: E402
 
-STATEMENT_DIR = Path(os.getenv("SC07_STATEMENT_DIR", str(REPO / "dataset" / "mutasi")))
 BRI_FILE = "Mutasi_Rekening_BRI-Januari_2026.pdf"
 BNI_FILE = "BNI_Mutasi_Januari_2026.pdf"
 
@@ -151,6 +151,10 @@ async def measure_all(folder: Path, out: Path) -> dict:
     if not key:
         raise SystemExit("AI_API_KEY is not set")
 
+    if not all((folder / name).exists() for name in (BNI_FILE, BRI_FILE)):
+        print(f"statement PDFs not found in {folder}; downloading from the dataset repo")
+        cfg.download_statements(folder)
+
     out.mkdir(parents=True, exist_ok=True)
     samples = []
     for filename in (BNI_FILE, BRI_FILE):
@@ -186,7 +190,7 @@ def main() -> int:
         description="Measure SC-07: bank statement reconciliation"
     )
     parser.add_argument(
-        "--statements", default=str(STATEMENT_DIR),
+        "--statements", default=str(cfg.statements_dir()),
         help="folder holding the statement PDFs",
     )
     parser.add_argument(

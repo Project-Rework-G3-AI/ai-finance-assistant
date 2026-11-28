@@ -41,6 +41,15 @@ DATASET_BRANCH = os.getenv("GITHUB_DATASET_BRANCH", "main").strip()
 IMAGES_SUBDIR = "Bukti Transaksi Januari 2026"
 PAIRS_SUBDIR = "pairs.csv"
 
+# PDF mutasi rekening untuk SC-07. Repo dataset memakai spasi pada nama berkas;
+# nama lokal memakai garis bawah supaya bisa dipakai di perintah shell tanpa
+# tanda kutip. Pemetaan ini satu-satunya tempat kedua nama itu ditulis.
+STATEMENTS_SUBDIR = "Cash Report dan Mutasi Rekening"
+STATEMENT_FILES = {
+    "BNI_Mutasi_Januari_2026.pdf": "BNI_Mutasi_Januari_2026.pdf",
+    "Mutasi_Rekening_BRI-Januari_2026.pdf": "Mutasi Rekening BRI-Januari 2026.pdf",
+}
+
 # Kunci balikan `main.extract` memakai bahasa Indonesia karena fungsi itu dipakai
 # jalur produksi (Telegram, Sheets) yang sudah berjalan. Dipetakan di sini supaya
 # harness memakai nama Inggris tanpa mengubah kontrak produksi.
@@ -255,6 +264,11 @@ def _fetch_from_github(repo_path: str, token: str | None = None) -> bytes:
         ) from None
 
 
+def statements_dir() -> Path:
+    """Folder tempat PDF mutasi rekening disimpan."""
+    return Path(os.getenv("SC07_STATEMENT_DIR", "dataset/mutasi"))
+
+
 def download_pairs(target: Path | None = None,
                    token: str | None = None) -> Path:
     """Unduh daftar pasangan dari repo dataset bila belum ada.
@@ -271,6 +285,29 @@ def download_pairs(target: Path | None = None,
     print(f"mengunduh daftar pasangan ke: {target}")
     target.write_bytes(_fetch_file(_repo_path(PAIRS_SUBDIR)))
     return target
+
+
+def download_statements(target: Path | None = None,
+                        token: str | None = None) -> list[Path]:
+    """Unduh PDF mutasi rekening dari repo dataset bila belum ada.
+
+    Nama berkas di repo dataset memakai spasi, sedangkan SC-07 menyimpannya
+    dengan garis bawah. Pemetaan itu ditulis di sini supaya orang lain tidak
+    perlu menyalin berkas dengan nama yang tepat secara manual.
+    """
+    target = target or statements_dir()
+    target.mkdir(parents=True, exist_ok=True)
+
+    hasil = []
+    for nama_lokal, nama_repo in STATEMENT_FILES.items():
+        local = target / nama_lokal
+        if local.is_file() and local.stat().st_size > 1000:
+            hasil.append(local)
+            continue
+        print(f"mengunduh {nama_repo} -> {local.name}")
+        local.write_bytes(_fetch_file(_repo_path(STATEMENTS_SUBDIR, nama_repo)))
+        hasil.append(local)
+    return hasil
 
 
 def download_images(target: Path | None = None, token: str | None = None,
