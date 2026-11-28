@@ -91,6 +91,14 @@ python3 tests/sc_runner.py --download-templates # 3 template Cash Report (SC-06)
 python3 tests/_sc07_run.py                     # 2 PDF mutasi, lalu ukur SC-07
 ```
 
+`--download` dan `--download-templates` tidak butuh kunci AI. `_sc07_run.py`
+mengunduh kedua PDF lalu langsung memanggil model, jadi ia butuh `AI_API_KEY`.
+Tanpa kunci, unduh PDF-nya saja:
+
+```bash
+python3 -c "import sys; sys.path.insert(0,'tests'); import sc_common as C; C.download_statements()"
+```
+
 Hasil unduhan masuk ke `dataset/`, yang sudah ada di `.gitignore`. Rincian bahan
 per kriteria ada di README repo dataset. Kalau dataset dipindahkan ke repo lain,
 cukup ganti `GITHUB_DATASET_REPO` di `.env`; kode tidak perlu diubah.

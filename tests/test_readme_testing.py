@@ -218,3 +218,47 @@ def test_criteria_without_a_measurer_are_never_marked_as_met(testing_section):
                 f"SC-{nomor} ditulis tercapai padahal belum punya pengukur: {b}")
 
 
+def test_readme_names_the_dataset_repository_by_url(text):
+    """README harus menyebut alamat repo dataset, bukan hanya namanya.
+
+    Cacat yang dicegah: README menyebut "repo dataset" delapan kali tanpa pernah
+    menulis alamatnya, sehingga pembaca yang mengikuti langkah Setup tidak tahu
+    bahan pengujian berasal dari mana. Alamatnya juga tidak boleh berbeda dari
+    nilai bawaan yang dipakai kode, karena README yang menunjuk repo lain akan
+    membuat orang mengunduh bahan yang salah.
+    """
+    import sc_common
+
+    alamat = f"https://github.com/{sc_common.DATASET_REPO}"
+    assert alamat in text, f"README tidak menulis alamat repo dataset: {alamat}"
+
+
+def test_readme_states_that_the_dataset_repository_is_public(text):
+    """Status akses repo dataset harus dinyatakan, bukan disimpulkan pembaca.
+
+    Cacat yang dicegah: satu dokumen menyebut repo dataset "privat" padahal
+    repo-nya publik, sehingga pembaca mengira butuh token GitHub yang sebenarnya
+    tidak perlu.
+    """
+    bagian = text[text.index("## Dataset"):]
+    bagian = bagian[:bagian.index("\n## ", 1)]
+
+    assert "publik" in bagian.lower(), (
+        "bagian Dataset tidak menyatakan repo dataset bersifat publik")
+
+
+def test_no_document_calls_the_dataset_repository_private():
+    """Tidak boleh ada dokumen yang menyebut repo dataset sebagai repo privat.
+
+    Repo-nya publik. Sebutan "privat" membuat pembaca membuang waktu menyiapkan
+    token, dan membuat klaim di README bertentangan dengan dokumen lain.
+    """
+    tersalah = []
+    for path in sorted((ROOT / "docs").glob("*.md")) + [README]:
+        for nomor, baris in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "repo privat" in baris.lower() and "dataset" in baris.lower():
+                tersalah.append(f"{path.name}:{nomor}")
+
+    assert not tersalah, "dokumen menyebut repo dataset sebagai privat: " + ", ".join(tersalah)
+
+
