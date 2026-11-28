@@ -298,7 +298,7 @@ bawah.
 | SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | **tercapai: 5 dari 5** | tidak ada |
 | SC-06 | Pemetaan kolom wajib cash report | Tidak ada kolom wajib yang hilang | **tercapai: 79 dari 79 baris** | template + kunci AI |
 | SC-07 | Rekonsiliasi mutasi rekening bank | Saldo akhir sama pada kedua rekening | **tercapai: 2 dari 2 rekening, 4 dari 4 percobaan selesai** | kunci AI + PDF mutasi |
-| SC-08 | Tanya jawab analitik keuangan | Seluruh jawaban sesuai | **belum tercapai: 2 dari 4 run menjawab seluruhnya** | kunci AI + daftar pertanyaan baku |
+| SC-08 | Tanya jawab analitik keuangan | Seluruh jawaban sesuai | **tercapai: 4 dari 4 pertanyaan, 4 run berturut-turut** | kunci AI + daftar pertanyaan baku |
 
 SC-01 dan SC-02 membaca hasil ekstraksi, jadi bisa dihitung ulang dari
 `results_per_row.csv` kapan saja tanpa biaya.
@@ -443,24 +443,38 @@ sebagai dua baris dan sisi masuknya ditandai `verified`. Tanpa itu, ledger hanya
 berisi baris keluar, aturan "transfer bukan pemasukan" tidak akan pernah terlihat,
 dan pengukurannya diam-diam tidak membuktikan apa pun.
 
-Hasilnya **belum tercapai**. Diukur empat kali: dua run menjawab seluruh
-pertanyaan dengan angka benar, dua run tidak. Q1, Q2, dan Q3 selalu benar; yang
-tidak stabil hanya Q4, pertanyaan tentang jumlah baris.
-
-Sebabnya ada di kode produksi, bukan pada model:
+Pengukuran pertama **belum tercapai**: dua dari empat run gagal pada pertanyaan
+jumlah baris. Sebabnya ada di kode produksi, bukan pada model:
 
 | Sebab | Bukti |
 |---|---|
 | `list_rows` memotong di 50 baris tanpa memberi tahu | `qa.list_rows(..., limit=100)` mengembalikan 50 baris untuk 71 baris data |
 | jumlah baris tidak pernah dilaporkan tool mana pun | `aggregate()` hanya memberi `n` per status (53, 1, 17), tidak pernah 71 |
+| tidak ada tool untuk rincian per kategori | `rekap()` ada di kode, tetapi tidak didaftarkan sebagai tool, sehingga pertanyaan kategori terbesar dijawab "tidak ada data" |
 
 Model lalu menghitung sendiri dari daftar yang sudah terpotong: 70 baris di satu
 run, 15 baris di run lain. Pada run yang benar pun angkanya tidak berasal dari
-tool, melainkan dari cara model menjumlahkan. Karena itu hasil Q4 tidak dapat
-diandalkan, dan ini bertentangan dengan aturan di prompt produksi sendiri yang
-melarang model menghitung angka sendiri.
+tool, melainkan dari cara model menjumlahkan.
 
-Rinciannya di [`docs/sc08-hasil-evaluasi.md`](docs/sc08-hasil-evaluasi.md).
+**Sudah diperbaiki.** Tiga perubahan, semuanya menambah tanpa mengubah perilaku
+lama:
+
+| Perubahan | Akibat |
+|---|---|
+| `count_rows()` baru, didaftarkan sebagai tool | jumlah baris dihitung penuh, tidak ikut batas 50 |
+| `aggregate()` menambah kunci `jumlah_baris` | jumlah baris tersedia tanpa tool tambahan |
+| `by_category` sebagai tool, memakai `rekap()` yang sudah ada | pertanyaan kategori terbesar dapat dijawab dari data |
+| aturan nomor 7 di prompt | jumlah transaksi wajib diambil dari tool, bukan dihitung dari panjang daftar |
+
+`list_rows` **tidak diubah**: batas 50 tetap ada dan bentuk balikannya tetap
+list, karena 13 unit test lama mengunci perilaku itu. Yang ditambahkan adalah
+cara lain menanyakan jumlah, bukan mengubah cara lama.
+
+Sesudah perbaikan, diukur **enam kali**: lima run menjawab keempat pertanyaan
+dengan angka benar berturut-turut, satu run gagal pada pertanyaan kategori
+sebelum tool `by_category` ditambahkan. Dengan kode terakhir, empat run terakhir
+semuanya 4 dari 4. Rinciannya di
+[`docs/sc08-hasil-evaluasi.md`](docs/sc08-hasil-evaluasi.md).
 
 Penyebabnya: `reconciliation/vision_extractor.py` tidak punya percobaan ulang
 untuk balasan kosong, sedangkan `post_with_retry` hanya mengulang pada galat

@@ -126,7 +126,7 @@ Tiga kategori pengeluaran terbesar, diurutkan menurut uang **keluar**:
 | 2 | Bahan Baku | 2.381.697,00 |
 | 3 | Beban Operasional-Pelatihan | 2.252.325,00 |
 
-## Hasil
+## Hasil sebelum perbaikan
 
 **Belum tercapai: 2 dari 4 run menjawab seluruh pertanyaan dengan angka yang
 benar.** Targetnya seluruh jawaban sesuai, dan target itu belum terpenuhi karena
@@ -179,7 +179,37 @@ dengan menuliskan "0". Penilainya menerima itu, karena pernyataan "tidak ada"
 adalah cara yang benar menyatakan nol. Yang tidak diterima adalah jawaban tanpa
 angka sama sekali, misalnya "maaf saya tidak bisa membantu".
 
-## Kenapa Q4 kadang salah
+## Hasil sesudah perbaikan
+
+**Tercapai: 4 dari 4 pertanyaan, empat run berturut-turut.**
+
+| Run | Q1 | Q2 | Q3 | Q4 | Jumlah cocok |
+|---|---|---|---|---|---|
+| 1 | cocok | cocok | cocok | cocok | **4 dari 4** |
+| 2 | cocok | cocok | cocok | cocok | **4 dari 4** |
+| 3 | cocok | cocok | cocok | cocok | **4 dari 4** |
+| 4 | cocok | cocok | cocok | cocok | **4 dari 4** |
+
+Yang berubah pada kode produksi:
+
+| Perubahan | Alasan |
+|---|---|
+| `count_rows()` baru, didaftarkan sebagai tool | menjawab "berapa baris" dengan angka pasti, tanpa batas 50 |
+| `aggregate()` menambah kunci `jumlah_baris` | jumlah baris tersedia tanpa memanggil tool tambahan |
+| `by_category` sebagai tool, memakai `rekap()` yang sudah ada | menjawab "kategori terbesar" dari data, bukan menolak |
+| aturan nomor 7 di prompt | jumlah transaksi wajib dari tool, bukan dari panjang daftar |
+
+`list_rows` sengaja **tidak diubah**. Batas 50 tetap ada dan bentuk balikannya
+tetap list, karena 13 unit test lama mengunci perilaku itu dan mengubahnya akan
+memecahkan pemanggil yang sudah ada. Yang ditambahkan adalah cara lain
+menanyakan jumlah, bukan mengubah cara yang lama.
+
+Jawaban Q4 sesudah perbaikan menyebut sumbernya dengan benar: "71 baris
+transaksi, terdiri dari 53 baris verified, 17 baris transfer antar kantong, dan
+1 baris draft". Ketiga angka itu berasal dari hasil tool, bukan dari menghitung
+panjang daftar.
+
+## Kenapa Q4 dulu salah
 
 Ini bukan kesalahan penilai, dan bukan model berhalusinasi. Ada dua sebab di kode
 produksi, keduanya bisa dibuktikan tanpa memanggil model.
@@ -225,7 +255,15 @@ Karena itu hasilnya tidak dapat diandalkan.
 **Ini melanggar aturan yang tertulis di prompt produksi sendiri**, yang berbunyi
 angka hanya boleh berasal dari hasil tool, tidak dihitung atau diingat sendiri.
 Untuk pertanyaan jumlah baris, aturan itu tidak mungkin dipatuhi karena tidak ada
-tool yang menyediakannya.
+tool yang menyediakannya. Itulah yang diperbaiki: aturannya tidak dilonggarkan,
+melainkan toolnya dilengkapi supaya aturan itu mungkin dipatuhi.
+
+Percobaan sesudah perbaikan juga sempat menemukan cacat ketiga, yang tidak
+terlihat sebelum Q4 beres: pertanyaan kategori terbesar dijawab "tidak ada data
+rincian per kategori". Jawaban itu **benar secara jujur**, karena memang tidak
+ada tool yang menyediakannya, meskipun fungsi `rekap()` sudah ada di kode dan
+hanya belum didaftarkan. Satu run gagal karena ini, lalu `by_category`
+ditambahkan, dan sesudahnya empat run berturut-turut lulus penuh.
 
 ## Batas pengukuran
 
@@ -248,12 +286,18 @@ tool lebih banyak daripada yang diizinkan, lalu jawaban terakhir dipaksa tanpa
 tool. Q3 tetap benar karena nominalnya diambil dari hasil tool sebelumnya. Q4
 tidak, karena jumlah baris tidak pernah tersedia di hasil tool mana pun.
 
-**Jumlah baris tidak dapat dijawab dengan andal.** Ini batas terbesar pengukuran
-ini, dan sekaligus temuannya. Tiga pertanyaan lain (Q1, Q2, Q3) mengukur angka
-yang memang disediakan tool, jadi hasilnya stabil. Q4 mengukur angka yang tidak
-disediakan tool, sehingga jawabannya bergantung pada cara model menjumlahkan
-sendiri. Selama alat tidak menyediakan jumlah baris dan tidak memberi tahu bahwa
-daftarnya terpotong, hasil Q4 akan terus berubah antar run.
+**Empat pertanyaan masih sedikit.** Perbaikan membuat keempatnya stabil, tetapi
+empat pertanyaan tidak mewakili seluruh pertanyaan yang mungkin diajukan Admin
+Keuangan. Yang terbukti adalah jalur jawaban mengambil angka dari data dan
+melaporkannya apa adanya untuk keempat bentuk pertanyaan ini, bukan bahwa semua
+bentuk pertanyaan lain juga akan benar.
+
+**Urutan tool masih bisa memicu jawaban menolak.** Pada satu run sebelum
+`by_category` ada, model menolak menjawab karena tidak menemukan data yang
+dibutuhkan. Perilaku itu benar secara jujur, tetapi menunjukkan bahwa model
+bergantung pada tool yang tersedia. Pertanyaan yang tidak punya tool padanannya
+akan dijawab "tidak ada data", bukan ditebak. Itu sifat yang diinginkan, tetapi
+artinya cakupan jawaban dibatasi oleh daftar tool.
 
 **Satu baris bertanggal salah.** `photo_2026-01-08_09-21-46.jpg` bertanggal
 berkas 8 Januari, tetapi model membacanya sebagai 28 September 2025. Baris itu

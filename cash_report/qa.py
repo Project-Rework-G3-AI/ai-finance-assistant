@@ -168,13 +168,21 @@ def _is_transfer(kategori: str) -> bool:
 
 def aggregate(rows: list, awal: date, akhir: date,
               arah: str | None = None, kategori: str | None = None) -> dict:
-    """Total per status; transfer dikecualikan dari masuk/keluar (seperti RECAP)."""
+    """Total per status; transfer dikecualikan dari masuk/keluar (seperti RECAP).
+
+    `jumlah_baris` adalah seluruh baris dalam periode, termasuk transfer dan
+    termasuk yang tersaring oleh `arah`. Jumlah baris tidak berubah karena
+    ditanya per arah, jadi angkanya sengaja tidak ikut tersaring: pertanyaan
+    "berapa baris bulan ini" harus punya satu jawaban yang pasti.
+    """
     tot = {
+        "jumlah_baris": 0,
         "verified": {"masuk": 0.0, "keluar": 0.0, "n": 0},
         "draft": {"masuk": 0.0, "keluar": 0.0, "n": 0},
         "transfer": {"verified": 0.0, "draft": 0.0, "n_verified": 0, "n_draft": 0},
     }
     for x in _pilih(rows, awal, akhir, None, kategori):
+        tot["jumlah_baris"] += 1
         if _is_transfer(x["kategori"]):
             st = "verified" if x["status"] == "verified" else "draft"
             # sisi masuk pasangan; sisi keluar ikut sama
@@ -207,6 +215,18 @@ def rekap(rows: list, awal: date, akhir: date) -> list[tuple[str, dict]]:
         e[st + "k"] += x["keluar"]
         e[st + "n"] += 1
     return sorted(g.items(), key=lambda kv: -(kv[1]["vm"] + kv[1]["vk"] + kv[1]["dm"] + kv[1]["dk"]))
+
+
+def count_rows(rows: list, awal: date, akhir: date, arah: str | None = None,
+               kategori: str | None = None) -> int:
+    """Jumlah baris yang cocok dengan penyaring, tanpa memotong apa pun.
+
+    Dipisah dari `list_rows` karena keduanya menjawab pertanyaan berbeda:
+    "berapa banyak" dan "tampilkan sebagian". Menghitung lewat daftar yang sudah
+    dipotong pernah membuat model melaporkan 15 baris sebagai jumlah seluruh
+    transaksi, padahal ada 71.
+    """
+    return sum(1 for _ in _pilih(rows, awal, akhir, arah, kategori))
 
 
 def list_rows(rows: list, awal: date, akhir: date, arah: str | None = None,
@@ -343,7 +363,10 @@ TOOLS = [
     {"type": "function", "function": {
         "name": "aggregate",
         "description": "Total masuk/keluar suatu periode; angka verified & draft terpisah; "
-                       "transfer antar kantong dikecualikan dari total.",
+                       "transfer antar kantong dikecualikan dari total. "
+                       "Memuat jumlah_baris: seluruh baris periode ini, termasuk transfer, "
+                       "dan tidak berubah karena arah. Pakai ini untuk pertanyaan "
+                       "berapa banyak transaksi.",
         "parameters": {"type": "object", "properties": {
             "period": {"type": "string", "description": "'2026-11' atau nama bulan, mis. 'Nov'"},
             "arah": {"type": "string", "enum": ["masuk", "keluar"]},
@@ -352,14 +375,42 @@ TOOLS = [
         }, "required": ["period"]},
     }},
     {"type": "function", "function": {
+        "name": "count_rows",
+        "description": "Jumlah baris transaksi suatu periode, dihitung penuh tanpa dipotong. "
+                       "Pakai ini untuk pertanyaan berapa banyak transaksi atau berapa baris. "
+                       "Tidak berubah karena arah, karena satu transaksi tetap satu baris.",
+        "parameters": {"type": "object", "properties": {
+            "period": {"type": "string", "description": "'2026-11' atau nama bulan, mis. 'Nov'"},
+            "arah": {"type": "string", "enum": ["masuk", "keluar"]},
+            "kategori": {"type": "string",
+                         "description": "opsional, salah satu kategori resmi: " + KAT.PROMPT_KATEGORI},
+        }, "required": ["period"]},
+    }},
+    {"type": "function", "function": {
+        "name": "by_category",
+        "description": "Rincian per kategori untuk satu periode: masuk dan keluar, verified dan draft "
+                       "dipisah, transfer antar kantong tidak diikutkan. Urut dari nominal terbesar. "
+                       "Pakai ini untuk pertanyaan kategori terbesar atau rincian per kategori.",
+        "parameters": {"type": "object", "properties": {
+            "period": {"type": "string", "description": "'2026-11' atau nama bulan, mis. 'Nov'"},
+            "arah": {"type": "string", "enum": ["masuk", "keluar"],
+                     "description": "isi 'keluar' untuk pengeluaran terbesar, 'masuk' untuk pemasukan"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 50,
+                      "description": "banyak kategori yang dikirim, bawaan 15"},
+        }, "required": ["period"]},
+    }},
+    {"type": "function", "function": {
         "name": "list_rows",
-        "description": "Daftar baris transaksi suatu periode (tanggal, nominal, kategori, status).",
+        "description": "Daftar baris transaksi suatu periode (tanggal, nominal, kategori, status). "
+                       "Daftar ini dipotong pada limit, jadi JANGAN menghitung jumlah transaksi "
+                       "dari panjangnya; pakai count_rows untuk itu.",
         "parameters": {"type": "object", "properties": {
             "period": {"type": "string"},
             "arah": {"type": "string", "enum": ["masuk", "keluar"]},
             "kategori": {"type": "string",
                          "description": "opsional, salah satu kategori resmi: " + KAT.PROMPT_KATEGORI},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 50,
+                      "description": "paling banyak 50 baris dikirim"},
         }, "required": ["period"]},
     }},
     {"type": "function", "function": {
@@ -378,7 +429,10 @@ SYSTEM = (
     "3. Transfer antar kantong bukan pemasukan/pengeluaran.\n"
     "4. Sebut sumbernya: periode dan TRANSAKSI.\n"
     "5. Tidak ada data → bilang tidak ada. Singkat, bahasa Indonesia, format Rp40,400.\n"
-    "6. Jangan pakai tag HTML atau karakter < > di dalam jawaban."
+    "6. Jangan pakai tag HTML atau karakter < > di dalam jawaban.\n"
+    "7. Jumlah transaksi diambil dari jumlah_baris (tool count_rows atau aggregate), "
+    "bukan dari banyaknya baris yang dikirim list_rows dan bukan hasil menjumlahkan "
+    "sendiri. list_rows selalu terpotong, jadi panjangnya bukan jumlah transaksi."
 )
 
 
@@ -396,6 +450,45 @@ async def _jalankan(name: str, args: dict, load_rows) -> str:
         rows = await asyncio.to_thread(load_rows, str(awal.year))
         if name == "aggregate":
             return json.dumps(aggregate(rows, awal, akhir, args.get("arah"), args.get("kategori")))
+        if name == "count_rows":
+            return json.dumps({
+                "jumlah_baris": count_rows(rows, awal, akhir, args.get("arah"), args.get("kategori")),
+            })
+        if name == "by_category":
+            arah = args.get("arah")
+            batas = max(1, min(int(args.get("limit") or 15), 50))
+            items = []
+            # Seluruh kategori diperiksa lebih dulu, baru diurutkan dan dipotong.
+            # Memotong `rekap` sebelum disaring arah akan membuang kategori yang
+            # besar pada arah yang ditanya tetapi kecil pada arah lainnya.
+            for kategori, e in rekap(rows, awal, akhir):
+                # Arah hanya menyaring sisi mana yang ditonjolkan; nominalnya
+                # tetap verified + draft, dengan rinciannya disertakan terpisah.
+                if arah == "keluar":
+                    masuk, keluar = 0.0, e["vk"] + e["dk"]
+                elif arah == "masuk":
+                    masuk, keluar = e["vm"] + e["dm"], 0.0
+                else:
+                    masuk, keluar = e["vm"] + e["dm"], e["vk"] + e["dk"]
+                if not (masuk or keluar):
+                    continue
+                items.append({
+                    "kategori": kategori,
+                    "masuk": masuk,
+                    "keluar": keluar,
+                    "masuk_verified": e["vm"],
+                    "keluar_verified": e["vk"],
+                    "masuk_draft": e["dm"],
+                    "keluar_draft": e["dk"],
+                    "jumlah_baris": e["vn"] + e["dn"],
+                })
+            # `rekap` mengurutkan menurut masuk+keluar, sehingga daftar
+            # pengeluaran akan didominasi kategori yang besar karena pemasukan.
+            # Urutannya dihitung ulang menurut arah yang ditanya.
+            kunci = "keluar" if arah == "keluar" else "masuk" if arah == "masuk" else None
+            if kunci:
+                items.sort(key=lambda it: -it[kunci])
+            return json.dumps({"kategori": items[:batas]})
         if name == "list_rows":
             return json.dumps(list_rows(
                 rows, awal, akhir, args.get("arah"), args.get("kategori"),
