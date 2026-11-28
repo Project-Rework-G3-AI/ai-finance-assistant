@@ -14,14 +14,21 @@ Target dari BRD: saldo akhir sama pada kedua rekening.
 
 ## Hasil
 
-**Tercapai: 2 dari 2 rekening** — tetapi tidak pada setiap percobaan. Dari tiga
-kali pengukuran, **hanya satu yang selesai penuh**; dua lainnya berhenti karena
-model membalas kosong. Rinciannya di bagian [Kestabilan](#kestabilan-hanya-1-dari-3-percobaan-selesai).
+**Saldo akhir cocok pada kedua rekening — bila prosesnya selesai.** Itu tidak
+selalu terjadi. Dari empat kali pengukuran, **dua selesai penuh** dan dua
+berhenti di tengah karena model membalas kosong. Rinciannya di bagian
+[Kestabilan](#kestabilan-hanya-2-dari-4-percobaan-selesai).
+
+Pada percobaan yang selesai penuh, hasilnya:
 
 | Rekening | Saldo akhir tercetak | Saldo akhir sistem | Selisih |
 |---|---|---|---|
 | BNI 1783680837 | 9.556.974,00 | 9.556.974,00 | 0,00 |
 | BRI 306601000009566 | 192.643.952,00 | 192.643.952,00 | 0,00 |
+
+Karena itu status SC-07 **belum dapat dinyatakan tercapai secara konsisten**.
+Yang benar dikatakan: bila proses selesai, saldo akhirnya tepat; tetapi prosesnya
+tidak selalu selesai.
 
 Angka pendukung, semuanya juga cocok:
 
@@ -40,19 +47,22 @@ Ketepatan pembacaan transaksi:
 Model: `deepseek/deepseek-v4.1-flash-1017`. Pengukuran yang berhasil memerlukan
 93,43 detik untuk BNI (7 halaman) dan 15,76 detik untuk BRI (2 halaman).
 
-## Kestabilan: hanya 1 dari 3 percobaan selesai
+## Kestabilan: hanya 2 dari 4 percobaan selesai
 
-Tiga kali pengukuran dijalankan dengan model dan PDF yang sama:
+Empat kali pengukuran dijalankan dengan model dan PDF yang sama. Percobaan
+keempat dijalankan dari clone bersih, bukan dari mesin tempat pengukuran pertama
+dibuat:
 
 | Percobaan | BNI | BRI | Penyebab berhenti |
 |---|---|---|---|
 | 1 | cocok | cocok | selesai penuh |
 | 2 | gagal | gagal | `Empty AI response on page 3` (BNI), `page 1` (BRI) |
 | 3 | cocok | cocok | selesai penuh |
+| 4 (clone bersih) | cocok | gagal | `Empty AI response on page 1` (BRI) |
 
-Percobaan kedua berhenti di halaman yang berbeda pada tiap rekening, dan
-halamannya bukan halaman yang sama dengan percobaan lain. Artinya kegagalan ini
-**tidak menempel pada halaman tertentu**, melainkan pada balasan model yang
+Rekapnya: BNI gagal 1 kali, BRI gagal 2 kali, dan **tidak ada satu pun rekening
+yang gagal di halaman yang sama dua kali**. Artinya kegagalan ini **tidak
+menempel pada halaman atau berkas tertentu**, melainkan pada balasan model yang
 kadang datang kosong.
 
 Yang perlu dicatat: `reconciliation/vision_extractor.py` **tidak punya percobaan

@@ -261,7 +261,7 @@ pengukur terlihat, bukan tersembunyi.
 | SC-04 | Biaya per gambar | Di bawah Rp50 per gambar | **tercapai: Rp22,10** | kunci AI + kurs |
 | SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | **tercapai: 5 dari 5** | tidak ada |
 | SC-06 | Pemetaan kolom wajib cash report | Tidak ada kolom wajib yang hilang | **tercapai: 79 dari 79 baris** | template + kunci AI |
-| SC-07 | Rekonsiliasi mutasi rekening bank | Saldo akhir sama pada kedua rekening | **tercapai: 2 dari 2 rekening** | kunci AI + PDF mutasi |
+| SC-07 | Rekonsiliasi mutasi rekening bank | Saldo akhir sama pada kedua rekening | **belum stabil: 2 dari 4 percobaan selesai** | kunci AI + PDF mutasi |
 | SC-08 | Tanya jawab analitik keuangan | Seluruh jawaban sesuai | belum diukur | kunci AI + daftar pertanyaan baku |
 
 SC-01 dan SC-02 membaca hasil ekstraksi, jadi bisa dihitung ulang dari
@@ -348,14 +348,16 @@ spasi, sedangkan SC-07 menyimpannya dengan garis bawah; pemetaannya ada di
 mengganti nama secara manual. Berkas yang diunduh identik dengan aslinya
 (hash-nya sama), sehingga pengukuran orang lain memakai bahan yang sama.
 
-Hasil pengukuran terakhir: **saldo akhir cocok pada 2 dari 2 rekening**
-(BNI 9.556.974,00 dan BRI 192.643.952,00), seluruh transaksi BRI 14 dari 14
-terbaca. Rinciannya di [`docs/sc07-hasil-evaluasi.md`](docs/sc07-hasil-evaluasi.md).
+Bila prosesnya selesai, saldo akhir **cocok pada kedua rekening**: BNI
+9.556.974,00 dan BRI 192.643.952,00, dengan seluruh 14 transaksi BRI terbaca.
+Rinciannya di [`docs/sc07-hasil-evaluasi.md`](docs/sc07-hasil-evaluasi.md).
 
-Tetapi hasil itu **tidak selalu tercapai**. Dari tiga kali pengukuran, hanya satu
+Tetapi **prosesnya tidak selalu selesai.** Dari empat kali pengukuran, hanya dua
 yang selesai penuh; dua lainnya berhenti karena model membalas kosong pada satu
-halaman (`Empty AI response on page 3` untuk BNI, `page 1` untuk BRI). Halamannya
-berbeda-beda, jadi kegagalannya tidak menempel pada halaman tertentu.
+halaman (`Empty AI response on page 3` untuk BNI, `page 1` dua kali untuk BRI).
+Tidak ada rekening yang gagal di halaman yang sama dua kali, jadi kegagalannya
+tidak menempel pada halaman atau berkas tertentu. Karena itu SC-07 belum
+dinyatakan tercapai secara konsisten.
 
 Penyebabnya ada di kode: `reconciliation/vision_extractor.py` **tidak punya
 percobaan ulang untuk balasan kosong**. `post_with_retry` hanya mengulang pada
