@@ -298,7 +298,7 @@ pengukur terlihat, bukan tersembunyi.
 | SC-04 | Biaya per gambar | Di bawah Rp50 per gambar | **tercapai: Rp22,10** | kunci AI + kurs |
 | SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | **tercapai: 5 dari 5** | tidak ada |
 | SC-06 | Pemetaan kolom wajib cash report | Tidak ada kolom wajib yang hilang | **tercapai: 79 dari 79 baris** | template + kunci AI |
-| SC-07 | Rekonsiliasi mutasi rekening bank | Saldo akhir sama pada kedua rekening | **belum stabil: 2 dari 4 percobaan selesai** | kunci AI + PDF mutasi |
+| SC-07 | Rekonsiliasi mutasi rekening bank | Saldo akhir sama pada kedua rekening | **tercapai: 2 dari 2 rekening, 3 dari 3 percobaan selesai** | kunci AI + PDF mutasi |
 | SC-08 | Tanya jawab analitik keuangan | Seluruh jawaban sesuai | belum diukur | kunci AI + daftar pertanyaan baku |
 
 SC-01 dan SC-02 membaca hasil ekstraksi, jadi bisa dihitung ulang dari
@@ -385,22 +385,26 @@ spasi, sedangkan SC-07 menyimpannya dengan garis bawah; pemetaannya ada di
 mengganti nama secara manual. Berkas yang diunduh identik dengan aslinya
 (hash-nya sama), sehingga pengukuran orang lain memakai bahan yang sama.
 
-Bila prosesnya selesai, saldo akhir **cocok pada kedua rekening**: BNI
-9.556.974,00 dan BRI 192.643.952,00, dengan seluruh 14 transaksi BRI terbaca.
-Rinciannya di [`docs/sc07-hasil-evaluasi.md`](docs/sc07-hasil-evaluasi.md).
+Saldo akhir **cocok pada kedua rekening**: BNI 9.556.974,00 dan BRI
+192.643.952,00, dengan seluruh 14 transaksi BRI terbaca. Rinciannya di
+[`docs/sc07-hasil-evaluasi.md`](docs/sc07-hasil-evaluasi.md).
 
-Tetapi **prosesnya tidak selalu selesai.** Dari empat kali pengukuran, hanya dua
-yang selesai penuh; dua lainnya berhenti karena model membalas kosong pada satu
-halaman (`Empty AI response on page 3` untuk BNI, `page 1` dua kali untuk BRI).
-Tidak ada rekening yang gagal di halaman yang sama dua kali, jadi kegagalannya
-tidak menempel pada halaman atau berkas tertentu. Karena itu SC-07 belum
-dinyatakan tercapai secara konsisten.
+Sebelumnya hasil ini tidak selalu tercapai. Dari empat kali pengukuran, dua
+berhenti karena model membalas kosong pada satu halaman. Tidak ada rekening yang
+gagal di halaman yang sama dua kali, jadi kegagalannya tidak menempel pada
+halaman atau berkas tertentu.
 
-Penyebabnya ada di kode: `reconciliation/vision_extractor.py` **tidak punya
-percobaan ulang untuk balasan kosong**. `post_with_retry` hanya mengulang pada
-galat HTTP 500, 502, 503, dan 504. Akibatnya satu halaman yang gagal
-menghentikan seluruh mutasi, bukan hanya satu baris. `main.py` sudah menangani
-balasan kosong, tetapi jalur rekonsiliasi belum.
+Penyebabnya: `reconciliation/vision_extractor.py` tidak punya percobaan ulang
+untuk balasan kosong, sedangkan `post_with_retry` hanya mengulang pada galat
+HTTP 5xx. Satu halaman yang gagal menghentikan seluruh mutasi, bukan hanya satu
+baris.
+
+**Sudah diperbaiki.** Pembacaan halaman diulang bila balasannya kosong atau bukan
+JSON, sampai tiga percobaan dengan jeda singkat, dan galat HTTP tetap ditangani
+`post_with_retry` agar tidak diulang dua lapisan. Sesudah perbaikan, tiga dari
+tiga percobaan selesai penuh, termasuk satu percobaan yang mengalami balasan
+kosong dua kali dan berhasil setelah diulang. Perilakunya dijaga
+`tests/test_reconciliation_retry.py`.
 
 ### SC-06 memeriksa dua hal: susunan kolom dan hasil pencatatan
 

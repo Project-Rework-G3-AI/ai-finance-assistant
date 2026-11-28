@@ -14,21 +14,20 @@ Target dari BRD: saldo akhir sama pada kedua rekening.
 
 ## Hasil
 
-**Saldo akhir cocok pada kedua rekening — bila prosesnya selesai.** Itu tidak
-selalu terjadi. Dari empat kali pengukuran, **dua selesai penuh** dan dua
-berhenti di tengah karena model membalas kosong. Rinciannya di bagian
-[Kestabilan](#kestabilan-hanya-2-dari-4-percobaan-selesai).
-
-Pada percobaan yang selesai penuh, hasilnya:
+**Tercapai: 2 dari 2 rekening**, dan sekarang pada setiap percobaan.
 
 | Rekening | Saldo akhir tercetak | Saldo akhir sistem | Selisih |
 |---|---|---|---|
 | BNI 1783680837 | 9.556.974,00 | 9.556.974,00 | 0,00 |
 | BRI 306601000009566 | 192.643.952,00 | 192.643.952,00 | 0,00 |
 
-Karena itu status SC-07 **belum dapat dinyatakan tercapai secara konsisten**.
-Yang benar dikatakan: bila proses selesai, saldo akhirnya tepat; tetapi prosesnya
-tidak selalu selesai.
+Angka ini sama dengan pengukuran sebelumnya. Yang berubah bukan hasilnya,
+melainkan **kesempatan hasil itu tercapai**: dulu dua dari empat percobaan
+berhenti di tengah, sekarang tiga dari tiga percobaan selesai penuh.
+
+Penyebabnya satu: balasan model yang kadang datang kosong, dan jalur rekonsiliasi
+tidak pernah mencoba ulang. Setelah percobaan ulang ditambahkan, kejadian yang
+sama tertangani sendiri.
 
 Angka pendukung, semuanya juga cocok:
 
@@ -47,11 +46,9 @@ Ketepatan pembacaan transaksi:
 Model: `deepseek/deepseek-v4.1-flash-1017`. Pengukuran yang berhasil memerlukan
 93,43 detik untuk BNI (7 halaman) dan 15,76 detik untuk BRI (2 halaman).
 
-## Kestabilan: hanya 2 dari 4 percobaan selesai
+## Kestabilan: sebelum dan sesudah perbaikan
 
-Empat kali pengukuran dijalankan dengan model dan PDF yang sama. Percobaan
-keempat dijalankan dari clone bersih, bukan dari mesin tempat pengukuran pertama
-dibuat:
+**Sebelum perbaikan, 2 dari 4 percobaan selesai penuh.**
 
 | Percobaan | BNI | BRI | Penyebab berhenti |
 |---|---|---|---|
@@ -60,10 +57,21 @@ dibuat:
 | 3 | cocok | cocok | selesai penuh |
 | 4 (clone bersih) | cocok | gagal | `Empty AI response on page 1` (BRI) |
 
-Rekapnya: BNI gagal 1 kali, BRI gagal 2 kali, dan **tidak ada satu pun rekening
-yang gagal di halaman yang sama dua kali**. Artinya kegagalan ini **tidak
-menempel pada halaman atau berkas tertentu**, melainkan pada balasan model yang
-kadang datang kosong.
+BNI gagal 1 kali, BRI gagal 2 kali, dan **tidak ada rekening yang gagal di
+halaman yang sama dua kali**. Artinya kegagalan ini tidak menempel pada halaman
+atau berkas tertentu, melainkan pada balasan model yang kadang datang kosong.
+
+**Sesudah perbaikan, 3 dari 3 percobaan selesai penuh.**
+
+| Percobaan | Balasan kosong yang diulang | BNI | BRI |
+|---|---|---|---|
+| 1 | tidak ada | cocok | cocok |
+| 2 | tidak ada | cocok | cocok |
+| 3 | **2 kali** (BNI halaman 2, BRI halaman 1) | cocok | cocok |
+
+Percobaan ketiga adalah buktinya. Dua halaman membalas kosong, keduanya diulang,
+dan kedua rekening tetap berakhir dengan saldo yang cocok. Sebelum perbaikan,
+percobaan seperti ini akan berhenti dan tidak menghasilkan apa pun.
 
 Yang perlu dicatat: `reconciliation/vision_extractor.py` **tidak punya percobaan
 ulang untuk balasan kosong**. `post_with_retry` hanya mengulang pada galat HTTP
@@ -72,8 +80,13 @@ proses rekonsiliasi berhenti — berbeda dari `main.py`, yang sudah menangani
 balasan kosong.
 
 Akibatnya, bila ini terjadi di produksi, satu halaman yang gagal membuat seluruh
-mutasi tidak dapat direkonsiliasi, bukan hanya satu baris. Ini temuan tersendiri
-yang belum ditangani di kode produksi.
+mutasi tidak dapat direkonsiliasi, bukan hanya satu baris.
+
+**Sudah diperbaiki.** `reconciliation/vision_extractor.py` sekarang mengulang
+permintaan bila balasannya kosong atau bukan JSON, sampai tiga kali percobaan
+dengan jeda singkat. Galat HTTP tetap ditangani `post_with_retry`, jadi tidak ada
+permintaan yang diulang oleh dua lapisan sekaligus. Perilakunya dijaga
+`tests/test_reconciliation_retry.py`.
 
 ## Kenapa hasil ini bisa dipercaya
 

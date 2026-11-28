@@ -199,24 +199,22 @@ def test_missing_samples_gives_instructions(tmp_path):
     assert "_sc07_run.py" in str(excinfo.value)
 
 
-def test_empty_reply_aborts_the_whole_statement_without_retry():
-    """A blank model reply stops the whole reconciliation, not just one page.
+def test_empty_reply_is_retried_not_fatal():
+    """A blank model reply must not end the whole reconciliation.
 
-    This is why the run is not stable: two of three measurements stopped here.
-    `post_with_retry` only retries HTTP 5xx, so an empty body raises at once and
-    no partial result is produced. The test pins the current behaviour so that
-    adding a retry is a deliberate decision, not an accident.
+    Two of four SC-07 runs stopped here before this was fixed. The retry itself
+    is tested in `test_reconciliation_retry.py`; what is pinned here is that the
+    retry layer exists, because the SC-07 stability section depends on it.
     """
     import inspect
 
     import reconciliation.vision_extractor as extractor
 
-    source = inspect.getsource(extractor)
+    source = inspect.getsource(extractor.extract_statement_page)
 
-    assert "Empty AI response" in source
-    # Retry must not yet cover an empty body: only HTTP status errors are caught.
-    retry_body = inspect.getsource(extractor.post_with_retry)
-    assert "HTTPStatusError" in retry_body
-    assert "Empty AI response" not in retry_body, (
-        "empty replies are now retried; update the SC-07 stability section"
+    assert "Empty AI response" in inspect.getsource(extractor)
+    assert "_request_statement_page" in source, (
+        "page requests must go through the retry wrapper; "
+        "otherwise one blank reply aborts the whole statement"
     )
+    assert extractor.EMPTY_RESPONSE_ATTEMPTS >= 2

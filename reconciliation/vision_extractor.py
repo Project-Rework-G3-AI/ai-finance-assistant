@@ -9,6 +9,23 @@ import random
 import ai_trace
 
 
+# Balasan kosong dan balasan yang bukan JSON sama-sama tidak dapat dipakai,
+# tetapi keduanya bukan galat HTTP. `post_with_retry` hanya mengulang pada
+# status 5xx, sehingga keduanya lolos dan mematikan seluruh proses rekonsiliasi.
+# Dua nilai di bawah mengatur percobaan ulang khusus untuk keadaan itu.
+EMPTY_RESPONSE_ATTEMPTS = 3
+EMPTY_RESPONSE_DELAY = 1.0
+
+
+class EmptyResponseError(ValueError):
+    """Model membalas tanpa isi, atau isinya tidak dapat dibaca sebagai JSON."""
+
+    def __init__(self, message: str, page_number: int, reason: str):
+        super().__init__(message)
+        self.page_number = page_number
+        self.reason = reason
+
+
 SYSTEM_PROMPT = """
 You are a financial bank statement extraction system.
 
@@ -181,14 +198,14 @@ async def post_with_retry(
     raise RuntimeError("Unexpected retry termination")
 
 
-async def extract_statement_page(
+async def _request_statement_page(
     client: httpx.AsyncClient,
     image_bytes: bytes,
     page_number: int,
     ai_key: str,
     ai_base: str,
     ai_model: str
-) -> dict:
+) -> str:
 
     image_b64 = base64.b64encode(
         image_bytes
@@ -269,12 +286,26 @@ async def extract_statement_page(
         content = data["choices"][0]["message"]["content"]
         rekam(output=content, usage=ai_trace.usage_dari(data))
 
+    return content
+
+
+def _parse_statement_page(content: str, page_number: int) -> dict:
+    """Ubah balasan mentah menjadi satu halaman mutasi yang tervalidasi."""
     if not content:
-        raise ValueError(
-            f"Empty AI response on page {page_number}"
+        raise EmptyResponseError(
+            f"Empty AI response on page {page_number}",
+            page_number=page_number,
+            reason="empty",
         )
 
-    data = json.loads(content)
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise EmptyResponseError(
+            f"AI response on page {page_number} is not JSON: {exc}",
+            page_number=page_number,
+            reason="invalid_json",
+        ) from exc
 
     result = StatementPage.model_validate(data)
 
@@ -282,3 +313,48 @@ async def extract_statement_page(
         **result.model_dump(),
         "page_number": page_number
     }
+
+
+async def extract_statement_page(
+    client: httpx.AsyncClient,
+    image_bytes: bytes,
+    page_number: int,
+    ai_key: str,
+    ai_base: str,
+    ai_model: str
+) -> dict:
+    """Baca satu halaman, dengan percobaan ulang bila balasannya tidak terpakai.
+
+    Tanpa percobaan ulang, satu halaman yang dijawab kosong oleh model
+    menghentikan seluruh mutasi: tidak ada hasil sebagian, dan pengguna tidak
+    menerima apa pun. Kejadian ini tidak menempel pada halaman tertentu, jadi
+    mengulang permintaan adalah penanganan yang tepat.
+
+    Galat HTTP 5xx tetap ditangani `post_with_retry`. Yang diulang di sini hanya
+    balasan yang berhasil diambil tetapi tidak dapat dipakai: kosong, atau bukan
+    JSON.
+    """
+    last_error: EmptyResponseError | None = None
+
+    for attempt in range(1, EMPTY_RESPONSE_ATTEMPTS + 1):
+        content = await _request_statement_page(
+            client=client,
+            image_bytes=image_bytes,
+            page_number=page_number,
+            ai_key=ai_key,
+            ai_base=ai_base,
+            ai_model=ai_model,
+        )
+
+        try:
+            return _parse_statement_page(content, page_number)
+        except EmptyResponseError as exc:
+            last_error = exc
+            if attempt < EMPTY_RESPONSE_ATTEMPTS:
+                print(
+                    f"page {page_number}: {exc.reason} response, "
+                    f"retry {attempt}/{EMPTY_RESPONSE_ATTEMPTS - 1}"
+                )
+                await asyncio.sleep(EMPTY_RESPONSE_DELAY * attempt)
+
+    raise last_error  # type: ignore[misc]
