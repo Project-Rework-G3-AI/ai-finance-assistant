@@ -437,6 +437,22 @@ def write_sc03_report(results: list[dict], out: Path) -> dict:
     return {"result": c, "text": text}
 
 
+def write_sc07_report(results: list[dict], out: Path) -> dict:
+    """Jalankan SC-07 dan tulis laporannya.
+
+    Kriteria ini mengukur rekonsiliasi mutasi rekening bank: apakah saldo akhir
+    hasil hitung sistem sama dengan saldo akhir yang tercetak pada mutasi.
+
+    Angka yang dinilai hanya kecocokan saldo akhir. Runner tidak memanggil model:
+    pemanggilan dilakukan `_sc07_run.py`, yang menyimpan hasilnya di
+    `sc07_samples.json`. Bila berkas itu belum ada, laporan menyatakan BELUM
+    DIUKUR, bukan menjalankan model diam-diam tanpa persetujuan.
+    """
+    import sc07_reconciliation as sc07
+
+    return sc07.write_report(out)
+
+
 def write_sc06_report(results: list[dict], out: Path) -> dict:
     """Jalankan SC-06 dan tulis laporannya.
 
@@ -616,14 +632,16 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
     return {"result": c, "text": text}
 
 
-AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03", "sc04", "sc05", "sc06")
+AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03", "sc04", "sc05", "sc06", "sc07")
 
 # Kriteria yang tidak butuh kunci model, dataset gambar, maupun jaringan.
 # SC-06 termasuk di sini karena runner hanya merangkum `sc06_samples.csv` yang
 # sudah ada; pemanggilan modelnya dilakukan `_sc06_run.py`, bukan runner.
 # Daftar ini dipakai untuk memutuskan apakah runner boleh berhenti tanpa
 # memanggil model sama sekali.
-FREE_CRITERIA = {"sc03", "sc04", "sc05", "sc06"}
+# SC-07 termasuk: runner hanya merangkum `sc07_samples.json` yang sudah ada;
+# pemanggilan modelnya dilakukan `_sc07_run.py`, bukan runner.
+FREE_CRITERIA = {"sc03", "sc04", "sc05", "sc06", "sc07"}
 
 # Kriteria yang tidak membaca dataset gambar maupun `pairs.csv`. SC-02 termasuk
 # karena ia mengukur kelengkapan dari `results_per_row.csv` saja; nilai acuan
@@ -664,6 +682,7 @@ def run_reports(results: list[dict], out: Path, criteria: list[str]) -> dict[str
         "sc04": write_sc04_report,
         "sc05": write_sc05_report,
         "sc06": write_sc06_report,
+        "sc07": write_sc07_report,
     }
     return {name: builders[name](results, out) for name in criteria}
 
@@ -729,6 +748,8 @@ def main_cli() -> int:
                       help="uji penolakan duplikat (SC-05) saja")
     pick.add_argument("--sc06", action="store_true",
                       help="periksa pemetaan kolom wajib cash report (SC-06) saja")
+    pick.add_argument("--sc07", action="store_true",
+                      help="ukur rekonsiliasi mutasi rekening bank (SC-07) saja")
     pick.add_argument("--download-templates", action="store_true",
                       help="unduh template cash report perusahaan untuk SC-06")
     pick.add_argument("--all", action="store_true",

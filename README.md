@@ -248,11 +248,10 @@ Yang berbeda hanya cara menilainya.
 
 Target di bawah dikutip dari tabel Success Criteria pada BRD bagian 6.
 
-**SC-01 sampai SC-06 sudah punya pengukur.** SC-07 dan SC-08 sudah ditetapkan di
-BRD, tetapi **belum punya pengukur**: runner hanya mengenal `sc01` sampai `sc06`,
-sehingga kedua kriteria itu belum dapat dijalankan dan belum boleh ditulis
-tercapai. Barisnya tetap dicantumkan agar selisih antara BRD dan pengukur
-terlihat, bukan tersembunyi.
+**SC-01 sampai SC-07 sudah punya pengukur.** SC-08 sudah ditetapkan di BRD,
+tetapi **belum punya pengukur**, sehingga belum dapat dijalankan dan belum boleh
+ditulis tercapai. Barisnya tetap dicantumkan agar selisih antara BRD dan
+pengukur terlihat, bukan tersembunyi.
 
 | Kriteria | Yang diukur | Target | Status | Butuh |
 |---|---|---|---|---|
@@ -262,7 +261,7 @@ terlihat, bukan tersembunyi.
 | SC-04 | Biaya per gambar | Di bawah Rp50 per gambar | **tercapai: Rp22,10** | kunci AI + kurs |
 | SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | **tercapai: 5 dari 5** | tidak ada |
 | SC-06 | Pemetaan kolom wajib cash report | Tidak ada kolom wajib yang hilang | **tercapai: 79 dari 79 baris** | template + kunci AI |
-| SC-07 | Rekonsiliasi mutasi rekening bank | Saldo akhir sama pada kedua rekening | belum diukur | kunci AI + PDF mutasi |
+| SC-07 | Rekonsiliasi mutasi rekening bank | Saldo akhir sama pada kedua rekening | **tercapai: 2 dari 2 rekening** | kunci AI + PDF mutasi |
 | SC-08 | Tanya jawab analitik keuangan | Seluruh jawaban sesuai | belum diukur | kunci AI + daftar pertanyaan baku |
 
 SC-01 dan SC-02 membaca hasil ekstraksi, jadi bisa dihitung ulang dari
@@ -271,6 +270,13 @@ SC-01 dan SC-02 membaca hasil ekstraksi, jadi bisa dihitung ulang dari
 SC-03 dan SC-04 mengukur hal yang **tidak tersimpan** di hasil ekstraksi: durasi
 dan jumlah token. Keduanya perlu pengukuran sendiri lebih dulu, dan laporannya
 hanya merangkum sampel yang sudah ada.
+
+SC-07 juga begitu, dan ada satu syarat tambahan: pembandingnya **tidak boleh
+berasal dari model yang sedang diuji**. Untuk BRI, saldo akhir dibaca dari
+lapisan teks PDF. Untuk BNI, PDF-nya hasil pindai tanpa teks, sehingga angkanya
+dibaca manual dan dicatat di `tests/_sc07_pembanding_bni.json` beserta letaknya
+di halaman. Kalau keduanya dibaca model yang sama, hasilnya model dibandingkan
+dengan model, dan itu bukan pengukuran.
 
 Persiapan sekali saja:
 
@@ -292,6 +298,8 @@ python3 tests/sc_runner.py --sc05          # SC-05 saja
 python3 tests/sc_runner.py --download-templates  # sekali saja, untuk SC-06
 python3 tests/_sc06_run.py                 # SC-06: panggil model sekali per gambar
 python3 tests/sc_runner.py --sc06          # SC-06 saja (merangkum sampel)
+python3 tests/_sc07_run.py --mutasi /tmp/mutasi   # SC-07: baca PDF mutasi bank
+python3 tests/sc_runner.py --sc07          # SC-07 saja (merangkum sampel)
 python3 tests/sc_runner.py --metrics-only  # hitung ulang tanpa biaya
 python3 tests/sc_runner.py --repeat 3      # lihat sebaran antar-run
 ```
@@ -303,6 +311,51 @@ Menjalankan perintah yang sama dua kali **tidak** memanggil model lagi pada run
 kedua: hasil per gambar disimpan di `sc-out/` dan dilanjutkan dari situ. Runner
 mengumumkannya dengan jelas, dan mencatat asal angkanya di `sc-out/source.json`.
 Pakai `--restart` untuk benar-benar mengukur ulang dari nol.
+
+### SC-07 membandingkan saldo akhir dengan angka yang tercetak di mutasi
+
+SC-07 mengukur satu hal saja: apakah saldo akhir hasil hitung sistem sama dengan
+saldo akhir yang tercetak pada mutasi rekening. Satu transaksi yang hilang akan
+membuat saldo akhir meleset, jadi kecocokan saldo akhir menuntut seluruh
+transaksi terbaca benar.
+
+Yang membuat pengukuran ini sah adalah **asal pembandingnya**:
+
+| Rekening | Asal pembanding | Alasan |
+|---|---|---|
+| BRI | lapisan teks PDF | PDF BRI punya teks, angkanya dibaca langsung tanpa model |
+| BNI | dibaca manual | PDF BNI hasil pindai, 7 halaman tanpa satu pun karakter teks |
+
+Pembanding BNI yang dibaca manual itu bukan jalan pintas. Kalau saldo akhir BNI
+dibaca oleh model yang sama dengan yang diuji, yang terjadi adalah model
+dibandingkan dengan model, dan hasilnya tidak mengukur apa pun. Angka manual itu
+dicatat di `tests/_sc07_pembanding_bni.json` beserta letaknya di halaman dan
+pemeriksaan aritmetikanya, sehingga orang lain bisa memeriksa ulang.
+
+Pembanding BRI juga diperiksa mandiri: saldo awal + kredit - debet harus sama
+dengan saldo akhir yang tercetak, dan saldo berjalan tiap baris harus
+berkesinambungan. Kalau PDF-nya sendiri tidak konsisten, pembandingnya tidak
+dipakai.
+
+```bash
+python3 tests/_sc07_run.py --mutasi /tmp/mutasi   # panggil model, berbayar
+python3 tests/sc_runner.py --sc07                 # laporan, gratis
+```
+
+Hasil pengukuran terakhir: **saldo akhir cocok pada 2 dari 2 rekening**
+(BNI 9.556.974,00 dan BRI 192.643.952,00), seluruh transaksi BRI 14 dari 14
+terbaca. Rinciannya di [`docs/sc07-hasil-evaluasi.md`](docs/sc07-hasil-evaluasi.md).
+
+Tetapi hasil itu **tidak selalu tercapai**. Dari tiga kali pengukuran, hanya satu
+yang selesai penuh; dua lainnya berhenti karena model membalas kosong pada satu
+halaman (`Empty AI response on page 3` untuk BNI, `page 1` untuk BRI). Halamannya
+berbeda-beda, jadi kegagalannya tidak menempel pada halaman tertentu.
+
+Penyebabnya ada di kode: `reconciliation/vision_extractor.py` **tidak punya
+percobaan ulang untuk balasan kosong**. `post_with_retry` hanya mengulang pada
+galat HTTP 500, 502, 503, dan 504. Akibatnya satu halaman yang gagal
+menghentikan seluruh mutasi, bukan hanya satu baris. `main.py` sudah menangani
+balasan kosong, tetapi jalur rekonsiliasi belum.
 
 ### SC-06 memeriksa dua hal: susunan kolom dan hasil pencatatan
 
@@ -552,6 +605,9 @@ Hasil ada di `sc-out/`:
 | `sc06_report.txt` | SC-06: susunan kolom dan baris yang kurang |
 | `sc06_rows.csv` | SC-06: rincian per baris hasil pencatatan |
 | `sc06_samples.csv` | SC-06: balasan mentah model per gambar |
+| `sc07_report.txt` | SC-07: saldo akhir sistem dibanding saldo akhir tercetak, per rekening |
+| `sc07_metrics.json` | SC-07 dalam bentuk JSON |
+| `sc07_samples.json` | SC-07: keluaran sistem dan pembanding per rekening |
 | `results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
 | `sc03_samples.csv` | SC-03: waktu per gambar dan pecahan tahap (bahan laporan SC-03) |
 | `sc04_samples.csv` | SC-04: token per gambar (bahan laporan SC-04) |
@@ -581,6 +637,7 @@ Hasil pengukuran tiap kriteria:
 | SC-04 | [`docs/sc04-hasil-evaluasi.md`](docs/sc04-hasil-evaluasi.md) |
 | SC-05 | [`docs/sc05-hasil-evaluasi.md`](docs/sc05-hasil-evaluasi.md) |
 | SC-06 | [`docs/sc06-hasil-evaluasi.md`](docs/sc06-hasil-evaluasi.md) |
+| SC-07 | [`docs/sc07-hasil-evaluasi.md`](docs/sc07-hasil-evaluasi.md) |
 ## Tanya-jawab (milestone 3)
 
 Routing: foto/dokumen → jalur ekstraksi (tidak pernah lewat LLM); teks → command `/` dulu (deterministik, gratis), lalu bahasa bebas lewat **satu panggilan LLM tool-calling** (modul `cash_report/qa.py`).
