@@ -453,6 +453,23 @@ def write_sc07_report(results: list[dict], out: Path) -> dict:
     return sc07.write_report(out)
 
 
+def write_sc08_report(results: list[dict], out: Path) -> dict:
+    """Jalankan SC-08 dan tulis laporannya.
+
+    Kriteria ini mengukur tanya jawab analitik: apakah angka yang disebut dalam
+    jawaban sama dengan angka di spreadsheet.
+
+    Angka pembanding dihitung `_sc08_reference.py` dari baris mentah ledger,
+    bukan dari fungsi yang dipakai produksi. Runner tidak memanggil model:
+    pemanggilan dilakukan `_sc08_run.py`, yang menyimpan hasilnya di
+    `sc08_samples.json`. Bila berkas itu belum ada, laporan menyatakan BELUM
+    DIUKUR, bukan menjalankan model diam-diam tanpa persetujuan.
+    """
+    import sc08_qa as sc08
+
+    return sc08.write_report(out)
+
+
 def write_sc06_report(results: list[dict], out: Path) -> dict:
     """Jalankan SC-06 dan tulis laporannya.
 
@@ -632,7 +649,7 @@ def write_sc02_report(results: list[dict], out: Path) -> dict:
     return {"result": c, "text": text}
 
 
-AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03", "sc04", "sc05", "sc06", "sc07")
+AVAILABLE_CRITERIA = ("sc01", "sc02", "sc03", "sc04", "sc05", "sc06", "sc07", "sc08")
 
 # Kriteria yang tidak butuh kunci model, dataset gambar, maupun jaringan.
 # SC-06 termasuk di sini karena runner hanya merangkum `sc06_samples.csv` yang
@@ -683,6 +700,7 @@ def run_reports(results: list[dict], out: Path, criteria: list[str]) -> dict[str
         "sc05": write_sc05_report,
         "sc06": write_sc06_report,
         "sc07": write_sc07_report,
+        "sc08": write_sc08_report,
     }
     return {name: builders[name](results, out) for name in criteria}
 
@@ -750,6 +768,8 @@ def main_cli() -> int:
                       help="periksa pemetaan kolom wajib cash report (SC-06) saja")
     pick.add_argument("--sc07", action="store_true",
                       help="ukur rekonsiliasi mutasi rekening bank (SC-07) saja")
+    pick.add_argument("--sc08", action="store_true",
+                      help="ukur tanya jawab analitik keuangan (SC-08) saja")
     pick.add_argument("--download-templates", action="store_true",
                       help="unduh template cash report perusahaan untuk SC-06")
     pick.add_argument("--all", action="store_true",

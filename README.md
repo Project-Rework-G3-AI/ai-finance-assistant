@@ -285,10 +285,9 @@ Yang berbeda hanya cara menilainya.
 
 Target di bawah dikutip dari tabel Success Criteria pada BRD bagian 6.
 
-**SC-01 sampai SC-07 sudah punya pengukur.** SC-08 sudah ditetapkan di BRD,
-tetapi **belum punya pengukur**, sehingga belum dapat dijalankan dan belum boleh
-ditulis tercapai. Barisnya tetap dicantumkan agar selisih antara BRD dan
-pengukur terlihat, bukan tersembunyi.
+**SC-01 sampai SC-08 sudah punya pengukur.** Seluruh kriteria di BRD dapat
+diukur. Yang belum tentu tercapai, dan statusnya ditulis apa adanya di tabel
+bawah.
 
 | Kriteria | Yang diukur | Target | Status | Butuh |
 |---|---|---|---|---|
@@ -299,7 +298,7 @@ pengukur terlihat, bukan tersembunyi.
 | SC-05 | Bukti berulang tidak mencatat ganda | Seluruh duplikat ditolak | **tercapai: 5 dari 5** | tidak ada |
 | SC-06 | Pemetaan kolom wajib cash report | Tidak ada kolom wajib yang hilang | **tercapai: 79 dari 79 baris** | template + kunci AI |
 | SC-07 | Rekonsiliasi mutasi rekening bank | Saldo akhir sama pada kedua rekening | **tercapai: 2 dari 2 rekening, 4 dari 4 percobaan selesai** | kunci AI + PDF mutasi |
-| SC-08 | Tanya jawab analitik keuangan | Seluruh jawaban sesuai | belum diukur | kunci AI + daftar pertanyaan baku |
+| SC-08 | Tanya jawab analitik keuangan | Seluruh jawaban sesuai | **belum tercapai: 2 dari 4 run menjawab seluruhnya** | kunci AI + daftar pertanyaan baku |
 
 SC-01 dan SC-02 membaca hasil ekstraksi, jadi bisa dihitung ulang dari
 `results_per_row.csv` kapan saja tanpa biaya.
@@ -314,6 +313,12 @@ lapisan teks PDF. Untuk BNI, PDF-nya hasil pindai tanpa teks, sehingga angkanya
 dibaca manual dan dicatat di `tests/_sc07_pembanding_bni.json` beserta letaknya
 di halaman. Kalau keduanya dibaca model yang sama, hasilnya model dibandingkan
 dengan model, dan itu bukan pengukuran.
+
+SC-08 memakai syarat yang sama: angka pembanding dihitung `tests/_sc08_reference.py`
+langsung dari baris mentah ledger, dengan parser tanggal dan angka sendiri, bukan
+dengan memanggil `cash_report.qa.aggregate`. Kalau memanggil fungsi itu, bot akan
+dibandingkan dengan dirinya sendiri dan hasilnya selalu cocok. Yang dinilai hanya
+angka yang disebut dalam jawaban; kalimatnya tidak dinilai.
 
 Persiapan sekali saja:
 
@@ -337,6 +342,8 @@ python3 tests/_sc06_run.py                 # SC-06: panggil model sekali per gam
 python3 tests/sc_runner.py --sc06          # SC-06 saja (merangkum sampel)
 python3 tests/_sc07_run.py                 # SC-07: unduh PDF mutasi lalu ukur
 python3 tests/sc_runner.py --sc07          # SC-07 saja (merangkum sampel)
+python3 tests/_sc08_run.py                 # SC-08: tanya jawab, panggil model
+python3 tests/sc_runner.py --sc08          # SC-08 saja (merangkum sampel)
 python3 tests/sc_runner.py --metrics-only  # hitung ulang tanpa biaya
 python3 tests/sc_runner.py --repeat 3      # lihat sebaran antar-run
 ```
@@ -393,6 +400,67 @@ Sebelumnya hasil ini tidak selalu tercapai. Dari empat kali pengukuran, dua
 berhenti karena model membalas kosong pada satu halaman. Tidak ada rekening yang
 gagal di halaman yang sama dua kali, jadi kegagalannya tidak menempel pada
 halaman atau berkas tertentu.
+
+### SC-08 menilai angka dalam jawaban, bukan kalimatnya
+
+SC-08 mengajukan empat pertanyaan baku tentang data Januari 2026, lalu memeriksa
+apakah angka yang disebut dalam jawaban sama dengan angka spreadsheet. Yang
+dinilai hanya angka; susunan kalimatnya tidak.
+
+Pembandingnya dihitung `tests/_sc08_reference.py` dari baris mentah ledger,
+dengan parser tanggal dan parser angka sendiri. Berkas itu **tidak boleh**
+mengimpor `cash_report` atau `main`, dan ada test yang menegakkannya: kalau
+pembanding memanggil fungsi yang dipakai menjawab, bot dibandingkan dengan
+dirinya sendiri dan hasilnya selalu cocok. Test itu membaca pohon impor dengan
+`ast`, bukan mencari teks, supaya kata "cash_report" di penjelasan tidak
+dianggap pelanggaran.
+
+Aturannya dinyatakan ulang di pembanding, tidak diimpor dari produksi:
+
+| Aturan | Arti |
+|---|---|
+| periode setengah terbuka | 31 Januari masuk, 1 Februari tidak |
+| transfer bukan pemasukan/pengeluaran | hanya sisi masuknya yang dihitung, di kantong terpisah |
+| verified dan draft tidak dicampur | baris draft bukan angka resmi |
+| tanggal tak terbaca di luar semua periode | termasuk di luar total |
+
+Soal datanya:
+
+```bash
+python3 tests/_sc08_run.py --ledger sc-out/sc08_ledger.csv
+python3 tests/sc_runner.py --sc08              # laporan, gratis
+```
+
+Ledger diambil dari hasil ekstraksi yang sudah ada
+(`sc-out/results_per_row.csv`), bukan dari model yang dipanggil ulang, karena
+kriteria ini soal jawaban atas data yang tercatat, bukan soal membaca bukti
+transaksi lagi. Bila ledger belum ada, `_sc08_run.py` menyusunnya sendiri dari
+hasil ekstraksi itu.
+
+Susunan ledger meniru apa yang ditulis `write_cash_report()`, dengan satu
+tambahan yang disengaja: transfer dengan kantong tujuan yang terbaca ditulis
+sebagai dua baris dan sisi masuknya ditandai `verified`. Tanpa itu, ledger hanya
+berisi baris keluar, aturan "transfer bukan pemasukan" tidak akan pernah terlihat,
+dan pengukurannya diam-diam tidak membuktikan apa pun.
+
+Hasilnya **belum tercapai**. Diukur empat kali: dua run menjawab seluruh
+pertanyaan dengan angka benar, dua run tidak. Q1, Q2, dan Q3 selalu benar; yang
+tidak stabil hanya Q4, pertanyaan tentang jumlah baris.
+
+Sebabnya ada di kode produksi, bukan pada model:
+
+| Sebab | Bukti |
+|---|---|
+| `list_rows` memotong di 50 baris tanpa memberi tahu | `qa.list_rows(..., limit=100)` mengembalikan 50 baris untuk 71 baris data |
+| jumlah baris tidak pernah dilaporkan tool mana pun | `aggregate()` hanya memberi `n` per status (53, 1, 17), tidak pernah 71 |
+
+Model lalu menghitung sendiri dari daftar yang sudah terpotong: 70 baris di satu
+run, 15 baris di run lain. Pada run yang benar pun angkanya tidak berasal dari
+tool, melainkan dari cara model menjumlahkan. Karena itu hasil Q4 tidak dapat
+diandalkan, dan ini bertentangan dengan aturan di prompt produksi sendiri yang
+melarang model menghitung angka sendiri.
+
+Rinciannya di [`docs/sc08-hasil-evaluasi.md`](docs/sc08-hasil-evaluasi.md).
 
 Penyebabnya: `reconciliation/vision_extractor.py` tidak punya percobaan ulang
 untuk balasan kosong, sedangkan `post_with_retry` hanya mengulang pada galat
@@ -657,6 +725,10 @@ Hasil ada di `sc-out/`:
 | `sc07_report.txt` | SC-07: saldo akhir sistem dibanding saldo akhir tercetak, per rekening |
 | `sc07_metrics.json` | SC-07 dalam bentuk JSON |
 | `sc07_samples.json` | SC-07: keluaran sistem dan pembanding per rekening |
+| `sc08_report.txt` | SC-08: angka pembanding, tanya jawab, penilaian per pertanyaan |
+| `sc08_metrics.json` | SC-08 dalam bentuk JSON |
+| `sc08_samples.json` | SC-08: pertanyaan, jawaban, angka yang cocok dan tidak |
+| `sc08_ledger.csv` | SC-08: isi ledger yang dipakai sebagai sumber data |
 | `results_per_row.csv` | Keluaran per gambar, termasuk nominal, tanggal, kantong, arah |
 | `sc03_samples.csv` | SC-03: waktu per gambar dan pecahan tahap (bahan laporan SC-03) |
 | `sc04_samples.csv` | SC-04: token per gambar (bahan laporan SC-04) |
@@ -687,6 +759,7 @@ Hasil pengukuran tiap kriteria:
 | SC-05 | [`docs/sc05-hasil-evaluasi.md`](docs/sc05-hasil-evaluasi.md) |
 | SC-06 | [`docs/sc06-hasil-evaluasi.md`](docs/sc06-hasil-evaluasi.md) |
 | SC-07 | [`docs/sc07-hasil-evaluasi.md`](docs/sc07-hasil-evaluasi.md) |
+| SC-08 | [`docs/sc08-hasil-evaluasi.md`](docs/sc08-hasil-evaluasi.md) |
 
 ## Tanya-jawab
 
