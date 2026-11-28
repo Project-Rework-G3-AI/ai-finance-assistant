@@ -29,14 +29,33 @@ import _sc08_run as runner  # noqa: E402
 import sc08_qa as report  # noqa: E402
 
 
+# A small ledger used when no extraction run is available. It is built here on
+# purpose: a guard test that skips on a fresh clone protects nothing, and a test
+# that only runs on the author's machine is not a guard at all.
+FALLBACK_ROWS = [
+    ["2026-01-02 09:00:00", "BNI", 500_000, "", "Pendapatan Usaha (Penjualan Produk)", "penjualan", "verified", "", "r1", "a.jpg", ""],
+    ["2026-01-03 09:00:00", "BNI", 250_000, "", "Pendapatan Lain", "lain", "verified", "", "r2", "b.jpg", ""],
+    ["2026-01-04 09:00:00", "BNI", "", 300_000, "Bahan Baku", "beli", "verified", "", "r3", "c.jpg", ""],
+    ["2026-01-05 09:00:00", "BNI", "", 120_000, "Biaya-Ongkir", "kirim", "verified", "", "r4", "d.jpg", ""],
+    ["2026-01-06 09:00:00", "BNI", "", 35_000, "Biaya-Ongkir", "kirim draft", "draft", "", "r5", "e.jpg", ""],
+    ["2026-01-07 09:00:00", "BNI", "", 100_000, "Transfer Antar Bank", "transfer", "verified", "", "r6", "f.jpg", ""],
+    ["2026-01-07 09:00:00", "BNI", 100_000, "", "Transfer Antar Bank", "transfer", "verified", "", "r6", "f.jpg", ""],
+]
+
+
 @pytest.fixture(scope="module")
 def records() -> list[dict]:
-    """Ledger rows built from a finished extraction run, or skipped."""
+    """Ledger rows for the guard tests.
+
+    Uses the real extraction output when it is there, otherwise the small ledger
+    above. Either way the guards run: they check the tool, not the data, so a
+    missing extraction run must not turn them into no-ops.
+    """
     results = REPO / "sc-out" / "results_per_row.csv"
-    if not results.exists():
-        pytest.skip("needs sc-out/results_per_row.csv from a finished extraction run")
-    rows, _ = ledger_tools.build_ledger(results)
-    return reference.read_rows(rows)
+    if results.exists():
+        rows, _ = ledger_tools.build_ledger(results)
+        return reference.read_rows(rows)
+    return reference.read_rows(FALLBACK_ROWS)
 
 
 @pytest.fixture(scope="module")
