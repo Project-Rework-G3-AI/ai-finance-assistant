@@ -141,6 +141,25 @@ Diukur empat kali berturut-turut dengan pertanyaan dan data yang sama:
 | 3 | cocok | cocok | cocok | cocok (71 baris) | **4 dari 4** |
 | 4 | cocok | cocok | cocok | **salah (15 baris)** | 3 dari 4 |
 
+Sebelum keempat run itu ada satu percobaan yang **dibuang**, dan pembuangannya
+perlu dijelaskan supaya tidak terlihat seperti run yang dihapus karena hasilnya
+jelek.
+
+Percobaan pertama berhenti di tengah karena alat ukurnya sendiri rusak di tiga
+titik:
+
+| Kerusakan | Akibat |
+|---|---|
+| angka `35,000,` (koma di ujung kalimat) gagal dibaca | seluruh pengukuran berhenti dengan `ValueError` |
+| jawaban "tidak ada" untuk angka nol ditolak | Q1 dinyatakan gagal padahal benar |
+| peringkat pengeluaran dijumlahkan dengan pemasukan | Q3 dinyatakan gagal padahal benar |
+
+Ketiganya cacat pengukur, bukan cacat produk, jadi percobaannya tidak boleh
+dihitung. Setelah ketiganya diperbaiki, pengukuran diulang dari awal dan
+menghasilkan empat run di atas. Yang perlu dicatat: dua kegagalan pada percobaan
+pertama itu **bukan** temuan produk, dan tidak boleh dipakai sebagai bukti apa pun
+soal bot.
+
 Q1, Q2, dan Q3 konsisten benar di keempat run. Yang tidak konsisten hanya Q4,
 yaitu pertanyaan tentang **jumlah baris**.
 
